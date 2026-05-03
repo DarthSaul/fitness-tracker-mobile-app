@@ -1,0 +1,3 @@
+// Debug configuration — points at local dev server
+API_BASE_URL = http:\/\/localhost:3000
+SENTRY_DSN = SENTRY_DSN_PLACEHOLDER
