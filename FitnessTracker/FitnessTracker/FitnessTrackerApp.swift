@@ -60,7 +60,6 @@ struct FitnessTrackerApp: App {
         WindowGroup {
             ContentView()
                 .environment(sessionManager)
-                .environment(tokenStore)
                 .environment(apiClient)
                 .task { await sessionManager.bootstrap() }
         }

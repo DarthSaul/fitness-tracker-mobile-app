@@ -25,7 +25,8 @@ final class SessionManager {
         Logger.auth.info("Bootstrapping session...")
         do {
             try await tokenRefresher.refresh()
-            let userId = extractUserId(from: tokenStore.accessToken)
+            let token = await tokenStore.getAccessToken()
+            let userId = extractUserId(from: token)
             authState = userId.map { .authenticated(userId: $0) } ?? .unauthenticated
             Logger.auth.info("Session bootstrap: authenticated as \(userId ?? "unknown", privacy: .private)")
         } catch {
@@ -37,7 +38,7 @@ final class SessionManager {
     // MARK: - Sign Out
     func signOut() async {
         Logger.auth.info("Signing out.")
-        tokenStore.clear()
+        await tokenStore.clear()
         try? await keychain.delete(.refreshToken)
         try? await keychain.delete(.appleUserID)
         authState = .unauthenticated
@@ -45,7 +46,7 @@ final class SessionManager {
 
     // MARK: - Authenticated Transition
     func didSignIn(accessToken: String, refreshToken: String) async throws {
-        tokenStore.set(access: accessToken)
+        await tokenStore.set(access: accessToken)
         try await keychain.save(refreshToken, for: .refreshToken)
         let userId = extractUserId(from: accessToken) ?? "unknown"
         authState = .authenticated(userId: userId)

@@ -42,7 +42,7 @@ final class APIClient: APIClientProtocol {
 
     // MARK: - Core Execution
     private func execute(_ endpoint: APIEndpoint, retried: Bool) async throws(APIError) -> Data {
-        let sentAccessToken = tokenStore.accessToken
+        let sentAccessToken = await tokenStore.getAccessToken()
         let request: URLRequest
         do {
             request = try endpoint.urlRequest(baseURL: APIConfig.baseURL, accessToken: sentAccessToken)

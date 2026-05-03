@@ -1,12 +1,15 @@
 import Foundation
-import Observation
 
-@Observable
-final class TokenStore {
-    // MARK: - State (access token lives in memory only)
-    private(set) var accessToken: String?
+/// In-memory access-token holder, isolated as an actor so reads and writes
+/// from APIClient (called from arbitrary executors), SessionManager (main
+/// actor), and TokenRefresher (its own actor) can't race on the same state.
+actor TokenStore {
+    private var accessToken: String?
 
-    // MARK: - Mutations
+    func getAccessToken() -> String? {
+        accessToken
+    }
+
     func set(access token: String) {
         accessToken = token
     }
