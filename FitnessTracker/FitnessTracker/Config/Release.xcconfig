@@ -1,3 +1,4 @@
 // Release configuration — points at production
-API_BASE_URL = https:\/\/fitness-app.me
+SLASH = /
+API_BASE_URL = https:$(SLASH)/fitness-app.me
 SENTRY_DSN = SENTRY_DSN_PLACEHOLDER
