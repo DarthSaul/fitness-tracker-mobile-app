@@ -34,7 +34,19 @@ The server is at `/Users/saulgraves/code/fitness-tracker` (Nuxt 4 + h3 + Prisma 
 
 - Build/run: open `FitnessTracker/FitnessTracker.xcodeproj` in Xcode → ⌘R. Synchronized folders (`PBXFileSystemSynchronizedRootGroup`) auto-include new Swift files.
 - Clean build: ⇧⌘K.
-- Test: ⌘U in Xcode, or `xcodebuild test -project FitnessTracker/FitnessTracker.xcodeproj -scheme FitnessTracker -destination 'platform=iOS Simulator,name=iPhone 16'`.
+- Test: ⌘U in Xcode (see Verification workflow below for why we don't run `xcodebuild test` from the terminal).
+
+## Verification workflow
+
+I keep an iOS Simulator running in Xcode during development. Do not invoke `xcodebuild test` or spawn simulators from the terminal — they conflict with my running sim and cause `ipc/mig server died` errors.
+
+For verification, delegate execution to me:
+
+- **Compile check**: `xcodebuild build` and `xcodebuild build-for-testing` (no simulator launch) are fine to run yourself.
+- **Test suite**: tell me to run ⌘U in Xcode and report results back.
+- **Smoke test**: tell me to run ⌘⇧K then ⌘R in Xcode.
+
+Keep recommending test runs and smoke tests in your verification steps — just don't execute the simulator-dependent ones.
 
 ## Local dev server
 
@@ -53,6 +65,7 @@ Items deliberately deferred. Roughly ordered by priority within each tier.
 ### High
 
 - **Reconcile bundle ID before TestFlight.** Server `.env` `NUXT_APPLE_BUNDLE_ID` is currently set to `me.fitness-app.fitness` to match the iOS scaffold's bundle ID, instead of the canonical `me.fitness-app.tracker` (which matches the repo names and test target IDs). Before TestFlight: pick the canonical ID, register the App ID in Apple Developer with Sign in with Apple capability, generate the provisioning profile, and update both the iOS `PRODUCT_BUNDLE_IDENTIFIER` and the server `.env`. Same value also drives APNs topic.
+- **App icon design.** `AppIcon.appiconset/Contents.json` declares three appearance variants (universal / dark / tinted) with no `filename` fields and no PNG assets. Provide 1024×1024 PNGs (e.g., `AppIcon-1024.png`, `AppIcon-1024-dark.png`, `AppIcon-1024-tinted.png`) and wire filename references so asset-catalog validation passes. Required before TestFlight.
 - **Feedback tab.** Skipped from milestone 2. Web has a full feedback feature: list with addressed/unaddressed filter tabs, submit form with optional screenshot upload (multipart/form-data). iOS port needs `PhotosPicker` for image selection and multipart body construction in `APIClient`.
 
 ### Medium
