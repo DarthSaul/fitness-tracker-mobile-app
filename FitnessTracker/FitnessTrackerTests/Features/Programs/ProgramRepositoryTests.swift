@@ -4,6 +4,7 @@ import SwiftData
 @testable import FitnessTracker
 
 @Suite("ProgramRepository")
+@MainActor
 struct ProgramRepositoryTests {
     // MARK: - Fixtures
     private func makeRepository(apiClient: MockAPIClient) throws -> (ProgramRepository, ModelContext) {

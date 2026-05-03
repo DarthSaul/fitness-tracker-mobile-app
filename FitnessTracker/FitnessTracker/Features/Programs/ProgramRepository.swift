@@ -2,6 +2,7 @@ import Foundation
 import SwiftData
 import OSLog
 
+@MainActor
 final class ProgramRepository {
     private let apiClient: any APIClientProtocol
     private let modelContext: ModelContext
