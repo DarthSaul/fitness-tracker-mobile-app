@@ -50,8 +50,8 @@ private struct ProgramRow: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(program.name)
                 .font(.headline)
-            if !program.programDescription.isEmpty {
-                Text(program.programDescription)
+            if let description = program.programDescription, !description.isEmpty {
+                Text(description)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)

@@ -15,7 +15,7 @@ final class ProgramRepository {
     // MARK: - Fetch and Sync
     @discardableResult
     func fetchPrograms() async throws -> [ProgramModel] {
-        let dtos: [ProgramDTO] = try await apiClient.send(.getPrograms)
+        let dtos: [ProgramSummaryDTO] = try await apiClient.send(.getPrograms)
         Logger.data.info("Fetched \(dtos.count) programs from API — upserting into SwiftData.")
         return try upsert(dtos)
     }
@@ -28,7 +28,7 @@ final class ProgramRepository {
 
     // MARK: - Upsert
     @discardableResult
-    private func upsert(_ dtos: [ProgramDTO]) throws -> [ProgramModel] {
+    private func upsert(_ dtos: [ProgramSummaryDTO]) throws -> [ProgramModel] {
         var descriptor = FetchDescriptor<ProgramModel>()
         descriptor.predicate = #Predicate { _ in true }
         let existing = try modelContext.fetch(descriptor)

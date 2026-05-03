@@ -14,8 +14,14 @@ struct ProgramRepositoryTests {
         return (repo, context)
     }
 
-    private func makeDTO(id: String = "p1", name: String = "Strength Base") -> ProgramDTO {
-        ProgramDTO(id: id, name: name, description: "A solid strength program.", createdAt: .now)
+    private func makeDTO(id: String = "p1", name: String = "Strength Base") -> ProgramSummaryDTO {
+        ProgramSummaryDTO(
+            id: id,
+            name: name,
+            description: "A solid strength program.",
+            createdAt: .now,
+            count: ProgramSummaryDTO.Count(weeks: 4)
+        )
     }
 
     // MARK: - Tests
