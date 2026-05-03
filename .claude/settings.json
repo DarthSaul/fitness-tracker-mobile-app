@@ -1,0 +1,56 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Glob(**)",
+      "Grep(**)",
+      "Write(**)",
+      "Edit(**)",
+
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "Bash(rg:*)",
+      "Bash(grep:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(pwd)",
+      "Bash(echo:*)",
+      "Bash(mkdir:*)",
+      "Bash(touch:*)",
+      "Bash(cp:*)",
+      "Bash(mv:*)",
+
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git pull:*)",
+      "Bash(git fetch:*)",
+      "Bash(git checkout:*)",
+      "Bash(git restore:*)",
+      "Bash(git stash:*)",
+
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(gh pr checks:*)",
+
+      "Bash(xcodebuild:*)",
+      "Bash(xcrun:*)",
+      "Bash(swift build:*)",
+      "Bash(swift test:*)",
+      "Bash(swift package:*)",
+      "Bash(xcbeautify:*)",
+      "Bash(simctl:*)",
+
+      "Bash(plutil:*)",
+      "Bash(defaults read:*)"
+    ]
+  }
+}
