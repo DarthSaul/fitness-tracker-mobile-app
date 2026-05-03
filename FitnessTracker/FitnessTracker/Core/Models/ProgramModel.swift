@@ -4,7 +4,7 @@ import SwiftData
 @Model
 final class ProgramModel {
     // MARK: - Stored Properties
-    @Attribute(.unique) var id: String
+    @Attribute(.unique) private(set) var id: String
     var name: String
     var programDescription: String
     var createdAt: Date
