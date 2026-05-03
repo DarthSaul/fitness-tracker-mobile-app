@@ -37,6 +37,10 @@ actor KeychainService {
 
         var attrs = query
         attrs[kSecValueData] = data
+        // Refresh tokens must be readable after first unlock so background
+        // URLSession-driven token refresh can run without requiring the user
+        // to unlock the device. ThisDeviceOnly prevents iCloud Keychain sync.
+        attrs[kSecAttrAccessible] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         let status = SecItemAdd(attrs as CFDictionary, nil)
         guard status == errSecSuccess else { throw KeychainError.saveFailed(status) }
         Logger.auth.debug("Keychain: saved key \(key.rawValue, privacy: .private)")
