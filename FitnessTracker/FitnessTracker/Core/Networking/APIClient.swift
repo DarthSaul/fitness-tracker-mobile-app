@@ -42,9 +42,10 @@ final class APIClient: APIClientProtocol {
 
     // MARK: - Core Execution
     private func execute(_ endpoint: APIEndpoint, retried: Bool) async throws(APIError) -> Data {
+        let sentAccessToken = tokenStore.accessToken
         let request: URLRequest
         do {
-            request = try endpoint.urlRequest(baseURL: APIConfig.baseURL, accessToken: tokenStore.accessToken)
+            request = try endpoint.urlRequest(baseURL: APIConfig.baseURL, accessToken: sentAccessToken)
         } catch {
             throw .unknown(error)
         }
@@ -68,13 +69,18 @@ final class APIClient: APIClientProtocol {
 
         Logger.networking.debug("\(http.statusCode) \(endpoint.path)")
 
-        if http.statusCode == 401 && !retried {
+        // Only attempt refresh if the failed request actually carried an access token.
+        // Otherwise the 401 came from an unauthenticated endpoint (sign-in, refresh) and
+        // refreshing makes no sense — it would just mask the real error.
+        if http.statusCode == 401 && !retried && sentAccessToken != nil {
             Logger.networking.info("401 on \(endpoint.path) — attempting token refresh.")
             try await tokenRefresher.refresh()
             return try await execute(endpoint, retried: true)
         }
 
         guard (200..<300).contains(http.statusCode) else {
+            let body = String(data: data, encoding: .utf8) ?? "<\(data.count) bytes, non-utf8>"
+            Logger.networking.error("HTTP \(http.statusCode) on \(endpoint.path): \(body, privacy: .public)")
             throw .httpError(statusCode: http.statusCode, data: data)
         }
 
