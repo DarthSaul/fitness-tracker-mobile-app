@@ -38,16 +38,33 @@ final class SessionManager {
     // MARK: - Sign Out
     func signOut() async {
         Logger.auth.info("Signing out.")
+
+        // Surface keychain failures in the log so they aren't lost, but always
+        // continue to clear in-memory state — the user requested sign-out, and
+        // a stale Keychain entry is preferable to a stale in-memory token.
+        do {
+            try await keychain.delete(.refreshToken)
+        } catch {
+            Logger.auth.error("Failed to delete refreshToken from Keychain during sign-out: \(error)")
+        }
+        do {
+            try await keychain.delete(.appleUserID)
+        } catch {
+            Logger.auth.error("Failed to delete appleUserID from Keychain during sign-out: \(error)")
+        }
+
         await tokenStore.clear()
-        try? await keychain.delete(.refreshToken)
-        try? await keychain.delete(.appleUserID)
         authState = .unauthenticated
     }
 
     // MARK: - Authenticated Transition
     func didSignIn(accessToken: String, refreshToken: String) async throws {
-        await tokenStore.set(access: accessToken)
+        // Persist first. If the Keychain save fails, throw before we mutate
+        // any in-memory state — that way we never end up with an access token
+        // in memory but no matching refresh token on disk (a partial session
+        // that would later silently fail to refresh).
         try await keychain.save(refreshToken, for: .refreshToken)
+        await tokenStore.set(access: accessToken)
         let userId = extractUserId(from: accessToken) ?? "unknown"
         authState = .authenticated(userId: userId)
     }
