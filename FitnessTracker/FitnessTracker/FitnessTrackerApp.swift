@@ -23,11 +23,15 @@ struct FitnessTrackerApp: App {
         }()
 
         // MARK: Sentry (before any other setup so crashes during init are captured)
-        SentrySDK.start { options in
-            options.dsn = APIConfig.sentryDSN
-            options.environment = isDebug ? "debug" : "release"
-            options.enableAutoSessionTracking = true
-            options.tracesSampleRate = isDebug ? 1.0 : 0.2
+        if let dsn = APIConfig.sentryDSN {
+            SentrySDK.start { options in
+                options.dsn = dsn
+                options.environment = isDebug ? "debug" : "release"
+                options.enableAutoSessionTracking = true
+                options.tracesSampleRate = isDebug ? 1.0 : 0.2
+            }
+        } else {
+            Logger.app.info("Sentry disabled — DSN not configured (xcconfig still has the placeholder).")
         }
 
         // MARK: Session

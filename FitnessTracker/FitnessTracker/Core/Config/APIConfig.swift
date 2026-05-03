@@ -15,12 +15,17 @@ enum APIConfig {
     }()
 
     // MARK: - Sentry DSN
-    nonisolated static let sentryDSN: String = {
+    /// Returns the configured Sentry DSN, or `nil` if the value is missing,
+    /// empty, or still the placeholder shipped in the xcconfig templates.
+    /// Callers should skip Sentry initialization when this is `nil` rather
+    /// than crash, so dev builds without a real DSN still launch.
+    nonisolated static let sentryDSN: String? = {
         guard
             let dsn = Bundle.main.infoDictionary?["SENTRY_DSN"] as? String,
-            !dsn.isEmpty
+            !dsn.isEmpty,
+            dsn != "SENTRY_DSN_PLACEHOLDER"
         else {
-            fatalError("SENTRY_DSN is missing in Info.plist — check your xcconfig.")
+            return nil
         }
         return dsn
     }()
