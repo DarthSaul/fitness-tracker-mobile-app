@@ -46,9 +46,16 @@ actor TokenRefresher {
         let stored: String
         do {
             stored = try await keychain.load(.refreshToken)
-        } catch {
+        } catch KeychainError.itemNotFound {
+            // Genuine "no session yet" — surface as unauthorized so the UI
+            // routes to sign-in.
             Logger.auth.warning("No refresh token in Keychain — cannot refresh session.")
             throw APIError.unauthorized
+        } catch {
+            // Any other Keychain failure (read error, decoding, OSStatus) is
+            // a transient/system issue, not an auth problem. Don't mask it.
+            Logger.auth.error("Keychain load failed for refreshToken: \(error)")
+            throw error
         }
 
         let body = RefreshTokenBody(refreshToken: stored)
