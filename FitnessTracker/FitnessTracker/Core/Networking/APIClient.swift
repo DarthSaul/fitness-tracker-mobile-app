@@ -79,11 +79,30 @@ final class APIClient: APIClientProtocol {
         }
 
         guard (200..<300).contains(http.statusCode) else {
-            let body = String(data: data, encoding: .utf8) ?? "<\(data.count) bytes, non-utf8>"
-            Logger.networking.error("HTTP \(http.statusCode) on \(endpoint.path): \(body, privacy: .public)")
+            let body = APIClient.previewBody(data)
+            // Body marked private — non-2xx payloads can contain auth tokens,
+            // PII, or other sensitive material. Status code and path stay public
+            // so the log line is still useful in production.
+            Logger.networking.error("HTTP \(http.statusCode) on \(endpoint.path): \(body, privacy: .private)")
             throw .httpError(statusCode: http.statusCode, data: data)
         }
 
         return data
+    }
+
+    // Cap response-body previews used in error logs so we don't spill huge
+    // payloads (or anything beyond a quick diagnostic snippet) into the
+    // unified log buffer.
+    private static let bodyPreviewLimit = 512
+
+    private static func previewBody(_ data: Data) -> String {
+        guard let text = String(data: data, encoding: .utf8) else {
+            return "<\(data.count) bytes, non-utf8>"
+        }
+        if text.count <= bodyPreviewLimit {
+            return text
+        }
+        let prefix = text.prefix(bodyPreviewLimit)
+        return "\(prefix)…(\(text.count - bodyPreviewLimit) more chars)"
     }
 }
