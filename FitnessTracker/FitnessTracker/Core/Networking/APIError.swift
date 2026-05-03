@@ -6,6 +6,10 @@ nonisolated enum APIError: Error, LocalizedError, Equatable {
     case decoding(DecodingError)
     case network(URLError)
     case unknown(any Error)
+    /// Test-only signal from MockAPIClient when an endpoint is hit without
+    /// having been stubbed. Surfaces immediately rather than the mock
+    /// returning empty Data and pretending success.
+    case missingHandler(path: String)
 
     // MARK: - LocalizedError
     var errorDescription: String? {
@@ -20,6 +24,8 @@ nonisolated enum APIError: Error, LocalizedError, Equatable {
             return err.localizedDescription
         case .unknown(let err):
             return err.localizedDescription
+        case .missingHandler(let path):
+            return "MockAPIClient: no stub registered for \(path)."
         }
     }
 
@@ -30,6 +36,7 @@ nonisolated enum APIError: Error, LocalizedError, Equatable {
         switch (lhs, rhs) {
         case (.unauthorized, .unauthorized): return true
         case (.httpError(let a, _), .httpError(let b, _)): return a == b
+        case (.missingHandler(let a), .missingHandler(let b)): return a == b
         default: return false
         }
     }

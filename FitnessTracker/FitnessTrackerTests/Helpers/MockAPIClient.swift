@@ -3,7 +3,9 @@ import Foundation
 
 // MARK: - Mock
 final class MockAPIClient: APIClientProtocol {
-    // Store a handler per endpoint path; throwing nil means return empty Data
+    // One handler per endpoint path. Hit an unstubbed endpoint and resolve()
+    // throws APIError.missingHandler — silent empty-Data success masks
+    // missing test setup.
     var handlers: [String: (APIEndpoint) throws -> Data] = [:]
 
     func send<T: Decodable>(_ endpoint: APIEndpoint) async throws(APIError) -> T {
@@ -24,7 +26,7 @@ final class MockAPIClient: APIClientProtocol {
     // MARK: - Helpers
     private func resolve(_ endpoint: APIEndpoint) throws(APIError) -> Data {
         guard let handler = handlers[endpoint.path] else {
-            return Data()
+            throw APIError.missingHandler(path: endpoint.path)
         }
         do {
             return try handler(endpoint)
@@ -42,5 +44,11 @@ final class MockAPIClient: APIClientProtocol {
 
     func stubUnauthorized(for path: String) {
         handlers[path] = { _ in throw APIError.unauthorized }
+    }
+
+    /// Convenience overload so tests can stub by case rather than by string
+    /// path — fewer typos, and stays in sync with `APIEndpoint.path` automatically.
+    func stubUnauthorized(for endpoint: APIEndpoint) {
+        stubUnauthorized(for: endpoint.path)
     }
 }
