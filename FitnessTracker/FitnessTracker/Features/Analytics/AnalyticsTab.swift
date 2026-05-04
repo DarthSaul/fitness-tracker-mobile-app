@@ -11,6 +11,7 @@ struct AnalyticsTab: View {
                 description: Text("Strength tracking and session history will live here.")
             )
             .navigationTitle("Analytics")
+            .settingsToolbarItem()
         }
     }
 }

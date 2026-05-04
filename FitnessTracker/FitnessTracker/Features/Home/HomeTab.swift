@@ -10,6 +10,7 @@ struct HomeTab: View {
                 description: Text("Calendar strip and today's workout will live here.")
             )
             .navigationTitle("Home")
+            .settingsToolbarItem()
         }
     }
 }

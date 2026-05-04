@@ -10,6 +10,7 @@ struct ProgramsTab: View {
     var body: some View {
         NavigationStack {
             ProgramListView(viewModel: makeViewModel())
+                .settingsToolbarItem()
         }
     }
 
