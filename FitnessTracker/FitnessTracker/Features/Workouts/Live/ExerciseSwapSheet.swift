@@ -1,0 +1,114 @@
+import SwiftUI
+
+/// Two-step swap-mid-workout sheet: pick a replacement exercise, then confirm.
+/// Both steps render inside a single, stable `NavigationStack` so SwiftUI can
+/// keep the sheet's view hierarchy intact across the step transition. The
+/// previous structure (different `NavigationStack` per step) triggered an
+/// `_UIReparentingView` warning when the user picked a replacement.
+struct ExerciseSwapSheet: View {
+    let programExerciseId: String
+    let currentExerciseName: String
+    let hasLoggedSets: Bool
+    /// Returns the deletedSetCount (server reports it) so the caller can
+    /// surface a "lost N sets" message; nil on failure.
+    let onConfirm: (_ replacementExerciseId: String) async -> Int?
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var pendingReplacement: ExerciseDTO?
+    @State private var isConfirming = false
+    @State private var resultMessage: String?
+
+    var body: some View {
+        NavigationStack {
+            content
+                .navigationTitle(pendingReplacement == nil ? "Swap exercise" : "Confirm swap")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Cancel") { dismiss() }
+                    }
+                }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let pending = pendingReplacement {
+            confirmation(replacement: pending)
+        } else {
+            ExerciseSearchList(subtitle: searchSubtitle) { picked in
+                pendingReplacement = picked
+            }
+        }
+    }
+
+    private var searchSubtitle: String {
+        var s = "Currently: \(currentExerciseName)"
+        if hasLoggedSets {
+            s += "\n\u{26A0}\u{FE0F} Swapping will delete logged sets for this exercise."
+        }
+        return s
+    }
+
+    private func confirmation(replacement: ExerciseDTO) -> some View {
+        Form {
+            Section("Replacement") {
+                Text(replacement.name).font(.headline)
+                if let description = replacement.description, !description.isEmpty {
+                    Text(description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if hasLoggedSets {
+                Section {
+                    Label("Logged sets for the original exercise will be removed.", systemImage: "exclamationmark.triangle")
+                        .font(.subheadline)
+                        .foregroundStyle(.orange)
+                }
+            }
+
+            if let resultMessage {
+                Section { Text(resultMessage).font(.footnote).foregroundStyle(.secondary) }
+            }
+
+            Section {
+                Button(role: .destructive) {
+                    Task { await performSwap(replacement: replacement) }
+                } label: {
+                    HStack {
+                        if isConfirming { ProgressView().controlSize(.small) }
+                        Text(isConfirming ? "Swapping…" : "Confirm swap")
+                    }
+                }
+                .disabled(isConfirming)
+                Button("Pick a different exercise") {
+                    pendingReplacement = nil
+                }
+                .disabled(isConfirming)
+            }
+        }
+    }
+
+    private func performSwap(replacement: ExerciseDTO) async {
+        isConfirming = true
+        defer { isConfirming = false }
+
+        // `onConfirm` returns nil on failure (the VM caught and logged the
+        // error). Surface it inline so the user can retry from the same sheet
+        // — previously we dismissed unconditionally, which dropped the user
+        // back into the live workout with no indication the swap had failed.
+        guard let deleted = await onConfirm(replacement.id) else {
+            resultMessage = "Couldn't swap exercise. Please try again."
+            return
+        }
+
+        if deleted > 0 {
+            resultMessage = "\(deleted) logged set\(deleted == 1 ? "" : "s") removed."
+            // Hold briefly so the user sees the result, then dismiss.
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+        dismiss()
+    }
+}

@@ -134,4 +134,109 @@ struct WorkoutRepositoryTests {
 
         try await repo.abandonWorkout(id: "ws1")
     }
+
+    // MARK: - getActiveWorkout (M7)
+
+    @Test("getActiveWorkout returns the response on 200")
+    func getActiveWorkoutFound() async throws {
+        let client = MockAPIClient()
+        let session = ActiveWorkoutResponseDTO.ActiveWorkoutSession(
+            id: "ws1", userId: "u1", userProgramId: "up1",
+            weekNumber: 1, dayNumber: 1, status: .inProgress,
+            startedAt: .now, completedAt: nil, notes: nil,
+            completedSets: [], userProgram: UserProgramDTO(
+                id: "up1", userId: "u1", programId: "p1", isActive: true,
+                currentWeek: 1, currentDay: 1, startedAt: .now
+            ),
+            workoutExerciseSwaps: []
+        )
+        client.stub(.getActiveWorkout, response: ActiveWorkoutResponseDTO(session: session, day: makeProgramDayDTO()))
+        let repo = WorkoutRepository(apiClient: client)
+
+        let result = try await repo.getActiveWorkout()
+        #expect(result?.session.id == "ws1")
+    }
+
+    @Test("getActiveWorkout returns nil on 404")
+    func getActiveWorkoutNotFound() async throws {
+        let client = MockAPIClient()
+        client.handlers["/api/workouts/active"] = { _ in
+            throw APIError.httpError(statusCode: 404, data: Data())
+        }
+        let repo = WorkoutRepository(apiClient: client)
+
+        let result = try await repo.getActiveWorkout()
+        #expect(result == nil)
+    }
+
+    // MARK: - Extra sets / ad-hoc / swap / notes (M7)
+
+    @Test("addExtraSet posts to the programExercise extra-sets endpoint")
+    func addExtraSetDispatch() async throws {
+        let client = MockAPIClient()
+        let body = AddExtraSetBody(reps: 8, weight: 100, rpe: nil, notes: nil)
+        client.stub(.addExtraSet(workoutId: "ws1", programExerciseId: "pe1", body: body), response: makeCompletedSetDTO(id: "cs-extra"))
+        let repo = WorkoutRepository(apiClient: client)
+
+        let result = try await repo.addExtraSet(workoutId: "ws1", programExerciseId: "pe1", body: body)
+        #expect(result.id == "cs-extra")
+    }
+
+    @Test("deleteExtraSet hits the extra-sets DELETE endpoint")
+    func deleteExtraSetDispatch() async throws {
+        let client = MockAPIClient()
+        client.stub(.deleteExtraSet(workoutId: "ws1", completedSetId: "cs-extra"), response: ["deleted": true])
+        let repo = WorkoutRepository(apiClient: client)
+
+        try await repo.deleteExtraSet(workoutId: "ws1", completedSetId: "cs-extra")
+    }
+
+    @Test("swapExercise posts the replacement and decodes deletedSetCount")
+    func swapDispatch() async throws {
+        let client = MockAPIClient()
+        let swap = WorkoutExerciseSwapDTO(
+            id: "swap1", workoutSessionId: "ws1", programExerciseId: "pe1",
+            originalExerciseId: "ex-orig", replacementExerciseId: "ex-new",
+            createdAt: .now
+        )
+        client.stub(
+            .swapExercise(workoutId: "ws1", programExerciseId: "pe1", body: SwapExerciseBody(replacementExerciseId: "ex-new")),
+            response: SwapExerciseResponseDTO(swap: swap, deletedSetCount: 3)
+        )
+        let repo = WorkoutRepository(apiClient: client)
+
+        let result = try await repo.swapExercise(workoutId: "ws1", programExerciseId: "pe1", replacementExerciseId: "ex-new")
+        #expect(result.swap.replacementExerciseId == "ex-new")
+        #expect(result.deletedSetCount == 3)
+    }
+
+    @Test("addAdHocSet posts the exercise name and decodes the new completed set")
+    func addAdHocDispatch() async throws {
+        let client = MockAPIClient()
+        client.stub(
+            .addAdHocSet(workoutId: "ws1", body: AddAdHocSetBody(exerciseName: "Pull-up")),
+            response: CompletedSetDTO(
+                id: "cs-adhoc", workoutSessionId: "ws1",
+                exerciseSetId: nil, programExerciseId: nil, adhocExerciseName: "Pull-up",
+                reps: nil, weight: nil, rpe: nil, notes: nil, completedAt: .now
+            )
+        )
+        let repo = WorkoutRepository(apiClient: client)
+
+        let result = try await repo.addAdHocSet(workoutId: "ws1", exerciseName: "Pull-up")
+        #expect(result.adhocExerciseName == "Pull-up")
+    }
+
+    @Test("updateNotes patches and decodes the {id, notes} response")
+    func updateNotesDispatch() async throws {
+        let client = MockAPIClient()
+        client.stub(
+            .updateWorkoutNotes(id: "ws1", body: UpdateWorkoutNotesBody(notes: "felt strong today")),
+            response: UpdateWorkoutNotesResponseDTO(id: "ws1", notes: "felt strong today")
+        )
+        let repo = WorkoutRepository(apiClient: client)
+
+        let result = try await repo.updateNotes(workoutId: "ws1", notes: "felt strong today")
+        #expect(result.notes == "felt strong today")
+    }
 }

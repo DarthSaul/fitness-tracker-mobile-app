@@ -6,6 +6,7 @@ import SwiftUI
 struct HomeView: View {
     @State private var viewModel: HomeViewModel
     @State private var scheduleSheetPresented = false
+    @Environment(LiveWorkoutPresentation.self) private var liveWorkout
     private let homeRepository: HomeRepository
     private let workoutRepository: WorkoutRepository
 
@@ -66,6 +67,14 @@ struct HomeView: View {
         .navigationTitle("Home")
         .task { await viewModel.load() }
         .refreshable { await viewModel.load() }
+        // Refresh on transitions of the live-workout sheet so the today card
+        // flips back from "Resume workout" to "Start next workout" after the
+        // user completes or abandons a session.
+        .onChange(of: liveWorkout.isPresented) { wasPresented, isPresented in
+            if wasPresented && !isPresented {
+                Task { await viewModel.load() }
+            }
+        }
         .sheet(isPresented: $scheduleSheetPresented) {
             ScheduleWorkoutSheet(viewModel: viewModel)
         }
