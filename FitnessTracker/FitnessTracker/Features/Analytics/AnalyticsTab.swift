@@ -1,17 +1,16 @@
 import SwiftUI
 
-/// Analytics tab — dashboard stats, exercise selector, e1RM Swift Charts
-/// sparkline, and session history arrive in PR #8.
+/// Analytics tab — instantiates the repository and view model and provides
+/// the NavigationStack the analytics view renders inside.
 struct AnalyticsTab: View {
+    @Environment(APIClient.self) private var apiClient
+
     var body: some View {
+        let repo = AnalyticsRepository(apiClient: apiClient)
+        let viewModel = AnalyticsViewModel(repository: repo)
         NavigationStack {
-            ContentUnavailableView(
-                "Analytics",
-                systemImage: "chart.line.uptrend.xyaxis",
-                description: Text("Strength tracking and session history will live here.")
-            )
-            .navigationTitle("Analytics")
-            .settingsToolbarItem()
+            AnalyticsView(viewModel: viewModel)
+                .settingsToolbarItem()
         }
     }
 }
