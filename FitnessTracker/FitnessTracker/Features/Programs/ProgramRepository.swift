@@ -26,6 +26,15 @@ final class ProgramRepository {
         return try modelContext.fetch(descriptor)
     }
 
+    // MARK: - Detail / Day (transient — not persisted to SwiftData)
+    func fetchProgramDetail(id: String) async throws -> ProgramDetailDTO {
+        try await apiClient.send(.getProgram(id: id))
+    }
+
+    func fetchProgramDay(id: String) async throws -> ProgramDayDTO {
+        try await apiClient.send(.getProgramDay(id: id))
+    }
+
     // MARK: - Upsert
     @discardableResult
     private func upsert(_ dtos: [ProgramSummaryDTO]) throws -> [ProgramModel] {
