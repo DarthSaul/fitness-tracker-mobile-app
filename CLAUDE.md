@@ -70,6 +70,7 @@ Items deliberately deferred. Roughly ordered by priority within each tier.
 
 ### Medium
 
+- **DTO decode-time invariant validation.** Several DTOs model server shapes where a payload is only valid if exactly one of a set of optional fields is populated (e.g., `CompletedSetDTO`'s three set-flavor fields: `exerciseSetId` / `programExerciseId` / `adhocExerciseName`). Currently synthesized `Decodable` lets zero or multiple coexist silently. Audit all DTOs with mutually-exclusive optional fields and add a custom `init(from decoder:)` that decodes all properties, then `guard`s the invariant and throws `DecodingError.dataCorrupted` with a clear `debugDescription` on violation. Keeps bad server payloads from flowing into the UI as ambiguous state.
 - **Email & Google sign-in providers.** Web supports both. iOS only has Apple. Email auth needs sign-in / sign-up / password-reset forms plus deep-link handling for the email-confirmation redirect. Google sign-in needs the `GoogleSignIn-iOS` SPM dependency, an iOS OAuth client registered in Google Cloud Console (tied to bundle ID), and URL scheme configuration in `Info.plist`.
 - **HealthKit integration.** Read workout / body composition signals where useful; write completed workouts as `HKWorkout` entries. Not present on web (web can't access HealthKit).
 - **Push notifications.** APNs is server-side scaffolded (`server/utils/apns.ts`, `registerDevice` endpoint exists in iOS scaffold). Need to: register for remote notifications, capture device token, call `registerDevice`, handle notification delivery / deep links.
