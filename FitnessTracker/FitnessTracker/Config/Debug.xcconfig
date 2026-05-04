@@ -1,0 +1,4 @@
+// Debug configuration — points at local dev server
+SLASH = /
+API_BASE_URL = http:$(SLASH)/localhost:3000
+SENTRY_DSN = SENTRY_DSN_PLACEHOLDER
