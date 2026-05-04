@@ -1,5 +1,4 @@
 import SwiftUI
-import OSLog
 
 /// Today-view card with three states keyed off HomeViewModel:
 ///   1. Active workout exists  → "Resume workout" with X/Y sets progress.
@@ -26,6 +25,7 @@ struct HomeTodayCard: View {
 
 private struct ResumeCard: View {
     let active: ActiveWorkoutResponseDTO
+    @Environment(LiveWorkoutPresentation.self) private var liveWorkout
 
     private var totalSets: Int {
         active.day.exerciseGroups.reduce(0) { sum, group in
@@ -56,8 +56,7 @@ private struct ResumeCard: View {
 
     var body: some View {
         Button {
-            // PR #7 wires this to the live-workout view via the resume deep link.
-            Logger.app.info("Resume workout tapped — deep link arrives in PR #7.")
+            liveWorkout.present()
         } label: {
             HomeCardChrome {
                 VStack(alignment: .leading, spacing: 8) {
@@ -93,14 +92,14 @@ private struct ResumeCard: View {
 
 private struct StartNextCard: View {
     let viewModel: HomeViewModel
+    @Environment(LiveWorkoutPresentation.self) private var liveWorkout
 
     var body: some View {
         let program = viewModel.activeProgram!
         Button {
             Task {
-                if let sessionId = await viewModel.startNextWorkout() {
-                    // PR #7 wires this to the live-workout view.
-                    Logger.app.info("Started workout \(sessionId, privacy: .private) — deep link arrives in PR #7.")
+                if await viewModel.startNextWorkout() != nil {
+                    liveWorkout.present()
                 }
             }
         } label: {

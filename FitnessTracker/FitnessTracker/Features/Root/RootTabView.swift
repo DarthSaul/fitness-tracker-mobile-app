@@ -1,16 +1,17 @@
 import SwiftUI
-import OSLog
 
 /// Top-level shell when the user is authenticated. Hosts the three primary
-/// tabs and the resume-workout banner.
+/// tabs, the resume-workout banner, and the live-workout sheet.
 ///
 /// Convention: each tab's NavigationStack lives at the tab level here.
 /// Tab content views (e.g. ProgramListView) should NOT wrap themselves in a
 /// NavigationStack — they get one for free from their tab.
 struct RootTabView: View {
     @Environment(APIClient.self) private var apiClient
+    @Environment(SessionManager.self) private var sessionManager
     @State private var resumeViewModel: ResumeWorkoutViewModel?
     @State private var tabSelection = TabSelection()
+    @State private var liveWorkout = LiveWorkoutPresentation()
 
     var body: some View {
         TabView(selection: $tabSelection.current) {
@@ -27,13 +28,23 @@ struct RootTabView: View {
                 .tag(AppTab.analytics)
         }
         .environment(tabSelection)
+        .environment(liveWorkout)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let session = resumeViewModel?.activeSession {
                 ResumeWorkoutBanner(session: session) {
-                    // PR #7 will navigate into the live workout view.
-                    Logger.app.info("Resume banner tapped — deep link arrives in PR #7.")
+                    liveWorkout.present()
                 }
             }
+        }
+        .fullScreenCover(isPresented: $liveWorkout.isPresented) {
+            // Sheet dismissed → refresh the resume banner so it disappears
+            // when the workout has been completed or abandoned.
+            Task { await resumeViewModel?.refresh() }
+        } content: {
+            LiveWorkoutView(viewModel: LiveWorkoutViewModel(
+                repository: WorkoutRepository(apiClient: apiClient),
+                sessionManager: sessionManager
+            ))
         }
         .task {
             // Initialize lazily so we capture apiClient from the environment.

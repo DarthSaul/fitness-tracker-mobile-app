@@ -1,0 +1,239 @@
+import Foundation
+import Testing
+@testable import FitnessTracker
+
+@Suite("LiveWorkoutViewModel")
+@MainActor
+struct LiveWorkoutViewModelTests {
+    // MARK: - Fixtures
+
+    private func makeTemplateSet(_ id: String, setNumber: Int = 1) -> ExerciseSetDTO {
+        ExerciseSetDTO(
+            id: id, programExerciseId: "pe1", setNumber: setNumber,
+            reps: 5, weight: 100, rpe: nil, notes: nil, effortTarget: nil
+        )
+    }
+
+    private func makeProgramDay() -> ProgramDayDTO {
+        let exercise = ProgramExerciseDTO(
+            id: "pe1", exerciseGroupId: "g1", exerciseId: "ex1", order: 0,
+            exercise: ExerciseDTO(id: "ex1", name: "Bench", description: nil),
+            sets: [makeTemplateSet("es1", setNumber: 1), makeTemplateSet("es2", setNumber: 2)]
+        )
+        let group = ExerciseGroupDTO(
+            id: "g1", programDayId: "d1", order: 0,
+            type: .standard, restSeconds: 90, exercises: [exercise]
+        )
+        return ProgramDayDTO(
+            id: "d1", programWeekId: "w1", dayNumber: 1,
+            name: "Day 1", warmUp: nil, exerciseGroups: [group]
+        )
+    }
+
+    private func makeCompletedSet(
+        id: String,
+        exerciseSetId: String? = nil,
+        programExerciseId: String? = nil,
+        adhocExerciseName: String? = nil,
+        reps: Int = 5,
+        weight: Double = 100
+    ) -> CompletedSetDTO {
+        CompletedSetDTO(
+            id: id, workoutSessionId: "ws1",
+            exerciseSetId: exerciseSetId, programExerciseId: programExerciseId,
+            adhocExerciseName: adhocExerciseName,
+            reps: reps, weight: weight, rpe: nil, notes: nil,
+            completedAt: .now
+        )
+    }
+
+    private func makeActiveResponse(completedSets: [CompletedSetDTO] = []) -> ActiveWorkoutResponseDTO {
+        let session = ActiveWorkoutResponseDTO.ActiveWorkoutSession(
+            id: "ws1", userId: "u1", userProgramId: "up1",
+            weekNumber: 1, dayNumber: 1, status: .inProgress,
+            startedAt: .now, completedAt: nil, notes: nil,
+            completedSets: completedSets,
+            userProgram: UserProgramDTO(
+                id: "up1", userId: "u1", programId: "p1", isActive: true,
+                currentWeek: 1, currentDay: 1, startedAt: .now
+            ),
+            workoutExerciseSwaps: []
+        )
+        return ActiveWorkoutResponseDTO(session: session, day: makeProgramDay())
+    }
+
+    private func makeViewModel(client: MockAPIClient = MockAPIClient()) -> LiveWorkoutViewModel {
+        let repo = WorkoutRepository(apiClient: client)
+        let session = SessionManager(keychain: KeychainService(), tokenStore: TokenStore())
+        return LiveWorkoutViewModel(repository: repo, sessionManager: session)
+    }
+
+    // MARK: - Load + bucketing
+
+    @Test("load splits completedSets into template / extra / ad-hoc buckets")
+    func loadBuckets() async {
+        let client = MockAPIClient()
+        let template = makeCompletedSet(id: "cs1", exerciseSetId: "es1")
+        let extra = makeCompletedSet(id: "cs2", programExerciseId: "pe1")
+        let adhoc = makeCompletedSet(id: "cs3", adhocExerciseName: "Pull-up")
+        client.stub(.getActiveWorkout, response: makeActiveResponse(completedSets: [template, extra, adhoc]))
+
+        let vm = makeViewModel(client: client)
+        await vm.load()
+
+        #expect(vm.completedByExerciseSetId["es1"]?.id == "cs1")
+        #expect(vm.extraSets(forProgramExerciseId: "pe1").count == 1)
+        #expect(vm.extraSets(forProgramExerciseId: "pe1")[0].id == "cs2")
+        #expect(vm.adhocSets.count == 1)
+        #expect(vm.adhocSets[0].adhocExerciseName == "Pull-up")
+    }
+
+    @Test("load with no active session leaves session/day nil and no error")
+    func loadNoActive() async {
+        let client = MockAPIClient()
+        client.handlers["/api/workouts/active"] = { _ in
+            throw APIError.httpError(statusCode: 404, data: Data())
+        }
+
+        let vm = makeViewModel(client: client)
+        await vm.load()
+
+        #expect(vm.session == nil)
+        #expect(vm.day == nil)
+        #expect(vm.loadError == nil)
+    }
+
+    // MARK: - Set logging routing
+
+    @Test("logSet POSTs recordSet for unrecorded template sets")
+    func logSetRecord() async {
+        let client = MockAPIClient()
+        client.stub(.getActiveWorkout, response: makeActiveResponse())
+        client.stub(
+            .recordSet(workoutId: "ws1", body: RecordSetBody(exerciseSetId: "es1", reps: 6, weight: 110, rpe: nil, notes: nil)),
+            response: makeCompletedSet(id: "cs-new", exerciseSetId: "es1", reps: 6, weight: 110)
+        )
+
+        let vm = makeViewModel(client: client)
+        await vm.load()
+        await vm.logSet(exerciseSetId: "es1", reps: 6, weight: 110, rpe: nil, notes: nil)
+
+        #expect(vm.completedByExerciseSetId["es1"]?.id == "cs-new")
+    }
+
+    @Test("logSet PATCHes updateSet when a CompletedSet already exists")
+    func logSetUpdate() async {
+        let client = MockAPIClient()
+        let existing = makeCompletedSet(id: "cs1", exerciseSetId: "es1", reps: 5, weight: 100)
+        client.stub(.getActiveWorkout, response: makeActiveResponse(completedSets: [existing]))
+        client.stub(
+            .updateSet(workoutId: "ws1", setId: "cs1", body: UpdateSetBody(reps: 8, weight: 120, rpe: nil, notes: nil)),
+            response: makeCompletedSet(id: "cs1", exerciseSetId: "es1", reps: 8, weight: 120)
+        )
+
+        let vm = makeViewModel(client: client)
+        await vm.load()
+        await vm.logSet(exerciseSetId: "es1", reps: 8, weight: 120, rpe: nil, notes: nil)
+
+        #expect(vm.completedByExerciseSetId["es1"]?.reps == 8)
+    }
+
+    // MARK: - Extra / ad-hoc
+
+    @Test("addExtraSet appends to the extra-sets bucket for the programExercise")
+    func addExtraAppends() async {
+        let client = MockAPIClient()
+        client.stub(.getActiveWorkout, response: makeActiveResponse())
+        client.stub(
+            .addExtraSet(workoutId: "ws1", programExerciseId: "pe1", body: AddExtraSetBody(reps: 6, weight: 80, rpe: nil, notes: nil)),
+            response: makeCompletedSet(id: "cs-extra", programExerciseId: "pe1", reps: 6, weight: 80)
+        )
+
+        let vm = makeViewModel(client: client)
+        await vm.load()
+        await vm.addExtraSet(programExerciseId: "pe1", reps: 6, weight: 80, rpe: nil, notes: nil)
+
+        #expect(vm.extraSets(forProgramExerciseId: "pe1").count == 1)
+        #expect(vm.extraSets(forProgramExerciseId: "pe1")[0].id == "cs-extra")
+    }
+
+    @Test("addAdHocExercise appends to the ad-hoc list")
+    func addAdHocAppends() async {
+        let client = MockAPIClient()
+        client.stub(.getActiveWorkout, response: makeActiveResponse())
+        client.stub(
+            .addAdHocSet(workoutId: "ws1", body: AddAdHocSetBody(exerciseName: "Pull-up")),
+            response: makeCompletedSet(id: "cs-adhoc", adhocExerciseName: "Pull-up", reps: 0, weight: 0)
+        )
+
+        let vm = makeViewModel(client: client)
+        await vm.load()
+        await vm.addAdHocExercise(name: "Pull-up")
+
+        #expect(vm.adhocSets.count == 1)
+        #expect(vm.adhocSets[0].adhocExerciseName == "Pull-up")
+    }
+
+    // MARK: - Complete / abandon
+
+    @Test("completeWorkout returns true on success")
+    func completeReturnsTrue() async {
+        let client = MockAPIClient()
+        client.stub(.getActiveWorkout, response: makeActiveResponse())
+        // Path-keyed stub so we don't have to construct an exact body match.
+        client.handlers["/api/workouts/ws1/complete"] = { _ in
+            try JSONCoding.encoder.encode(CompleteWorkoutResponseDTO(
+                session: WorkoutSessionDTO(
+                    id: "ws1", userId: "u1", userProgramId: "up1",
+                    weekNumber: 1, dayNumber: 1, status: .completed,
+                    startedAt: .now, completedAt: .now, notes: nil
+                ),
+                userProgram: UserProgramDTO(
+                    id: "up1", userId: "u1", programId: "p1", isActive: true,
+                    currentWeek: 1, currentDay: 2, startedAt: .now
+                ),
+                programCompleted: false
+            ))
+        }
+
+        let vm = makeViewModel(client: client)
+        await vm.load()
+        let ok = await vm.completeWorkout()
+        #expect(ok == true)
+    }
+
+    @Test("abandonWorkout clears session/day and returns true")
+    func abandonClears() async {
+        let client = MockAPIClient()
+        client.stub(.getActiveWorkout, response: makeActiveResponse())
+        client.stub(.abandonWorkout(id: "ws1"), response: ["deleted": true])
+
+        let vm = makeViewModel(client: client)
+        await vm.load()
+        #expect(vm.session != nil)
+        let ok = await vm.abandonWorkout()
+
+        #expect(ok == true)
+        #expect(vm.session == nil)
+        #expect(vm.day == nil)
+    }
+
+    // MARK: - Notes auto-save
+
+    @Test("notes save schedules debounced save and reaches .saved state")
+    func notesAutoSave() async throws {
+        let client = MockAPIClient()
+        client.stub(.getActiveWorkout, response: makeActiveResponse())
+        client.handlers["/api/workouts/ws1"] = { _ in
+            try JSONCoding.encoder.encode(UpdateWorkoutNotesResponseDTO(id: "ws1", notes: "hello"))
+        }
+
+        let vm = makeViewModel(client: client)
+        await vm.load()
+        vm.notes = "hello"
+        // Wait past the 0.6s debounce + a buffer for the save itself.
+        try await Task.sleep(nanoseconds: 1_200_000_000)
+
+        #expect(vm.notesSaveState == .saved)
+    }
+}
