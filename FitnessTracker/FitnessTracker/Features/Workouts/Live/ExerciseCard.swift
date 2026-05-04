@@ -36,28 +36,33 @@ struct ExerciseCard: View {
     // MARK: - Header (always visible)
 
     private var header: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.18)) {
-                isExpanded.toggle()
-            }
-        } label: {
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 4) {
+        // Two stacked rows: a tappable toggle row (name + completion + chevron)
+        // and a separate chips row outside the Button. Nesting the chips inside
+        // the toggle Button caused tap-routing ambiguity — chip taps could
+        // bubble up to the expand/collapse handler in some cases.
+        VStack(alignment: .leading, spacing: 6) {
+            Button {
+                withAnimation(.easeInOut(duration: 0.18)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 10) {
                     nameRow
-                    chipsRow
+                    Spacer()
+                    if isComplete {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    }
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
                 }
-                Spacer()
-                if isComplete {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                }
-                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+
+            chipsRow
         }
-        .buttonStyle(.plain)
     }
 
     private var nameRow: some View {

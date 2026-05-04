@@ -94,8 +94,17 @@ struct ExerciseSwapSheet: View {
     private func performSwap(replacement: ExerciseDTO) async {
         isConfirming = true
         defer { isConfirming = false }
-        let deleted = await onConfirm(replacement.id)
-        if let deleted, deleted > 0 {
+
+        // `onConfirm` returns nil on failure (the VM caught and logged the
+        // error). Surface it inline so the user can retry from the same sheet
+        // — previously we dismissed unconditionally, which dropped the user
+        // back into the live workout with no indication the swap had failed.
+        guard let deleted = await onConfirm(replacement.id) else {
+            resultMessage = "Couldn't swap exercise. Please try again."
+            return
+        }
+
+        if deleted > 0 {
             resultMessage = "\(deleted) logged set\(deleted == 1 ? "" : "s") removed."
             // Hold briefly so the user sees the result, then dismiss.
             try? await Task.sleep(nanoseconds: 1_000_000_000)

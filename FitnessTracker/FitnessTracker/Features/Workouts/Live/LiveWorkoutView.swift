@@ -281,7 +281,11 @@ struct LiveWorkoutView: View {
         return ExerciseSwapSheet(
             programExerciseId: target.programExerciseId,
             currentExerciseName: target.currentName,
-            hasLoggedSets: !vm.completedByExerciseSetId.isEmpty || !vm.extraSets(forProgramExerciseId: target.programExerciseId).isEmpty,
+            // Scope the destructive-swap warning to THIS exercise's logged sets:
+            // the global `completedByExerciseSetId` map covers every exercise in
+            // the day, so using it directly would warn even when the user has
+            // logged sets on other exercises but not this one.
+            hasLoggedSets: hasLoggedSets(forProgramExerciseId: target.programExerciseId),
             onConfirm: { replacementId in
                 let deleted = await vm.swap(programExerciseId: target.programExerciseId, replacementExerciseId: replacementId)
                 return deleted
@@ -291,6 +295,18 @@ struct LiveWorkoutView: View {
 
     private func trendSheet(for target: TrendTarget) -> some View {
         ExerciseTrendSheet(exerciseId: target.exerciseId, exerciseName: target.exerciseName)
+    }
+
+    /// True when the specific programExercise has any logged sets — either a
+    /// CompletedSet against one of its template sets, or any extra sets.
+    private func hasLoggedSets(forProgramExerciseId id: String) -> Bool {
+        let extras = !viewModel.extraSets(forProgramExerciseId: id).isEmpty
+        let templateSetIds = viewModel.day?.exerciseGroups
+            .flatMap(\.exercises)
+            .first(where: { $0.id == id })?
+            .sets.map(\.id) ?? []
+        let templateLogged = templateSetIds.contains { viewModel.completedSet(forExerciseSetId: $0) != nil }
+        return templateLogged || extras
     }
 
     private func adHocSearchSheet() -> some View {

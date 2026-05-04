@@ -19,6 +19,12 @@ struct ExerciseSearchList: View {
     @State private var isLoading = false
     @State private var loadError: String?
     @State private var searchTask: Task<Void, Never>?
+    /// Monotonic counter incremented on each `runSearch` invocation. The
+    /// initial empty-query load and any debounced calls capture the value
+    /// before they await; if a newer search has started by the time they
+    /// resume, they bail out without touching `results` / `loadError` so a
+    /// stale response can't flash matches for the wrong term.
+    @State private var searchRevision: Int = 0
 
     var body: some View {
         content
@@ -83,17 +89,24 @@ struct ExerciseSearchList: View {
     }
 
     private func runSearch(query: String) async {
+        searchRevision += 1
+        let revision = searchRevision
         isLoading = true
         loadError = nil
-        defer { isLoading = false }
         do {
             let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
             let exercises: [ExerciseDTO] = try await apiClient.send(
                 .getExercises(search: trimmed.isEmpty ? nil : trimmed)
             )
+            // Newer search already ran (or this one was superseded by the
+            // initial empty-query .task) — drop our results on the floor.
+            guard revision == searchRevision else { return }
             self.results = exercises
+            self.isLoading = false
         } catch {
-            loadError = error.localizedDescription
+            guard revision == searchRevision else { return }
+            self.loadError = error.localizedDescription
+            self.isLoading = false
         }
     }
 }
