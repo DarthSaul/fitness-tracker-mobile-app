@@ -5,11 +5,16 @@ struct HomeTab: View {
     @Environment(SessionManager.self) private var sessionManager
 
     var body: some View {
-        let repo = HomeRepository(apiClient: apiClient)
-        let viewModel = HomeViewModel(repository: repo, sessionManager: sessionManager)
+        let homeRepo = HomeRepository(apiClient: apiClient)
+        let workoutRepo = WorkoutRepository(apiClient: apiClient)
+        let viewModel = HomeViewModel(repository: homeRepo, sessionManager: sessionManager)
         NavigationStack {
-            HomeView(viewModel: viewModel)
-                .settingsToolbarItem()
+            HomeView(
+                viewModel: viewModel,
+                homeRepository: homeRepo,
+                workoutRepository: workoutRepo
+            )
+            .settingsToolbarItem()
         }
     }
 }

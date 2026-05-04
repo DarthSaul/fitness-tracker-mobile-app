@@ -6,9 +6,13 @@ import SwiftUI
 struct HomeView: View {
     @State private var viewModel: HomeViewModel
     @State private var scheduleSheetPresented = false
+    private let homeRepository: HomeRepository
+    private let workoutRepository: WorkoutRepository
 
-    init(viewModel: HomeViewModel) {
+    init(viewModel: HomeViewModel, homeRepository: HomeRepository, workoutRepository: WorkoutRepository) {
         _viewModel = State(initialValue: viewModel)
+        self.homeRepository = homeRepository
+        self.workoutRepository = workoutRepository
     }
 
     var body: some View {
@@ -38,8 +42,12 @@ struct HomeView: View {
                 .padding(.horizontal)
 
                 if viewModel.hasActiveProgram {
-                    ActiveProgramProgressCard(viewModel: viewModel)
-                        .padding(.horizontal)
+                    ActiveProgramProgressCard(
+                        viewModel: viewModel,
+                        homeRepository: homeRepository,
+                        workoutRepository: workoutRepository
+                    )
+                    .padding(.horizontal)
 
                     sectionHeader("My Fitness")
                     HomeQuickLinksRow()
