@@ -1,8 +1,10 @@
 import SwiftUI
 
-/// Wraps ExerciseSearchSheet for the swap-mid-workout flow. Includes a
-/// destructive-action warning if the user already has logged sets — the
-/// server deletes them on swap.
+/// Two-step swap-mid-workout sheet: pick a replacement exercise, then confirm.
+/// Both steps render inside a single, stable `NavigationStack` so SwiftUI can
+/// keep the sheet's view hierarchy intact across the step transition. The
+/// previous structure (different `NavigationStack` per step) triggered an
+/// `_UIReparentingView` warning when the user picked a replacement.
 struct ExerciseSwapSheet: View {
     let programExerciseId: String
     let currentExerciseName: String
@@ -17,64 +19,74 @@ struct ExerciseSwapSheet: View {
     @State private var resultMessage: String?
 
     var body: some View {
-        if pendingReplacement == nil {
-            ExerciseSearchSheet(
-                title: "Swap exercise",
-                subtitle: "Currently: \(currentExerciseName)" + (hasLoggedSets ? "\n\u{26A0}\u{FE0F} Swapping will delete logged sets for this exercise." : "")
-            ) { picked in
-                pendingReplacement = picked
-            }
-        } else if let pending = pendingReplacement {
-            confirmation(replacement: pending)
+        NavigationStack {
+            content
+                .navigationTitle(pendingReplacement == nil ? "Swap exercise" : "Confirm swap")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button("Cancel") { dismiss() }
+                    }
+                }
         }
     }
 
+    @ViewBuilder
+    private var content: some View {
+        if let pending = pendingReplacement {
+            confirmation(replacement: pending)
+        } else {
+            ExerciseSearchList(subtitle: searchSubtitle) { picked in
+                pendingReplacement = picked
+            }
+        }
+    }
+
+    private var searchSubtitle: String {
+        var s = "Currently: \(currentExerciseName)"
+        if hasLoggedSets {
+            s += "\n\u{26A0}\u{FE0F} Swapping will delete logged sets for this exercise."
+        }
+        return s
+    }
+
     private func confirmation(replacement: ExerciseDTO) -> some View {
-        NavigationStack {
-            Form {
-                Section("Replacement") {
-                    Text(replacement.name).font(.headline)
-                    if let description = replacement.description, !description.isEmpty {
-                        Text(description)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                if hasLoggedSets {
-                    Section {
-                        Label("Logged sets for the original exercise will be removed.", systemImage: "exclamationmark.triangle")
-                            .font(.subheadline)
-                            .foregroundStyle(.orange)
-                    }
-                }
-
-                if let resultMessage {
-                    Section { Text(resultMessage).font(.footnote).foregroundStyle(.secondary) }
-                }
-
-                Section {
-                    Button(role: .destructive) {
-                        Task { await performSwap(replacement: replacement) }
-                    } label: {
-                        HStack {
-                            if isConfirming { ProgressView().controlSize(.small) }
-                            Text(isConfirming ? "Swapping…" : "Confirm swap")
-                        }
-                    }
-                    .disabled(isConfirming)
-                    Button("Pick a different exercise") {
-                        pendingReplacement = nil
-                    }
-                    .disabled(isConfirming)
+        Form {
+            Section("Replacement") {
+                Text(replacement.name).font(.headline)
+                if let description = replacement.description, !description.isEmpty {
+                    Text(description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("Confirm swap")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }
+
+            if hasLoggedSets {
+                Section {
+                    Label("Logged sets for the original exercise will be removed.", systemImage: "exclamationmark.triangle")
+                        .font(.subheadline)
+                        .foregroundStyle(.orange)
                 }
+            }
+
+            if let resultMessage {
+                Section { Text(resultMessage).font(.footnote).foregroundStyle(.secondary) }
+            }
+
+            Section {
+                Button(role: .destructive) {
+                    Task { await performSwap(replacement: replacement) }
+                } label: {
+                    HStack {
+                        if isConfirming { ProgressView().controlSize(.small) }
+                        Text(isConfirming ? "Swapping…" : "Confirm swap")
+                    }
+                }
+                .disabled(isConfirming)
+                Button("Pick a different exercise") {
+                    pendingReplacement = nil
+                }
+                .disabled(isConfirming)
             }
         }
     }

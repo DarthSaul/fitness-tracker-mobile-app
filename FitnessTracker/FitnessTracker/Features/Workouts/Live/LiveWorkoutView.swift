@@ -7,11 +7,12 @@ import SwiftUI
 /// Add Exercise button, Complete CTA at the bottom. Reuses SetLogSheet from M6.
 struct LiveWorkoutView: View {
     @State private var viewModel: LiveWorkoutViewModel
-    @State private var setBeingEdited: SetEditTarget?
-    @State private var swapTarget: SwapTarget?
-    @State private var trendTarget: TrendTarget?
-    @State private var showPreview = false
-    @State private var showAdHocSearch = false
+    /// Single source of truth for which sheet (if any) is presented. Stacking
+    /// multiple `.sheet` modifiers on one view caused `_UIReparentingView`
+    /// warnings when a sheet was presented from a Menu (the dismissal of the
+    /// menu and the sheet present overlapped), so we collapse all sheet
+    /// presentations into one optional enum + one `.sheet(item:)` modifier.
+    @State private var presentedSheet: PresentedSheet?
     @State private var showCompleteConfirmation = false
     @State private var showAbandonConfirmation = false
     @Environment(\.dismiss) private var dismiss
@@ -27,11 +28,7 @@ struct LiveWorkoutView: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
                 .task { await viewModel.load() }
-                .sheet(item: $setBeingEdited, content: setLogSheet(for:))
-                .sheet(item: $swapTarget, content: swapSheet(for:))
-                .sheet(item: $trendTarget, content: trendSheet(for:))
-                .sheet(isPresented: $showPreview, content: previewSheet)
-                .sheet(isPresented: $showAdHocSearch, content: adHocSearchSheet)
+                .sheet(item: $presentedSheet, content: sheetContent(for:))
                 .confirmationDialog(
                     "Complete this workout?",
                     isPresented: $showCompleteConfirmation,
@@ -97,7 +94,7 @@ struct LiveWorkoutView: View {
         }
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
-                Button { showPreview = true } label: { Label("Preview workout", systemImage: "eye") }
+                Button { presentedSheet = .preview } label: { Label("Preview workout", systemImage: "eye") }
                 Button(role: .destructive) {
                     showAbandonConfirmation = true
                 } label: {
@@ -121,21 +118,25 @@ struct LiveWorkoutView: View {
                             viewModel: viewModel,
                             exercise: exercise,
                             onTapTemplateSet: { templateSet in
-                                setBeingEdited = SetEditTarget.template(
+                                presentedSheet = .setLog(.template(
                                     exerciseName: exercise.exercise.name,
                                     programExerciseId: exercise.id,
                                     templateSet: templateSet
-                                )
+                                ))
                             },
                             onAddExtraSet: {
-                                setBeingEdited = SetEditTarget.extra(
+                                presentedSheet = .setLog(.extra(
                                     exerciseName: exercise.exercise.name,
                                     programExerciseId: exercise.id,
                                     nextSetNumber: exercise.sets.count + viewModel.extraSets(forProgramExerciseId: exercise.id).count + 1
-                                )
+                                ))
                             },
-                            onSwap: { swapTarget = SwapTarget(programExerciseId: exercise.id, currentName: exercise.exercise.name) },
-                            onShowTrend: { trendTarget = TrendTarget(exerciseId: exercise.exercise.id, exerciseName: exercise.exercise.name) }
+                            onSwap: {
+                                presentedSheet = .swap(SwapTarget(programExerciseId: exercise.id, currentName: exercise.exercise.name))
+                            },
+                            onShowTrend: {
+                                presentedSheet = .trend(TrendTarget(exerciseId: exercise.exercise.id, exerciseName: exercise.exercise.name))
+                            }
                         )
                     }
                 } header: {
@@ -175,7 +176,7 @@ struct LiveWorkoutView: View {
         }
 
         Section {
-            Button { showAdHocSearch = true } label: {
+            Button { presentedSheet = .adHocSearch } label: {
                 Label("Add exercise", systemImage: "plus.circle")
             }
         }
@@ -221,6 +222,17 @@ struct LiveWorkoutView: View {
     }
 
     // MARK: - Sheets
+
+    @ViewBuilder
+    private func sheetContent(for target: PresentedSheet) -> some View {
+        switch target {
+        case .setLog(let t): setLogSheet(for: t)
+        case .swap(let t): swapSheet(for: t)
+        case .trend(let t): trendSheet(for: t)
+        case .preview: previewSheet()
+        case .adHocSearch: adHocSearchSheet()
+        }
+    }
 
     private func setLogSheet(for target: SetEditTarget) -> some View {
         let vm = viewModel
@@ -324,6 +336,27 @@ struct LiveWorkoutView: View {
     }
 
     // MARK: - Targets (sheet identifiers)
+
+    /// Single discriminator for `.sheet(item:)`. Keeps `LiveWorkoutView` from
+    /// stacking five separate `.sheet` modifiers on one view, which caused
+    /// `_UIReparentingView` warnings when sheets were presented from a Menu.
+    fileprivate enum PresentedSheet: Identifiable {
+        case setLog(SetEditTarget)
+        case swap(SwapTarget)
+        case trend(TrendTarget)
+        case preview
+        case adHocSearch
+
+        var id: String {
+            switch self {
+            case .setLog(let t): return "setLog-\(t.id)"
+            case .swap(let t): return "swap-\(t.id)"
+            case .trend(let t): return "trend-\(t.id)"
+            case .preview: return "preview"
+            case .adHocSearch: return "adHocSearch"
+            }
+        }
+    }
 
     fileprivate enum SetEditTarget: Identifiable {
         case template(exerciseName: String, programExerciseId: String, templateSet: ExerciseSetDTO)

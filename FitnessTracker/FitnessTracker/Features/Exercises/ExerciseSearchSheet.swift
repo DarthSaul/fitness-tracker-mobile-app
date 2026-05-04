@@ -1,19 +1,17 @@
 import SwiftUI
 
-/// Searchable exercise picker. Issues a debounced GET /api/exercises?search=
-/// as the user types and surfaces results in a list. Tap a result → invoke
-/// `onPick` (caller closes the sheet on its own — sheet only dismisses on
-/// the explicit Cancel button).
-///
-/// Reused for two flows in M7:
-///   1. Adding an ad-hoc exercise to a live workout
-///   2. Picking the replacement in ExerciseSwapSheet (which wraps this view)
-struct ExerciseSearchSheet: View {
-    let title: String
+/// Inner search-and-pick component (no NavigationStack / toolbar of its own).
+/// Extracted from `ExerciseSearchSheet` so other sheets can host the same
+/// search experience inside their own stable `NavigationStack`, which avoids
+/// the `_UIReparentingView` warning that comes from swapping one root
+/// `NavigationStack` for another inside a single SwiftUI sheet.
+struct ExerciseSearchList: View {
+    /// Optional copy shown above the list when the query is empty.
     let subtitle: String?
-    let onPick: (ExerciseDTO) async -> Void
+    /// Sync callback — the host decides what to do with the picked exercise
+    /// (e.g. dismiss its sheet, advance to a confirmation step).
+    let onPick: (ExerciseDTO) -> Void
 
-    @Environment(\.dismiss) private var dismiss
     @Environment(APIClient.self) private var apiClient
 
     @State private var query: String = ""
@@ -22,36 +20,15 @@ struct ExerciseSearchSheet: View {
     @State private var loadError: String?
     @State private var searchTask: Task<Void, Never>?
 
-    init(
-        title: String,
-        subtitle: String? = nil,
-        onPick: @escaping (ExerciseDTO) async -> Void
-    ) {
-        self.title = title
-        self.subtitle = subtitle
-        self.onPick = onPick
-    }
-
     var body: some View {
-        NavigationStack {
-            content
-                .navigationTitle(title)
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Cancel") { dismiss() }
-                    }
-                }
-                .searchable(text: $query, prompt: "Search exercises")
-                .onChange(of: query) { _, newValue in
-                    scheduleSearch(query: newValue)
-                }
-                .task {
-                    // Initial load with empty query so the user sees something
-                    // before they start typing.
-                    await runSearch(query: "")
-                }
-        }
+        content
+            .searchable(text: $query, prompt: "Search exercises")
+            .onChange(of: query) { _, newValue in
+                scheduleSearch(query: newValue)
+            }
+            .task {
+                await runSearch(query: "")
+            }
     }
 
     @ViewBuilder
@@ -71,10 +48,7 @@ struct ExerciseSearchSheet: View {
                 }
                 ForEach(results) { exercise in
                     Button {
-                        Task {
-                            await onPick(exercise)
-                            dismiss()
-                        }
+                        onPick(exercise)
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(exercise.name).foregroundStyle(.primary)
@@ -120,6 +94,44 @@ struct ExerciseSearchSheet: View {
             self.results = exercises
         } catch {
             loadError = error.localizedDescription
+        }
+    }
+}
+
+/// Searchable exercise picker presented as a sheet on its own. Wraps
+/// `ExerciseSearchList` in a NavigationStack with a Cancel toolbar item.
+struct ExerciseSearchSheet: View {
+    let title: String
+    let subtitle: String?
+    let onPick: (ExerciseDTO) async -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    init(
+        title: String,
+        subtitle: String? = nil,
+        onPick: @escaping (ExerciseDTO) async -> Void
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.onPick = onPick
+    }
+
+    var body: some View {
+        NavigationStack {
+            ExerciseSearchList(subtitle: subtitle) { exercise in
+                Task {
+                    await onPick(exercise)
+                    dismiss()
+                }
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
         }
     }
 }
