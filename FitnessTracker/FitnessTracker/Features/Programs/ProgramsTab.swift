@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 /// Programs tab — wraps the program library list. PR #4 will replace
 /// ProgramListView with the full library (filters, detail, week/day expansion).
