@@ -7,37 +7,37 @@ struct ProgramListView: View {
         _viewModel = State(initialValue: viewModel)
     }
 
+    // The enclosing tab (ProgramsTab) provides the NavigationStack — this
+    // view is content-only and assumes a navigation context already exists.
     var body: some View {
-        NavigationStack {
-            Group {
-                if viewModel.isLoading && viewModel.programs.isEmpty {
-                    ProgressView("Loading programs…")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if viewModel.programs.isEmpty {
-                    ContentUnavailableView(
-                        "No Programs",
-                        systemImage: "dumbbell",
-                        description: Text("Programs will appear here once loaded.")
-                    )
-                } else {
-                    List(viewModel.programs, id: \.id) { program in
-                        ProgramRow(program: program)
-                    }
-                    .listStyle(.insetGrouped)
-                    .refreshable { await viewModel.loadPrograms() }
+        Group {
+            if viewModel.isLoading && viewModel.programs.isEmpty {
+                ProgressView("Loading programs…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if viewModel.programs.isEmpty {
+                ContentUnavailableView(
+                    "No Programs",
+                    systemImage: "dumbbell",
+                    description: Text("Programs will appear here once loaded.")
+                )
+            } else {
+                List(viewModel.programs, id: \.id) { program in
+                    ProgramRow(program: program)
                 }
+                .listStyle(.insetGrouped)
+                .refreshable { await viewModel.loadPrograms() }
             }
-            .navigationTitle("Programs")
-            .task { await viewModel.loadPrograms() }
-            .alert("Error", isPresented: Binding(
-                get: { viewModel.error != nil },
-                set: { if !$0 { viewModel.error = nil } }
-            )) {
-                Button("Retry") { Task { await viewModel.loadPrograms() } }
-                Button("Dismiss", role: .cancel) { viewModel.error = nil }
-            } message: {
-                Text(viewModel.error?.localizedDescription ?? "")
-            }
+        }
+        .navigationTitle("Programs")
+        .task { await viewModel.loadPrograms() }
+        .alert("Error", isPresented: Binding(
+            get: { viewModel.error != nil },
+            set: { if !$0 { viewModel.error = nil } }
+        )) {
+            Button("Retry") { Task { await viewModel.loadPrograms() } }
+            Button("Dismiss", role: .cancel) { viewModel.error = nil }
+        } message: {
+            Text(viewModel.error?.localizedDescription ?? "")
         }
     }
 }
