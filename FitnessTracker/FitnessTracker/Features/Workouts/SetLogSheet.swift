@@ -74,6 +74,11 @@ struct SetLogSheet: View {
                 if let onDelete, existing != nil {
                     Section {
                         Button(role: .destructive) {
+                            // Guard against tapping Delete while a Save is mid-flight.
+                            // Without this, Save and Delete on the same record can
+                            // race — server-side ordering is undefined and local state
+                            // can end up out of sync with the server.
+                            guard !isSaving else { return }
                             Task {
                                 isDeleting = true
                                 let ok = await onDelete()
@@ -86,7 +91,7 @@ struct SetLogSheet: View {
                                 Text("Delete this set")
                             }
                         }
-                        .disabled(isDeleting)
+                        .disabled(isDeleting || isSaving)
                     }
                 }
             }
@@ -98,13 +103,16 @@ struct SetLogSheet: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") { saveAndDismiss() }
-                        .disabled(isSaving)
+                        .disabled(isSaving || isDeleting)
                 }
             }
         }
     }
 
     private func saveAndDismiss() {
+        // Match the Delete-button guard: don't queue a Save while a Delete is
+        // already in flight on the same record.
+        guard !isDeleting else { return }
         isSaving = true
         Task {
             let ok = await onSave(parseInt(repsText), parseDouble(weightText), parseDouble(rpeText), notes.isEmpty ? nil : notes)
@@ -122,7 +130,16 @@ struct SetLogSheet: View {
 
     private func parseDouble(_ s: String) -> Double? {
         let trimmed = s.trimmingCharacters(in: .whitespaces)
-        return trimmed.isEmpty ? nil : Double(trimmed)
+        guard !trimmed.isEmpty else { return nil }
+        // The decimalPad keyboard emits the user's locale separator (e.g. ","
+        // in DE/FR), and `formatDouble` already produces locale-aware strings
+        // for placeholders and prefills. Parse with the matching locale so the
+        // round-trip works — `Double(_:)` only accepts "." and would silently
+        // discard otherwise-valid input.
+        let formatter = NumberFormatter()
+        formatter.locale = Locale.current
+        formatter.numberStyle = .decimal
+        return formatter.number(from: trimmed)?.doubleValue
     }
 
     private func placeholderInt(_ value: Int?) -> String {
