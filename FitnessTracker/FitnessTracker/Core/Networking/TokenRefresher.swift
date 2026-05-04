@@ -85,8 +85,13 @@ actor TokenRefresher {
         }
 
         let tokens = try JSONCoding.decoder.decode(AuthTokensResponse.self, from: data)
-        await tokenStore.set(access: tokens.accessToken)
+        // Persist the rotated refresh token first. If keychain.save throws,
+        // the throw propagates and we leave the in-memory access token alone
+        // — otherwise we'd have a fresh access token paired with the now-
+        // invalidated refresh token still on disk, and the next refresh would
+        // 401 and force the user to sign in again.
         try await keychain.save(tokens.refreshToken, for: .refreshToken)
+        await tokenStore.set(access: tokens.accessToken)
         Logger.auth.info("Token refresh succeeded.")
     }
 }
