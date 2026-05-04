@@ -53,12 +53,27 @@ struct ProgramDayEditView: View {
 
     private var formContent: some View {
         Form {
-            if viewModel.session == nil {
+            if viewModel.isLoading && viewModel.session == nil {
+                // Distinct from the empty state: an existing-session fetch is
+                // in-flight. Showing the Start CTA here would race with
+                // loadIfNeeded() and risk a duplicate session creation.
+                Section {
+                    HStack {
+                        ProgressView().controlSize(.small)
+                        Text("Loading session…").foregroundStyle(.secondary)
+                    }
+                }
+            } else if viewModel.session == nil {
                 emptyStateSection
             } else {
                 datePickerSection
                 exerciseSections
                 actionsSection
+            }
+            if let loadError = viewModel.loadError {
+                Section {
+                    Text(loadError).foregroundStyle(.red).font(.footnote)
+                }
             }
             if let actionError = viewModel.actionError {
                 Section {
@@ -102,13 +117,13 @@ struct ProgramDayEditView: View {
         let exerciseSetId = target.templateSet.id
         let existing = viewModel.completedSet(forExerciseSetId: exerciseSetId)
         let vm = viewModel
-        let onSave: (Int?, Double?, Double?, String?) async -> Void = { reps, weight, rpe, notes in
+        let onSave: (Int?, Double?, Double?, String?) async -> Bool = { reps, weight, rpe, notes in
             await vm.logSet(
                 exerciseSetId: exerciseSetId,
                 reps: reps, weight: weight, rpe: rpe, notes: notes
             )
         }
-        var onDelete: (() async -> Void)? = nil
+        var onDelete: (() async -> Bool)? = nil
         if existing != nil {
             onDelete = {
                 await vm.deleteLoggedSet(exerciseSetId: exerciseSetId)
@@ -144,7 +159,10 @@ struct ProgramDayEditView: View {
                 }
             }
             .buttonStyle(.borderedProminent)
-            .disabled(viewModel.isStartingSession)
+            // Disabled during initial load too, defensively — formContent's
+            // loading branch normally hides this section while isLoading,
+            // but lock the action regardless in case the state ever races.
+            .disabled(viewModel.isStartingSession || viewModel.isLoading)
         }
     }
 

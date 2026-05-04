@@ -8,6 +8,7 @@ struct ProgramFlowView: View {
     @State private var viewModel: ProgramFlowViewModel
     @State private var expandedWeeks: Set<Int> = []
     private let workoutRepository: WorkoutRepository
+    @Environment(\.dismiss) private var dismiss
 
     init(viewModel: ProgramFlowViewModel, workoutRepository: WorkoutRepository) {
         _viewModel = State(initialValue: viewModel)
@@ -100,7 +101,15 @@ struct ProgramFlowView: View {
         }
 
         if isLocked {
-            label
+            // The text instructs the user to deal with the workout from the
+            // Home tab. Make the row act on that instruction by popping back
+            // to Home (this view is pushed onto Home's NavigationStack).
+            Button {
+                dismiss()
+            } label: {
+                label
+            }
+            .buttonStyle(.plain)
         } else {
             NavigationLink {
                 ProgramDayEditView(
@@ -126,6 +135,20 @@ private struct DayStatusBadge: View {
             Circle().fill(background)
                 .frame(width: 24, height: 24)
             icon
+        }
+        // Status is encoded purely visually (color + icon) — collapse the
+        // whole badge into a single VoiceOver element with an explicit label
+        // so the row text is augmented rather than overridden.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var accessibilityLabel: String {
+        switch status {
+        case .completed: return "Completed"
+        case .inProgress: return "In progress"
+        case .current: return "Current"
+        case .upcoming: return "Upcoming"
         }
     }
 

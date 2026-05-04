@@ -121,14 +121,16 @@ final class ProgramDayEditViewModel {
 
     /// Logs a value for a template set. Routes to recordSet (POST) for new sets
     /// and updateSet (PATCH) for already-completed ones — single call site for the UI.
+    /// Returns true on success so the SetLogSheet can keep the editor open on failure.
+    @discardableResult
     func logSet(
         exerciseSetId: String,
         reps: Int?,
         weight: Double?,
         rpe: Double?,
         notes: String?
-    ) async {
-        guard let session else { return }
+    ) async -> Bool {
+        guard let session else { return false }
         actionError = nil
         do {
             if let existing = completedByExerciseSetId[exerciseSetId] {
@@ -148,23 +150,28 @@ final class ProgramDayEditViewModel {
                 completedByExerciseSetId[exerciseSetId] = created
             }
             onChange()
+            return true
         } catch {
             Logger.data.error("logSet failed: \(error)")
             actionError = error.localizedDescription
+            return false
         }
     }
 
-    /// Deletes a previously-logged completed set.
-    func deleteLoggedSet(exerciseSetId: String) async {
-        guard let session, let existing = completedByExerciseSetId[exerciseSetId] else { return }
+    /// Deletes a previously-logged completed set. Returns true on success.
+    @discardableResult
+    func deleteLoggedSet(exerciseSetId: String) async -> Bool {
+        guard let session, let existing = completedByExerciseSetId[exerciseSetId] else { return false }
         actionError = nil
         do {
             try await repository.deleteSet(workoutId: session.id, setId: existing.id)
             completedByExerciseSetId.removeValue(forKey: exerciseSetId)
             onChange()
+            return true
         } catch {
             Logger.data.error("deleteLoggedSet failed: \(error)")
             actionError = error.localizedDescription
+            return false
         }
     }
 

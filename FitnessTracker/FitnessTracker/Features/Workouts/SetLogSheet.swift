@@ -11,8 +11,11 @@ struct SetLogSheet: View {
     let templateSet: ExerciseSetDTO
     /// Existing log, if any. When non-nil, the sheet shows a Delete button.
     let existing: CompletedSetDTO?
-    let onSave: (_ reps: Int?, _ weight: Double?, _ rpe: Double?, _ notes: String?) async -> Void
-    let onDelete: (() async -> Void)?
+    /// Returns `true` on successful persistence, `false` on failure. The sheet
+    /// only dismisses on `true` so the user can see and recover from errors
+    /// the caller already surfaces (e.g. via `viewModel.actionError`).
+    let onSave: (_ reps: Int?, _ weight: Double?, _ rpe: Double?, _ notes: String?) async -> Bool
+    let onDelete: (() async -> Bool)?
 
     @Environment(\.dismiss) private var dismiss
     @State private var repsText: String
@@ -27,8 +30,8 @@ struct SetLogSheet: View {
         setNumber: Int,
         templateSet: ExerciseSetDTO,
         existing: CompletedSetDTO?,
-        onSave: @escaping (_ reps: Int?, _ weight: Double?, _ rpe: Double?, _ notes: String?) async -> Void,
-        onDelete: (() async -> Void)? = nil
+        onSave: @escaping (_ reps: Int?, _ weight: Double?, _ rpe: Double?, _ notes: String?) async -> Bool,
+        onDelete: (() async -> Bool)? = nil
     ) {
         self.exerciseName = exerciseName
         self.setNumber = setNumber
@@ -73,9 +76,9 @@ struct SetLogSheet: View {
                         Button(role: .destructive) {
                             Task {
                                 isDeleting = true
-                                await onDelete()
+                                let ok = await onDelete()
                                 isDeleting = false
-                                dismiss()
+                                if ok { dismiss() }
                             }
                         } label: {
                             HStack {
@@ -104,9 +107,9 @@ struct SetLogSheet: View {
     private func saveAndDismiss() {
         isSaving = true
         Task {
-            await onSave(parseInt(repsText), parseDouble(weightText), parseDouble(rpeText), notes.isEmpty ? nil : notes)
+            let ok = await onSave(parseInt(repsText), parseDouble(weightText), parseDouble(rpeText), notes.isEmpty ? nil : notes)
             isSaving = false
-            dismiss()
+            if ok { dismiss() }
         }
     }
 
