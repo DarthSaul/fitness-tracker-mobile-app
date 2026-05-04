@@ -8,6 +8,11 @@ struct FeedbackView: View {
     @State private var viewModel: FeedbackViewModel
     @State private var photosPickerItem: PhotosPickerItem?
     @State private var screenshotPreview: Image?
+    /// Cancellable handle for the in-flight `loadPickedPhoto`. Keeping a
+    /// reference lets us cancel a slower previous load when the user picks
+    /// a new photo before the first one finishes — otherwise the older
+    /// load could complete late and overwrite the newer screenshot.
+    @State private var photoLoadTask: Task<Void, Never>?
 
     init(viewModel: FeedbackViewModel) {
         _viewModel = State(initialValue: viewModel)
@@ -24,7 +29,8 @@ struct FeedbackView: View {
         .task { await viewModel.load() }
         .refreshable { await viewModel.load() }
         .onChange(of: photosPickerItem) { _, newItem in
-            Task { await loadPickedPhoto(newItem) }
+            photoLoadTask?.cancel()
+            photoLoadTask = Task { await loadPickedPhoto(newItem) }
         }
     }
 
@@ -107,6 +113,7 @@ struct FeedbackView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Remove attachment")
             }
         } else {
             PhotosPicker(
@@ -187,6 +194,9 @@ struct FeedbackView: View {
     /// Loads bytes + a SwiftUI Image preview from the picker selection.
     /// Detects MIME type via the picked item's UTType so the multipart part
     /// header matches what the server validates against (image/*).
+    /// Checks `Task.isCancelled` after the suspension point and before
+    /// writing state so a stale load (superseded by a newer pick) leaves
+    /// the UI alone.
     private func loadPickedPhoto(_ item: PhotosPickerItem?) async {
         guard let item else {
             screenshotPreview = nil
@@ -195,6 +205,7 @@ struct FeedbackView: View {
         }
         do {
             guard let data = try await item.loadTransferable(type: Data.self) else { return }
+            if Task.isCancelled { return }
             let mime = inferMimeType(item: item)
             let filename = "screenshot-\(Int(Date.now.timeIntervalSince1970))\(extensionFor(mime))"
             viewModel.draftScreenshot = .init(data: data, filename: filename, mimeType: mime)
@@ -203,6 +214,7 @@ struct FeedbackView: View {
                 screenshotPreview = Image(uiImage: uiImage)
             }
         } catch {
+            if Task.isCancelled { return }
             viewModel.submitError = "Couldn't load screenshot: \(error.localizedDescription)"
         }
     }

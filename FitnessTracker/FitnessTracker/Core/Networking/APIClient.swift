@@ -75,6 +75,17 @@ final class APIClient: APIClientProtocol {
     }
 
     // MARK: - Core Execution
+
+    /// Outcome of `processResponse`: either the success `Data` or a signal
+    /// that the caller should refresh the token and re-run the request.
+    /// Returning a value (rather than recursing through a closure) keeps
+    /// `processResponse` agnostic to how the original request was built and
+    /// sidesteps a Swift typed-throws inference issue with closure params.
+    private enum ResponseOutcome {
+        case data(Data)
+        case shouldRetry
+    }
+
     private func execute(_ endpoint: APIEndpoint, retried: Bool) async throws(APIError) -> Data {
         let sentAccessToken = await tokenStore.getAccessToken()
         let request: URLRequest
@@ -85,18 +96,45 @@ final class APIClient: APIClientProtocol {
         }
 
         Logger.networking.debug("\(endpoint.method.rawValue) \(endpoint.path)")
+        let (data, response) = try await performRequest(request)
+        let outcome = try await processResponse(
+            data: data,
+            response: response,
+            endpoint: endpoint,
+            sentAccessToken: sentAccessToken,
+            retried: retried
+        )
+        switch outcome {
+        case .data(let d):     return d
+        case .shouldRetry:     return try await execute(endpoint, retried: true)
+        }
+    }
 
-        let data: Data
-        let response: URLResponse
+    /// Sends a `URLRequest` through the session, mapping URLError to the
+    /// typed `.network` case and anything else to `.unknown`. Used by both
+    /// the JSON and multipart paths so they share a single error map.
+    private func performRequest(_ request: URLRequest) async throws(APIError) -> (Data, URLResponse) {
         do {
-            (data, response) = try await session.data(for: request)
+            return try await session.data(for: request)
         } catch let urlError as URLError {
             Logger.networking.error("Network error: \(urlError)")
             throw .network(urlError)
         } catch {
             throw .unknown(error)
         }
+    }
 
+    /// Shared response handling for `execute` and `executeMultipart`:
+    /// HTTPURLResponse cast, 401-then-token-refresh signal, and status-code
+    /// validation against `data`. The caller decides how to re-run the
+    /// request when `.shouldRetry` is returned.
+    private func processResponse(
+        data: Data,
+        response: URLResponse,
+        endpoint: APIEndpoint,
+        sentAccessToken: String?,
+        retried: Bool
+    ) async throws(APIError) -> ResponseOutcome {
         guard let http = response as? HTTPURLResponse else {
             throw .unknown(URLError(.badServerResponse))
         }
@@ -109,7 +147,7 @@ final class APIClient: APIClientProtocol {
         if http.statusCode == 401 && !retried && sentAccessToken != nil {
             Logger.networking.info("401 on \(endpoint.path) — attempting token refresh.")
             try await tokenRefresher.refresh()
-            return try await execute(endpoint, retried: true)
+            return .shouldRetry
         }
 
         guard (200..<300).contains(http.statusCode) else {
@@ -121,7 +159,7 @@ final class APIClient: APIClientProtocol {
             throw .httpError(statusCode: http.statusCode, data: data)
         }
 
-        return data
+        return .data(data)
     }
 
     // Cap response-body previews used in error logs so we don't spill huge
@@ -163,37 +201,18 @@ final class APIClient: APIClientProtocol {
         request.httpBody = body
 
         Logger.networking.debug("\(endpoint.method.rawValue) \(endpoint.path) (multipart, \(body.count) bytes)")
-
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: request)
-        } catch let urlError as URLError {
-            Logger.networking.error("Network error: \(urlError)")
-            throw .network(urlError)
-        } catch {
-            throw .unknown(error)
+        let (data, response) = try await performRequest(request)
+        let outcome = try await processResponse(
+            data: data,
+            response: response,
+            endpoint: endpoint,
+            sentAccessToken: sentAccessToken,
+            retried: retried
+        )
+        switch outcome {
+        case .data(let d):     return d
+        case .shouldRetry:     return try await executeMultipart(endpoint, parts: parts, retried: true)
         }
-
-        guard let http = response as? HTTPURLResponse else {
-            throw .unknown(URLError(.badServerResponse))
-        }
-
-        Logger.networking.debug("\(http.statusCode) \(endpoint.path)")
-
-        if http.statusCode == 401 && !retried && sentAccessToken != nil {
-            Logger.networking.info("401 on \(endpoint.path) — attempting token refresh.")
-            try await tokenRefresher.refresh()
-            return try await executeMultipart(endpoint, parts: parts, retried: true)
-        }
-
-        guard (200..<300).contains(http.statusCode) else {
-            let preview = APIClient.previewBody(data)
-            Logger.networking.error("HTTP \(http.statusCode) on \(endpoint.path): \(preview, privacy: .private)")
-            throw .httpError(statusCode: http.statusCode, data: data)
-        }
-
-        return data
     }
 
     /// Encode the parts into a multipart/form-data body. Each part's headers
