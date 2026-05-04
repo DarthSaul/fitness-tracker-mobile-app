@@ -1,11 +1,13 @@
 import SwiftUI
-import OSLog
 
 /// Two-cell row: circular progress (completed / total days) + program name with
-/// a "Manage" affordance. Tapping Manage logs for now — PR #6 wires it to the
-/// /program detail view.
+/// a Manage chevron that pushes ProgramFlowView. Lives inside the Home tab's
+/// NavigationStack — the NavigationLink resolves into that stack.
 struct ActiveProgramProgressCard: View {
     let viewModel: HomeViewModel
+    let homeRepository: HomeRepository
+    let workoutRepository: WorkoutRepository
+    @Environment(SessionManager.self) private var sessionManager
 
     var body: some View {
         guard let program = viewModel.activeProgram else {
@@ -44,9 +46,14 @@ struct ActiveProgramProgressCard: View {
     }
 
     private func programInfo(program: ActiveUserProgramDTO) -> some View {
-        Button {
-            // PR #6 wires this to the /program detail view.
-            Logger.app.info("Manage program tapped — navigation arrives in PR #6.")
+        NavigationLink {
+            ProgramFlowView(
+                viewModel: ProgramFlowViewModel(
+                    homeRepository: homeRepository,
+                    sessionManager: sessionManager
+                ),
+                workoutRepository: workoutRepository
+            )
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
