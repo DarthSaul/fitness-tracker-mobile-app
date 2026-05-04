@@ -61,7 +61,9 @@ final class HomeViewModel {
         return week?.days.first { $0.dayNumber == activeProgram.currentDay }
     }
 
-    /// First three exercise names from the next workout day, used in the today card preview.
+    /// All exercise names from the next workout day. The Today card slices the
+    /// first three for its preview list and uses the full count to render
+    /// "+N more" — keep returning the full list rather than pre-slicing here.
     var nextWorkoutExerciseNames: [String] {
         guard let day = nextWorkoutDay else { return [] }
         return day.exerciseGroups.flatMap { $0.exercises.map { $0.exercise.name } }
@@ -112,7 +114,19 @@ final class HomeViewModel {
             // Scheduled workouts depend on having an active program — fetch in a
             // second pass once we know the userProgramId.
             if let userProgramId = program?.id {
-                self.scheduledWorkouts = (try? await repository.fetchScheduledWorkouts(userProgramId: userProgramId)) ?? []
+                do {
+                    self.scheduledWorkouts = try await repository.fetchScheduledWorkouts(userProgramId: userProgramId)
+                } catch let apiError as APIError where apiError == .unauthorized {
+                    await sessionManager.signOut()
+                    return
+                } catch {
+                    // Surface the failure to the user but keep the rest of the
+                    // dashboard usable — the active program / workout / sessions
+                    // we just loaded are still valid; only the schedule list is missing.
+                    Logger.data.error("Failed to fetch scheduled workouts: \(error)")
+                    self.scheduledWorkouts = []
+                    self.loadError = error
+                }
             } else {
                 self.scheduledWorkouts = []
             }

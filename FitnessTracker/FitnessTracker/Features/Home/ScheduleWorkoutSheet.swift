@@ -32,6 +32,12 @@ struct ScheduleWorkoutSheet: View {
                             .disabled(pickedDayNumber == nil)
                     }
                 }
+                // A picked day is week-scoped; clear it when the user switches
+                // weeks so the Schedule button doesn't stay enabled with a stale
+                // selection from the previous week.
+                .onChange(of: selectedWeekNumber) { _, _ in
+                    pickedDayNumber = nil
+                }
         }
     }
 

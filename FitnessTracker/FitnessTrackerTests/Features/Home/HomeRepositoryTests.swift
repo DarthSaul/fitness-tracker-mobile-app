@@ -116,21 +116,22 @@ struct HomeRepositoryTests {
     @Test("scheduleWorkout posts the body and returns the created record")
     func schedulePosts() async throws {
         let client = MockAPIClient()
+        let fixedDate = Date(timeIntervalSince1970: 1_700_000_000)
         let scheduled = ScheduledWorkoutDTO(
             id: "sw-new", userProgramId: "up1",
             weekNumber: 2, dayNumber: 3,
-            scheduledDate: .now, createdAt: .now
+            scheduledDate: fixedDate, createdAt: fixedDate
         )
         client.stub(
             .scheduleWorkout(ScheduleWorkoutBody(
-                userProgramId: "up1", weekNumber: 2, dayNumber: 3, scheduledDate: .now
+                userProgramId: "up1", weekNumber: 2, dayNumber: 3, scheduledDate: fixedDate
             )),
             response: ScheduleWorkoutResponseDTO(scheduledWorkout: scheduled)
         )
         let repo = HomeRepository(apiClient: client)
 
         let result = try await repo.scheduleWorkout(
-            userProgramId: "up1", weekNumber: 2, dayNumber: 3, scheduledDate: .now
+            userProgramId: "up1", weekNumber: 2, dayNumber: 3, scheduledDate: fixedDate
         )
         #expect(result.id == "sw-new")
     }

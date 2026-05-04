@@ -191,14 +191,17 @@ struct HomeViewModelTests {
     @Test("unscheduleSelected DELETEs and refreshes")
     func unscheduleRoundTrip() async throws {
         let active = makeActiveProgram()
-        let target = makeScheduled(id: "sw1", week: 1, day: 1, on: .now)
+        // Use a fixed date instead of .now to keep the test deterministic at
+        // midnight crossings — the VM matches scheduled workouts to selectedDate
+        // by calendar day, and `.now` evaluated twice could land on different days.
+        let fixedDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let target = makeScheduled(id: "sw1", week: 1, day: 1, on: fixedDate)
         let (vm, client) = makeViewModel(
             active: active,
             scheduled: [target]
         )
         await vm.load()
-        // selectedDate defaults to today; the scheduled workout above also uses .now,
-        // so they'll match for "scheduledForSelectedDate".
+        vm.selectedDate = fixedDate
 
         client.stub(.unscheduleWorkout(id: "sw1"), response: ["ok": true])
         client.stub(
