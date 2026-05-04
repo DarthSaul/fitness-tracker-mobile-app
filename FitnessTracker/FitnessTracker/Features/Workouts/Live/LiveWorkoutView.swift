@@ -228,10 +228,10 @@ struct LiveWorkoutView: View {
         case .template(let name, _, let templateSet):
             let exerciseSetId = templateSet.id
             let existing = vm.completedSet(forExerciseSetId: exerciseSetId)
-            let onSave: (Int?, Double?, Double?, String?) async -> Void = { reps, weight, rpe, notes in
+            let onSave: (Int?, Double?, Double?, String?) async -> Bool = { reps, weight, rpe, notes in
                 await vm.logSet(exerciseSetId: exerciseSetId, reps: reps, weight: weight, rpe: rpe, notes: notes)
             }
-            var onDelete: (() async -> Void)? = nil
+            var onDelete: (() async -> Bool)? = nil
             if existing != nil {
                 onDelete = { await vm.deleteLoggedSet(exerciseSetId: exerciseSetId) }
             }
@@ -251,7 +251,7 @@ struct LiveWorkoutView: View {
                 programExerciseId: peId, setNumber: nextSetNumber,
                 reps: nil, weight: nil, rpe: nil, notes: nil, effortTarget: nil
             )
-            let onSave: (Int?, Double?, Double?, String?) async -> Void = { reps, weight, rpe, notes in
+            let onSave: (Int?, Double?, Double?, String?) async -> Bool = { reps, weight, rpe, notes in
                 await vm.addExtraSet(programExerciseId: peId, reps: reps, weight: weight, rpe: rpe, notes: notes)
             }
             return AnyView(SetLogSheet(

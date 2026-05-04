@@ -132,11 +132,12 @@ final class LiveWorkoutViewModel {
 
     /// Routes between record (POST) and update (PATCH) based on whether a
     /// CompletedSet already exists for this template set id.
+    @discardableResult
     func logSet(
         exerciseSetId: String,
         reps: Int?, weight: Double?, rpe: Double?, notes: String?
-    ) async {
-        guard let session else { return }
+    ) async -> Bool {
+        guard let session else { return false }
         actionError = nil
         do {
             if let existing = completedByExerciseSetId[exerciseSetId] {
@@ -152,32 +153,40 @@ final class LiveWorkoutViewModel {
                 )
                 completedByExerciseSetId[exerciseSetId] = created
             }
+            return true
         } catch let apiError as APIError where apiError == .unauthorized {
             await sessionManager.signOut()
+            return false
         } catch {
             Logger.data.error("logSet failed: \(error)")
             actionError = error.localizedDescription
+            return false
         }
     }
 
-    func deleteLoggedSet(exerciseSetId: String) async {
-        guard let session, let existing = completedByExerciseSetId[exerciseSetId] else { return }
+    @discardableResult
+    func deleteLoggedSet(exerciseSetId: String) async -> Bool {
+        guard let session, let existing = completedByExerciseSetId[exerciseSetId] else { return false }
         actionError = nil
         do {
             try await repository.deleteSet(workoutId: session.id, setId: existing.id)
             completedByExerciseSetId.removeValue(forKey: exerciseSetId)
+            return true
         } catch let apiError as APIError where apiError == .unauthorized {
             await sessionManager.signOut()
+            return false
         } catch {
             Logger.data.error("deleteLoggedSet failed: \(error)")
             actionError = error.localizedDescription
+            return false
         }
     }
 
     // MARK: - Extra sets
 
-    func addExtraSet(programExerciseId: String, reps: Int?, weight: Double?, rpe: Double?, notes: String?) async {
-        guard let session else { return }
+    @discardableResult
+    func addExtraSet(programExerciseId: String, reps: Int?, weight: Double?, rpe: Double?, notes: String?) async -> Bool {
+        guard let session else { return false }
         actionError = nil
         do {
             let created = try await repository.addExtraSet(
@@ -185,11 +194,14 @@ final class LiveWorkoutViewModel {
                 body: AddExtraSetBody(reps: reps, weight: weight, rpe: rpe, notes: notes)
             )
             extraSetsByProgramExerciseId[programExerciseId, default: []].append(created)
+            return true
         } catch let apiError as APIError where apiError == .unauthorized {
             await sessionManager.signOut()
+            return false
         } catch {
             Logger.data.error("addExtraSet failed: \(error)")
             actionError = error.localizedDescription
+            return false
         }
     }
 
