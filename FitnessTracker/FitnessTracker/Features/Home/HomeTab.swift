@@ -1,16 +1,15 @@
 import SwiftUI
 
-/// Home tab — calendar strip, today's workout card, schedule modal arrive in PR #5.
 struct HomeTab: View {
+    @Environment(APIClient.self) private var apiClient
+    @Environment(SessionManager.self) private var sessionManager
+
     var body: some View {
+        let repo = HomeRepository(apiClient: apiClient)
+        let viewModel = HomeViewModel(repository: repo, sessionManager: sessionManager)
         NavigationStack {
-            ContentUnavailableView(
-                "Home",
-                systemImage: "house",
-                description: Text("Calendar strip and today's workout will live here.")
-            )
-            .navigationTitle("Home")
-            .settingsToolbarItem()
+            HomeView(viewModel: viewModel)
+                .settingsToolbarItem()
         }
     }
 }

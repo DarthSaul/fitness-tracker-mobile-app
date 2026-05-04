@@ -10,18 +10,23 @@ import OSLog
 struct RootTabView: View {
     @Environment(APIClient.self) private var apiClient
     @State private var resumeViewModel: ResumeWorkoutViewModel?
+    @State private var tabSelection = TabSelection()
 
     var body: some View {
-        TabView {
+        TabView(selection: $tabSelection.current) {
             HomeTab()
                 .tabItem { Label("Home", systemImage: "house.fill") }
+                .tag(AppTab.home)
 
             ProgramsTab()
                 .tabItem { Label("Programs", systemImage: "dumbbell.fill") }
+                .tag(AppTab.programs)
 
             AnalyticsTab()
                 .tabItem { Label("Analytics", systemImage: "chart.line.uptrend.xyaxis") }
+                .tag(AppTab.analytics)
         }
+        .environment(tabSelection)
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let session = resumeViewModel?.activeSession {
                 ResumeWorkoutBanner(session: session) {
