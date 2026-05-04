@@ -64,6 +64,7 @@ final class AnalyticsViewModel {
             self.dashboard = result
             self.dashboardStatus = .success
         } catch {
+            if Self.isCancellation(error) { return }
             guard token == loadToken else { return }
             Logger.networking.error("Analytics dashboard failed: \(error.localizedDescription, privacy: .public)")
             self.dashboardStatus = .error(error.localizedDescription)
@@ -79,10 +80,31 @@ final class AnalyticsViewModel {
             self.exercises = result
             self.exercisesStatus = .success
         } catch {
+            if Self.isCancellation(error) { return }
             guard token == loadToken else { return }
             Logger.networking.error("Analytics exercises failed: \(error.localizedDescription, privacy: .public)")
             self.exercisesStatus = .error(error.localizedDescription)
         }
+    }
+
+    /// True when `error` represents a cooperative cancellation rather than a
+    /// real failure. Two surfaces matter for our networking pipeline:
+    ///   - bare `CancellationError` (e.g. from `Task.sleep` or
+    ///     `Task.checkCancellation`)
+    ///   - `URLError.cancelled`, which is what `URLSession.data(for:)` throws
+    ///     when its surrounding Task is cancelled. APIClient wraps that as
+    ///     `APIError.network(URLError(.cancelled))`.
+    /// Either way, the right behavior is to bail without logging or writing
+    /// an .error status — the surrounding view is already on its way out.
+    private static func isCancellation(_ error: any Error) -> Bool {
+        if error is CancellationError { return true }
+        if Task.isCancelled { return true }
+        if let apiError = error as? APIError,
+           case .network(let urlError) = apiError,
+           urlError.code == .cancelled {
+            return true
+        }
+        return false
     }
 
     /// Toggle-select an exercise. Tapping the same row clears the selection
