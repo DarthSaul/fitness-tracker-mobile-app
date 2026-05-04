@@ -34,6 +34,10 @@ final class AnalyticsViewModel {
     private var historyTask: Task<Void, Never>?
     /// Bumped on every `selectExercise` call. The most recent revision wins.
     private var historyRevision = 0
+    /// Bumped on every `load()` call. Concurrent `.task` + `.refreshable`
+    /// invocations can interleave; only the latest token writes results back
+    /// so an older slower response can't clobber a newer one.
+    private var loadToken = 0
 
     init(repository: AnalyticsRepository) {
         self.repository = repository
@@ -44,28 +48,38 @@ final class AnalyticsViewModel {
     /// Loads dashboard and exercise list in parallel. Safe to call repeatedly
     /// (e.g. from `.refreshable`); each call refreshes both sources.
     func load() async {
-        async let dash: Void = loadDashboard()
-        async let ex: Void = loadExercises()
+        loadToken &+= 1
+        let token = loadToken
+        async let dash: Void = loadDashboard(token: token)
+        async let ex: Void = loadExercises(token: token)
         _ = await (dash, ex)
     }
 
-    func loadDashboard() async {
+    func loadDashboard(token: Int) async {
+        guard token == loadToken else { return }
         dashboardStatus = .pending
         do {
-            self.dashboard = try await repository.fetchDashboard()
+            let result = try await repository.fetchDashboard()
+            guard token == loadToken else { return }
+            self.dashboard = result
             self.dashboardStatus = .success
         } catch {
+            guard token == loadToken else { return }
             Logger.networking.error("Analytics dashboard failed: \(error.localizedDescription, privacy: .public)")
             self.dashboardStatus = .error(error.localizedDescription)
         }
     }
 
-    func loadExercises() async {
+    func loadExercises(token: Int) async {
+        guard token == loadToken else { return }
         exercisesStatus = .pending
         do {
-            self.exercises = try await repository.fetchExercises()
+            let result = try await repository.fetchExercises()
+            guard token == loadToken else { return }
+            self.exercises = result
             self.exercisesStatus = .success
         } catch {
+            guard token == loadToken else { return }
             Logger.networking.error("Analytics exercises failed: \(error.localizedDescription, privacy: .public)")
             self.exercisesStatus = .error(error.localizedDescription)
         }

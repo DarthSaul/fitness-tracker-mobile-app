@@ -162,15 +162,25 @@ struct AnalyticsViewModelTests {
 
     /// Polls the @MainActor-isolated VM until the predicate is satisfied or a
     /// short timeout elapses. Ample for in-memory mocks; cheap when the
-    /// predicate is already true on the first tick.
+    /// predicate is already true on the first tick. On timeout we record an
+    /// Issue (swift-testing's XCTFail equivalent) so a never-true predicate
+    /// fails the calling test fast instead of letting subsequent #expect
+    /// lines diagnose the symptom one step removed.
     private func waitForStatus(
         _ vm: AnalyticsViewModel,
         timeout: Duration = .milliseconds(500),
+        sourceLocation: SourceLocation = #_sourceLocation,
         predicate: (AnalyticsViewModel) -> Bool
     ) async {
         let start = ContinuousClock.now
         while !predicate(vm) {
-            if ContinuousClock.now - start > timeout { return }
+            if ContinuousClock.now - start > timeout {
+                Issue.record(
+                    "Timed out waiting for predicate in waitForStatus (historyStatus=\(vm.historyStatus), selectedExerciseId=\(vm.selectedExerciseId ?? "nil"))",
+                    sourceLocation: sourceLocation
+                )
+                return
+            }
             await Task.yield()
         }
     }
