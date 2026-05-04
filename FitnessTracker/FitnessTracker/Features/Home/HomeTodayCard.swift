@@ -93,53 +93,78 @@ private struct ResumeCard: View {
 private struct StartNextCard: View {
     let viewModel: HomeViewModel
     @Environment(LiveWorkoutPresentation.self) private var liveWorkout
+    @State private var showPreview = false
 
     var body: some View {
         let program = viewModel.activeProgram!
-        Button {
-            Task {
-                if await viewModel.startNextWorkout() != nil {
-                    liveWorkout.present()
-                }
-            }
-        } label: {
-            HomeCardChrome {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Next up")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("Week \(program.currentWeek) · Day \(program.currentDay)")
-                        .font(.headline)
+        // Card is no longer wrapped in one big Button — Preview and Start are
+        // both real interactive controls inside a non-tappable container so
+        // they don't collide with each other or with NavigationLink/Sheet
+        // semantics around the card.
+        HomeCardChrome {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Next up")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Week \(program.currentWeek) · Day \(program.currentDay)")
+                    .font(.headline)
 
-                    if !viewModel.nextWorkoutExerciseNames.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
-                            ForEach(viewModel.nextWorkoutExerciseNames.prefix(3), id: \.self) { name in
-                                Label(name, systemImage: "circle.fill")
-                                    .font(.subheadline)
-                                    .labelStyle(.titleAndIcon)
-                                    .imageScale(.small)
-                                    .foregroundStyle(.secondary)
-                            }
-                            if viewModel.nextWorkoutExerciseNames.count > 3 {
-                                Text("+\(viewModel.nextWorkoutExerciseNames.count - 3) more")
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
-                            }
+                if !viewModel.nextWorkoutExerciseNames.isEmpty {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(viewModel.nextWorkoutExerciseNames.prefix(3), id: \.self) { name in
+                            Label(name, systemImage: "circle.fill")
+                                .font(.subheadline)
+                                .labelStyle(.titleAndIcon)
+                                .imageScale(.small)
+                                .foregroundStyle(.secondary)
                         }
-                        .padding(.top, 2)
+                        if viewModel.nextWorkoutExerciseNames.count > 3 {
+                            Text("+\(viewModel.nextWorkoutExerciseNames.count - 3) more")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
                     }
+                    .padding(.top, 2)
+                }
 
-                    Spacer(minLength: 0)
+                Spacer(minLength: 0)
+
+                Button {
+                    Task {
+                        if await viewModel.startNextWorkout() != nil {
+                            liveWorkout.present()
+                        }
+                    }
+                } label: {
                     actionPill(
                         viewModel.isStartingWorkout ? "Starting…" : "Start next workout",
                         systemImage: viewModel.isStartingWorkout ? "" : "chevron.right",
                         tint: .green
                     )
                 }
+                .buttonStyle(.plain)
+                .disabled(viewModel.isStartingWorkout)
+
+                Button {
+                    showPreview = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "eye")
+                        Text("Preview workout")
+                        Spacer()
+                    }
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
             }
         }
-        .buttonStyle(.plain)
-        .disabled(viewModel.isStartingWorkout)
+        .sheet(isPresented: $showPreview) {
+            WorkoutPreviewSheet(day: viewModel.nextWorkoutDay)
+        }
     }
 }
 

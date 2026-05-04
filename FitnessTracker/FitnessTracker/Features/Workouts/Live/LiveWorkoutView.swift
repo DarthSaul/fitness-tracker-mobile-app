@@ -29,20 +29,20 @@ struct LiveWorkoutView: View {
                 .toolbar { toolbarContent }
                 .task { await viewModel.load() }
                 .sheet(item: $presentedSheet, content: sheetContent(for:))
-                .confirmationDialog(
-                    "Complete this workout?",
-                    isPresented: $showCompleteConfirmation,
-                    titleVisibility: .visible,
-                    actions: { completeDialogActions },
-                    message: { Text("This finalizes your session and advances your program.") }
-                )
-                .confirmationDialog(
-                    "Abandon this workout?",
-                    isPresented: $showAbandonConfirmation,
-                    titleVisibility: .visible,
-                    actions: { abandonDialogActions },
-                    message: { Text("All recorded sets for this session will be discarded.") }
-                )
+                // Centered .alert avoids the popover-anchor weirdness that
+                // .confirmationDialog gets when it's triggered from inside a
+                // toolbar Menu — the Menu has already started dismissing by
+                // the time the dialog wants to anchor itself to the trigger.
+                .alert("Complete this workout?", isPresented: $showCompleteConfirmation) {
+                    completeDialogActions
+                } message: {
+                    Text("This finalizes your session and advances your program.")
+                }
+                .alert("Abandon this workout?", isPresented: $showAbandonConfirmation) {
+                    abandonDialogActions
+                } message: {
+                    Text("All recorded sets for this session will be discarded.")
+                }
         }
     }
 
@@ -93,16 +93,16 @@ struct LiveWorkoutView: View {
             Button("Close") { dismiss() }
         }
         ToolbarItem(placement: .topBarTrailing) {
-            Menu {
-                Button { presentedSheet = .preview } label: { Label("Preview workout", systemImage: "eye") }
-                Button(role: .destructive) {
-                    showAbandonConfirmation = true
-                } label: {
-                    Label("Abandon", systemImage: "trash")
-                }
+            // Single trash button instead of a Menu — Preview moved to Home,
+            // so Abandon is the only action left here. A direct Button avoids
+            // the Menu→Alert anchoring issue (the alert was being attached to
+            // the Menu's popover which dismissed before the alert presented).
+            Button(role: .destructive) {
+                showAbandonConfirmation = true
             } label: {
-                Image(systemName: "ellipsis.circle")
+                Image(systemName: "trash")
             }
+            .disabled(viewModel.isAbandoning)
         }
     }
 
@@ -229,7 +229,6 @@ struct LiveWorkoutView: View {
         case .setLog(let t): setLogSheet(for: t)
         case .swap(let t): swapSheet(for: t)
         case .trend(let t): trendSheet(for: t)
-        case .preview: previewSheet()
         case .adHocSearch: adHocSearchSheet()
         }
     }
@@ -294,10 +293,6 @@ struct LiveWorkoutView: View {
         ExerciseTrendSheet(exerciseId: target.exerciseId, exerciseName: target.exerciseName)
     }
 
-    private func previewSheet() -> some View {
-        WorkoutPreviewSheet(day: viewModel.day)
-    }
-
     private func adHocSearchSheet() -> some View {
         let vm = viewModel
         return ExerciseSearchSheet(
@@ -344,7 +339,6 @@ struct LiveWorkoutView: View {
         case setLog(SetEditTarget)
         case swap(SwapTarget)
         case trend(TrendTarget)
-        case preview
         case adHocSearch
 
         var id: String {
@@ -352,7 +346,6 @@ struct LiveWorkoutView: View {
             case .setLog(let t): return "setLog-\(t.id)"
             case .swap(let t): return "swap-\(t.id)"
             case .trend(let t): return "trend-\(t.id)"
-            case .preview: return "preview"
             case .adHocSearch: return "adHocSearch"
             }
         }
