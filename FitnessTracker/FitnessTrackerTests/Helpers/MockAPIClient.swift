@@ -23,6 +23,22 @@ final class MockAPIClient: APIClientProtocol {
         _ = try resolve(endpoint)
     }
 
+    /// Records the most recent multipart call so tests can assert the parts
+    /// that were sent (e.g. that an attached screenshot reached the wire).
+    /// Resolves through the same path-based handler map as `send`.
+    var lastMultipartParts: [MultipartPart]?
+    func sendMultipart<T: Decodable>(_ endpoint: APIEndpoint, parts: [MultipartPart]) async throws(APIError) -> T {
+        lastMultipartParts = parts
+        let data = try resolve(endpoint)
+        do {
+            return try JSONCoding.decoder.decode(T.self, from: data)
+        } catch let err as DecodingError {
+            throw .decoding(err)
+        } catch {
+            throw .unknown(error)
+        }
+    }
+
     // MARK: - Helpers
     private func resolve(_ endpoint: APIEndpoint) throws(APIError) -> Data {
         guard let handler = handlers[endpoint.path] else {

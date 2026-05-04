@@ -4,6 +4,7 @@ import SwiftUI
 /// Web equivalent: SettingsDrawer (right-side slideover). On iOS we use a
 /// sheet for native modal idiom rather than porting the drawer pattern.
 struct SettingsView: View {
+    @Environment(APIClient.self) private var apiClient
     @Environment(SessionManager.self) private var sessionManager
     @Environment(\.dismiss) private var dismiss
 
@@ -22,6 +23,16 @@ struct SettingsView: View {
                                 .lineLimit(1)
                                 .truncationMode(.middle)
                         }
+                    }
+                }
+
+                Section {
+                    NavigationLink {
+                        FeedbackView(viewModel: FeedbackViewModel(
+                            repository: FeedbackRepository(apiClient: apiClient)
+                        ))
+                    } label: {
+                        Label("Feedback", systemImage: "bubble.left.and.bubble.right")
                     }
                 }
 

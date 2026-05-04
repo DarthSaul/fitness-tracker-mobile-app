@@ -63,6 +63,13 @@ enum APIEndpoint {
     // Devices
     case registerDevice(DeviceRegistrationBody)
     case unregisterDevice(id: String)
+
+    // Feedback
+    case getFeedback
+    /// POST /api/feedback. Body is `multipart/form-data` (built separately by
+    /// `APIClient.sendMultipart`) so this case carries no Encodable payload.
+    case createFeedback
+    case updateFeedback(id: String, body: UpdateFeedbackBody)
 }
 
 // MARK: - Request Building
@@ -124,6 +131,11 @@ extension APIEndpoint {
         // Devices
         case .registerDevice: return "/api/devices/register"
         case .unregisterDevice(let id): return "/api/devices/\(id)"
+
+        // Feedback
+        case .getFeedback: return "/api/feedback"
+        case .createFeedback: return "/api/feedback"
+        case .updateFeedback(let id, _): return "/api/feedback/\(id)"
         }
     }
 
@@ -134,18 +146,21 @@ extension APIEndpoint {
              .getScheduledWorkouts,
              .getActiveWorkout, .getWorkout,
              .getExercises, .getExerciseNotes,
-             .getDashboard, .getAnalyticsExercises, .getAnalyticsExercise:
+             .getDashboard, .getAnalyticsExercises, .getAnalyticsExercise,
+             .getFeedback:
             return .get
 
         case .appleSignIn, .refreshToken, .logout,
              .saveProgram,
              .scheduleWorkout,
              .createWorkout, .recordSet, .addExtraSet, .swapExercise, .addAdHocSet,
-             .registerDevice:
+             .registerDevice,
+             .createFeedback:
             return .post
 
         case .activateProgram, .deactivateProgram,
-             .updateWorkoutNotes, .completeWorkout, .updateSet:
+             .updateWorkoutNotes, .completeWorkout, .updateSet,
+             .updateFeedback:
             return .patch
 
         case .updateExerciseNotes:
@@ -174,6 +189,7 @@ extension APIEndpoint {
         case .addAdHocSet(_, let b): return b
         case .updateExerciseNotes(_, let b): return b
         case .registerDevice(let b): return b
+        case .updateFeedback(_, let b): return b
         default: return nil
         }
     }
