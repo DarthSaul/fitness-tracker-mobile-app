@@ -19,13 +19,21 @@ struct RootTabView: View {
                 .tabItem { Label("Home", systemImage: "house.fill") }
                 .tag(AppTab.home)
 
-            ProgramsTab()
-                .tabItem { Label("Programs", systemImage: "dumbbell.fill") }
-                .tag(AppTab.programs)
+            HistoryTab()
+                .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
+                .tag(AppTab.history)
 
             AnalyticsTab()
                 .tabItem { Label("Analytics", systemImage: "chart.line.uptrend.xyaxis") }
                 .tag(AppTab.analytics)
+
+            ProgramsTab()
+                .tabItem { Label("Programs", systemImage: "dumbbell.fill") }
+                .tag(AppTab.programs)
+
+            NavigationStack { SettingsView() }
+                .tabItem { Label("Settings", systemImage: "gearshape") }
+                .tag(AppTab.settings)
         }
         .environment(tabSelection)
         .environment(liveWorkout)

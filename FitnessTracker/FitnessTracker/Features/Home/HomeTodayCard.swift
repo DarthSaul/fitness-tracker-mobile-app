@@ -15,8 +15,26 @@ struct HomeTodayCard: View {
             ResumeCard(active: active)
         } else if viewModel.hasActiveProgram {
             StartNextCard(viewModel: viewModel)
+        } else if !viewModel.hasLoadedOnce {
+            LoadingCard()
         } else {
             NoProgramCard()
+        }
+    }
+}
+
+// MARK: - Loading
+
+private struct LoadingCard: View {
+    var body: some View {
+        HomeCardChrome {
+            VStack(alignment: .leading, spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Loading your program…")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }
@@ -112,11 +130,14 @@ private struct StartNextCard: View {
                 if !viewModel.nextWorkoutExerciseNames.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(viewModel.nextWorkoutExerciseNames.prefix(3), id: \.self) { name in
-                            Label(name, systemImage: "circle.fill")
-                                .font(.subheadline)
-                                .labelStyle(.titleAndIcon)
-                                .imageScale(.small)
-                                .foregroundStyle(.secondary)
+                            HStack(spacing: 8) {
+                                Image(systemName: "circle.fill")
+                                    .font(.system(size: 6))
+                                    .foregroundStyle(.purple)
+                                Text(name)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.primary)
+                            }
                         }
                         if viewModel.nextWorkoutExerciseNames.count > 3 {
                             Text("+\(viewModel.nextWorkoutExerciseNames.count - 3) more")
@@ -148,16 +169,7 @@ private struct StartNextCard: View {
                 Button {
                     showPreview = true
                 } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "eye")
-                        Text("Preview workout")
-                        Spacer()
-                    }
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
+                    actionPill("Preview workout", systemImage: "eye", tint: .secondary)
                 }
                 .buttonStyle(.plain)
             }

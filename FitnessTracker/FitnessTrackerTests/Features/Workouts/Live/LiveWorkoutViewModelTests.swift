@@ -218,22 +218,20 @@ struct LiveWorkoutViewModelTests {
         #expect(vm.day == nil)
     }
 
-    // MARK: - Notes auto-save
+    // MARK: - Mark complete
 
-    @Test("notes save schedules debounced save and reaches .saved state")
-    func notesAutoSave() async throws {
+    @Test("toggleMarkedComplete flips the per-exercise marked-complete flag")
+    func toggleMarkedComplete() async throws {
         let client = MockAPIClient()
         client.stub(.getActiveWorkout, response: makeActiveResponse())
-        client.handlers["/api/workouts/ws1"] = { _ in
-            try JSONCoding.encoder.encode(UpdateWorkoutNotesResponseDTO(id: "ws1", notes: "hello"))
-        }
 
         let vm = makeViewModel(client: client)
         await vm.load()
-        vm.notes = "hello"
-        // Wait past the 0.6s debounce + a buffer for the save itself.
-        try await Task.sleep(nanoseconds: 1_200_000_000)
 
-        #expect(vm.notesSaveState == .saved)
+        #expect(vm.isMarkedComplete(programExerciseId: "pe1") == false)
+        vm.toggleMarkedComplete(programExerciseId: "pe1")
+        #expect(vm.isMarkedComplete(programExerciseId: "pe1") == true)
+        vm.toggleMarkedComplete(programExerciseId: "pe1")
+        #expect(vm.isMarkedComplete(programExerciseId: "pe1") == false)
     }
 }

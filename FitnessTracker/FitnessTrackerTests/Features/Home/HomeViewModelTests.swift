@@ -84,10 +84,19 @@ struct HomeViewModelTests {
             .getActiveProgramSessions,
             response: ActiveProgramSessionsResponseDTO(sessions: sessions)
         )
+        client.stub(
+            .getWorkoutHistory(limit: 5, before: nil),
+            response: WorkoutHistoryResponseDTO(sessions: [])
+        )
 
         let repo = HomeRepository(apiClient: client)
+        let historyRepo = HistoryRepository(apiClient: client)
         let session = SessionManager(keychain: KeychainService(), tokenStore: TokenStore())
-        let vm = HomeViewModel(repository: repo, sessionManager: session)
+        let vm = HomeViewModel(
+            repository: repo,
+            historyRepository: historyRepo,
+            sessionManager: session
+        )
         return (vm, client)
     }
 

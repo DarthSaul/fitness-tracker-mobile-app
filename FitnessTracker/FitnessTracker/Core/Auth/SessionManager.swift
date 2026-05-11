@@ -6,11 +6,19 @@ import OSLog
 final class SessionManager {
     // MARK: - State
     private(set) var authState: AuthState = .loading
+    /// Cached profile from GET /api/auth/me. Populated by `loadProfile()` after
+    /// authenticated transitions; cleared on sign-out. UI (Settings) reads this
+    /// directly so the name/email render without re-fetching per view.
+    private(set) var userProfile: UserProfile?
 
     // MARK: - Dependencies
     let tokenStore: TokenStore
     let tokenRefresher: TokenRefresher
     private let keychain: KeychainService
+    /// Set by the app shell after construction so SessionManager itself can
+    /// avoid an init-time dependency on APIClient (APIClient depends on
+    /// TokenRefresher, which lives on SessionManager — circular if injected).
+    var apiClient: (any APIClientProtocol)?
 
     // MARK: - Init
     init(keychain: KeychainService, tokenStore: TokenStore) {
@@ -29,9 +37,29 @@ final class SessionManager {
             let userId = extractUserId(from: token)
             authState = userId.map { .authenticated(userId: $0) } ?? .unauthenticated
             Logger.auth.info("Session bootstrap: authenticated as \(userId ?? "unknown", privacy: .private)")
+            if userId != nil {
+                await loadProfile()
+            }
         } catch {
             Logger.auth.info("Session bootstrap: no valid session — showing sign-in.")
             authState = .unauthenticated
+        }
+    }
+
+    // MARK: - Profile
+
+    /// Fetches GET /api/auth/me and caches the result. Logs and swallows errors
+    /// — Settings falls back to a generic header when the profile is missing.
+    func loadProfile() async {
+        guard let apiClient else {
+            Logger.auth.error("loadProfile called before apiClient was wired")
+            return
+        }
+        do {
+            let profile: UserProfile = try await apiClient.send(.getMe)
+            self.userProfile = profile
+        } catch {
+            Logger.auth.error("loadProfile failed: \(error)")
         }
     }
 
@@ -54,6 +82,7 @@ final class SessionManager {
         }
 
         await tokenStore.clear()
+        userProfile = nil
         authState = .unauthenticated
     }
 
@@ -67,6 +96,7 @@ final class SessionManager {
         await tokenStore.set(access: accessToken)
         let userId = extractUserId(from: accessToken) ?? "unknown"
         authState = .authenticated(userId: userId)
+        await loadProfile()
     }
 
     // MARK: - Helpers
