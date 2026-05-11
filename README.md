@@ -82,7 +82,7 @@ For deeper architectural details and conventions, see [`CLAUDE.md`](./CLAUDE.md)
 
 ## Project layout
 
-```
+```text
 FitnessTracker/
 ├── FitnessTracker.xcodeproj
 ├── FitnessTracker/
