@@ -3,6 +3,8 @@ import AuthenticationServices
 
 // MARK: - UIViewRepresentable Wrapper
 struct SignInWithAppleButton: UIViewRepresentable {
+    @Environment(\.isEnabled) private var isEnabled
+
     var onCredential: (ASAuthorizationAppleIDCredential) -> Void
     var onError: (any Error) -> Void
 
@@ -12,11 +14,17 @@ struct SignInWithAppleButton: UIViewRepresentable {
 
     func makeUIView(context: Context) -> ASAuthorizationAppleIDButton {
         let button = ASAuthorizationAppleIDButton(type: .signIn, style: .black)
+        button.cornerRadius = 8
+        button.layer.cornerRadius = 8
+        button.layer.borderColor = UIColor.white.cgColor
+        button.layer.borderWidth = 1
         button.addTarget(context.coordinator, action: #selector(Coordinator.handleTap), for: .touchUpInside)
         return button
     }
 
-    func updateUIView(_ uiView: ASAuthorizationAppleIDButton, context: Context) {}
+    func updateUIView(_ uiView: ASAuthorizationAppleIDButton, context: Context) {
+        uiView.isEnabled = isEnabled
+    }
 }
 
 // MARK: - Coordinator
