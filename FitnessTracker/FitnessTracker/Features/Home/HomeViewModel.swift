@@ -122,12 +122,20 @@ final class HomeViewModel {
             async let activeProgramTask = repository.fetchActiveUserProgram()
             async let activeWorkoutTask = repository.fetchActiveWorkout()
             async let sessionsTask = repository.fetchActiveProgramSessions()
+            // Kicked off in parallel but awaited below — recent history is a
+            // Home preview, not part of the critical dashboard, so its failure
+            // shouldn't blank out the rest of the page.
             async let recentHistoryTask = historyRepository.fetchHistory(limit: recentHistoryLimit, before: nil)
-            let (program, workout, sessions, recent) = try await (activeProgramTask, activeWorkoutTask, sessionsTask, recentHistoryTask)
+            let (program, workout, sessions) = try await (activeProgramTask, activeWorkoutTask, sessionsTask)
             self.activeProgram = program
             self.activeWorkout = workout
             self.sessions = sessions
-            self.recentHistory = recent
+
+            do {
+                self.recentHistory = try await recentHistoryTask
+            } catch {
+                Logger.data.error("Failed to fetch recent history: \(error)")
+            }
 
             // Scheduled workouts depend on having an active program — fetch in a
             // second pass once we know the userProgramId.

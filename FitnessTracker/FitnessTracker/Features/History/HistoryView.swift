@@ -28,11 +28,22 @@ struct HistoryView: View {
         if viewModel.isLoading && viewModel.sessions.isEmpty {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if viewModel.sessions.isEmpty {
-            ContentUnavailableView(
-                "No workouts yet",
-                systemImage: "clock.arrow.circlepath",
-                description: Text("Completed workouts will show up here.")
-            )
+            // Surface the load error rather than falling through to a generic
+            // "no workouts yet" empty state — otherwise a fetch failure looks
+            // identical to a brand-new account with no history.
+            if let loadError = viewModel.loadError {
+                ContentUnavailableView(
+                    "Couldn't load history",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(loadError.localizedDescription)
+                )
+            } else {
+                ContentUnavailableView(
+                    "No workouts yet",
+                    systemImage: "clock.arrow.circlepath",
+                    description: Text("Completed workouts will show up here.")
+                )
+            }
         } else {
             List {
                 ForEach(viewModel.sessions) { session in
@@ -40,7 +51,7 @@ struct HistoryView: View {
                         HistoryRow(session: session)
                     }
                     .onAppear {
-                        if session.id == viewModel.sessions.last?.id {
+                        if session.id == viewModel.sessions.last?.id, !viewModel.isLoadingMore {
                             Task { await viewModel.loadMore() }
                         }
                     }

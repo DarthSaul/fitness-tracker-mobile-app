@@ -221,7 +221,7 @@ extension APIEndpoint {
 
         case .getWorkoutHistory(let limit, let before):
             var items: [URLQueryItem] = []
-            if let limit {
+            if let limit, limit > 0 {
                 items.append(URLQueryItem(name: "limit", value: String(limit)))
             }
             if let before {

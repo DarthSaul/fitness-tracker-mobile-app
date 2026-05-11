@@ -57,6 +57,10 @@ final class SessionManager {
         }
         do {
             let profile: UserProfile = try await apiClient.send(.getMe)
+            // Drop the result if the user signed out while the request was in
+            // flight — otherwise we'd reintroduce profile data into a session
+            // that's already .unauthenticated.
+            guard case .authenticated = authState else { return }
             self.userProfile = profile
         } catch {
             Logger.auth.error("loadProfile failed: \(error)")

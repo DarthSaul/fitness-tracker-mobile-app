@@ -6,6 +6,15 @@ import SwiftUI
 struct HistoryRow: View {
     let session: HistorySessionDTO
 
+    /// Cached so repeated row renders don't allocate a new formatter per row.
+    /// `setLocalizedDateFormatFromTemplate` adapts to the user's locale (avoids
+    /// hardcoding "EEE, MMM d", which reads oddly outside en-US).
+    private static let headlineDateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("EEE MMM d")
+        return f
+    }()
+
     var body: some View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
@@ -26,9 +35,7 @@ struct HistoryRow: View {
 
     private var headlineDate: String {
         let date = session.completedAt ?? session.startedAt
-        let f = DateFormatter()
-        f.dateFormat = "EEE, MMM d"
-        return f.string(from: date)
+        return Self.headlineDateFormatter.string(from: date)
     }
 
     private var subtitle: String {

@@ -66,7 +66,11 @@ struct SettingsView: View {
     }
 
     private func performSignOut() async {
+        guard !isSigningOut else { return }
         isSigningOut = true
+        // Reset on every exit so the button doesn't stay disabled if signOut
+        // returns without the view tearing down (e.g. an unforeseen error path).
+        defer { isSigningOut = false }
         await sessionManager.signOut()
         // SessionManager.authState flipping to .unauthenticated swaps
         // ContentView back to AuthView, so no explicit dismissal is needed.
