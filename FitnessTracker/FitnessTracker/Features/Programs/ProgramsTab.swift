@@ -16,7 +16,6 @@ struct ProgramsTab: View {
         )
         NavigationStack {
             ProgramListView(viewModel: viewModel, programRepository: programRepo)
-                .settingsToolbarItem()
         }
     }
 }

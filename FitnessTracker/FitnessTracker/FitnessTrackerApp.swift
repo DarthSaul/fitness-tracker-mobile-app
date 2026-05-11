@@ -12,6 +12,8 @@ struct FitnessTrackerApp: App {
     private let apiClient: APIClient
     private let modelContainer: ModelContainer
 
+    @AppStorage(appAppearanceStorageKey) private var appearanceRaw: String = AppAppearance.system.rawValue
+
     init() {
         // Local copy avoids capturing self in the escaping Sentry closure.
         let isDebug: Bool = {
@@ -43,6 +45,7 @@ struct FitnessTrackerApp: App {
             tokenStore: tokenStore,
             tokenRefresher: sm.tokenRefresher
         )
+        sm.apiClient = apiClient
 
         // MARK: Persistence
         do {
@@ -61,6 +64,7 @@ struct FitnessTrackerApp: App {
             ContentView()
                 .environment(sessionManager)
                 .environment(apiClient)
+                .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
                 .task { await sessionManager.bootstrap() }
         }
         .modelContainer(modelContainer)

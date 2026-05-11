@@ -15,6 +15,7 @@ enum APIEndpoint {
     case appleSignIn(AppleSignInBody)
     case refreshToken(RefreshTokenBody)
     case logout
+    case getMe
 
     // Programs
     case getPrograms
@@ -37,6 +38,7 @@ enum APIEndpoint {
 
     // Workouts
     case getActiveWorkout
+    case getWorkoutHistory(limit: Int?, before: Date?)
     case createWorkout(CreateWorkoutBody?)
     case getWorkout(id: String)
     case abandonWorkout(id: String)
@@ -80,6 +82,7 @@ extension APIEndpoint {
         case .appleSignIn: return "/api/auth/native/apple"
         case .refreshToken: return "/api/auth/refresh"
         case .logout: return "/api/auth/logout"
+        case .getMe: return "/api/auth/me"
 
         // Programs
         case .getPrograms: return "/api/programs"
@@ -102,6 +105,7 @@ extension APIEndpoint {
 
         // Workouts
         case .getActiveWorkout: return "/api/workouts/active"
+        case .getWorkoutHistory: return "/api/workouts/history"
         case .createWorkout: return "/api/workouts"
         case .getWorkout(let id): return "/api/workouts/\(id)"
         case .abandonWorkout(let id): return "/api/workouts/\(id)"
@@ -141,10 +145,11 @@ extension APIEndpoint {
 
     var method: HTTPMethod {
         switch self {
-        case .getPrograms, .getProgram, .getProgramDay,
+        case .getMe,
+             .getPrograms, .getProgram, .getProgramDay,
              .getUserPrograms, .getActiveUserProgram, .getActiveProgramSessions,
              .getScheduledWorkouts,
-             .getActiveWorkout, .getWorkout,
+             .getActiveWorkout, .getWorkoutHistory, .getWorkout,
              .getExercises, .getExerciseNotes,
              .getDashboard, .getAnalyticsExercises, .getAnalyticsExercise,
              .getFeedback:
@@ -213,6 +218,16 @@ extension APIEndpoint {
         case .getDashboard(let tzOffsetMinutes):
             guard let tzOffsetMinutes else { return nil }
             return [URLQueryItem(name: "tzOffset", value: String(tzOffsetMinutes))]
+
+        case .getWorkoutHistory(let limit, let before):
+            var items: [URLQueryItem] = []
+            if let limit, limit > 0 {
+                items.append(URLQueryItem(name: "limit", value: String(limit)))
+            }
+            if let before {
+                items.append(URLQueryItem(name: "before", value: APIEndpoint.iso8601String(before)))
+            }
+            return items.isEmpty ? nil : items
 
         default:
             return nil

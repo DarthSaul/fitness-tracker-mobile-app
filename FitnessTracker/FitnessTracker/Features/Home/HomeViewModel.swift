@@ -10,9 +10,16 @@ final class HomeViewModel {
     var activeWorkout: ActiveWorkoutResponseDTO?
     var sessions: [ActiveProgramSessionDTO] = []
     var scheduledWorkouts: [ScheduledWorkoutDTO] = []
+    /// 5 most-recent completed sessions across all programs, surfaced in the
+    /// Home page "History" preview list.
+    var recentHistory: [HistorySessionDTO] = []
 
     var selectedDate: Date = HomeViewModel.startOfDay(.now)
     var isLoading = false
+    /// True once `load()` has completed at least once (success or failure).
+    /// Used to suppress the "No active program" empty state during the first
+    /// fetch — otherwise it briefly flashes on sign-in before data arrives.
+    private(set) var hasLoadedOnce = false
     var loadError: Error?
     var scheduleError: String?
     var isStartingWorkout = false
@@ -20,17 +27,23 @@ final class HomeViewModel {
 
     // MARK: - Dependencies
     private let repository: HomeRepository
+    private let historyRepository: HistoryRepository
     private let sessionManager: SessionManager
     private let calendar: Calendar
+    private let recentHistoryLimit: Int
 
     init(
         repository: HomeRepository,
+        historyRepository: HistoryRepository,
         sessionManager: SessionManager,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        recentHistoryLimit: Int = 5
     ) {
         self.repository = repository
+        self.historyRepository = historyRepository
         self.sessionManager = sessionManager
         self.calendar = calendar
+        self.recentHistoryLimit = recentHistoryLimit
     }
 
     // MARK: - Derived state
@@ -100,16 +113,29 @@ final class HomeViewModel {
     func load() async {
         isLoading = true
         loadError = nil
-        defer { isLoading = false }
+        defer {
+            isLoading = false
+            hasLoadedOnce = true
+        }
 
         do {
             async let activeProgramTask = repository.fetchActiveUserProgram()
             async let activeWorkoutTask = repository.fetchActiveWorkout()
             async let sessionsTask = repository.fetchActiveProgramSessions()
+            // Kicked off in parallel but awaited below — recent history is a
+            // Home preview, not part of the critical dashboard, so its failure
+            // shouldn't blank out the rest of the page.
+            async let recentHistoryTask = historyRepository.fetchHistory(limit: recentHistoryLimit, before: nil)
             let (program, workout, sessions) = try await (activeProgramTask, activeWorkoutTask, sessionsTask)
             self.activeProgram = program
             self.activeWorkout = workout
             self.sessions = sessions
+
+            do {
+                self.recentHistory = try await recentHistoryTask
+            } catch {
+                Logger.data.error("Failed to fetch recent history: \(error)")
+            }
 
             // Scheduled workouts depend on having an active program — fetch in a
             // second pass once we know the userProgramId.

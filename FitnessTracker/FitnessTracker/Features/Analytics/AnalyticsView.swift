@@ -333,38 +333,45 @@ private struct SessionRow: View {
     let session: AnalyticsExerciseHistoryDTO.SessionEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text(AnalyticsView.formatSessionDate(session.completedAt))
                     .font(.subheadline.weight(.medium))
                 Spacer()
-                Text("\(session.sets.count) \(session.sets.count == 1 ? "set" : "sets")")
+                Text("W\(session.weekNumber) · D\(session.dayNumber)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            HStack(spacing: 12) {
-                Label {
-                    Text("e1RM: \(session.bestE1rm.map(AnalyticsView.formatE1rm) ?? "—")")
-                } icon: {
-                    Image(systemName: "chart.line.uptrend.xyaxis")
+            ForEach(Array(session.sets.enumerated()), id: \.offset) { _, sessionSet in
+                HStack {
+                    Text(setLine(sessionSet))
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if let e1rm = sessionSet.e1rm {
+                        Text("e1RM \(formatDouble(e1rm))")
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.tertiary)
+                    }
                 }
-                .labelStyle(.titleOnly)
-                .foregroundStyle(.tint)
-
-                Label {
-                    Text("Vol: \(session.totalVolume.map { "\(AnalyticsView.formatVolume($0)) lbs" } ?? "—")")
-                } icon: {
-                    Image(systemName: "scalemass")
-                }
-                .labelStyle(.titleOnly)
-                .foregroundStyle(.secondary)
             }
-            .font(.caption)
+            if let bestE1rm = session.bestE1rm {
+                Text("Best e1RM: \(formatDouble(bestE1rm))")
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func setLine(_ s: AnalyticsExerciseHistoryDTO.SessionSet) -> String {
+        var parts: [String] = []
+        if let reps = s.reps { parts.append("\(reps) reps") }
+        if let weight = s.weight { parts.append("\(formatDouble(weight)) lb") }
+        return parts.isEmpty ? "—" : parts.joined(separator: " · ")
     }
 }
 

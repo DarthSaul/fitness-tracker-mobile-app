@@ -24,7 +24,6 @@ struct LiveWorkoutView: View {
     var body: some View {
         NavigationStack {
             content
-                .navigationTitle(headerTitle)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
                 .task { await viewModel.load() }
@@ -71,13 +70,18 @@ struct LiveWorkoutView: View {
 
             exerciseSections
             adhocSection
-            notesSection
             completionSection
 
             if let actionError = viewModel.actionError {
                 Section { Text(actionError).foregroundStyle(.red).font(.footnote) }
             }
         }
+    }
+
+    private var progressFraction: Double {
+        let total = viewModel.totalTemplateSets
+        guard total > 0 else { return 0 }
+        return min(1, Double(viewModel.loggedTemplateSetCount) / Double(total))
     }
 
     // MARK: - Header
@@ -89,14 +93,26 @@ struct LiveWorkoutView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
+        // Leading: title as plain text + a short progress bar stacked below.
+        // On iOS 26+, hide the shared glass background so the slot reads as
+        // text rather than a tappable toolbar control.
+        if #available(iOS 26.0, *) {
+            ToolbarItem(placement: .topBarLeading) { leadingTitleContent }
+                .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .topBarLeading) { leadingTitleContent }
+        }
+        // Trailing: Close (text) and Abandon (trash) as two independent
+        // toolbar items. iOS 26 auto-merges same-placement items into one
+        // glass capsule, so insert a fixed ToolbarSpacer between them to keep
+        // each in its own container.
+        ToolbarItem(placement: .topBarTrailing) {
             Button("Close") { dismiss() }
         }
+        if #available(iOS 26.0, *) {
+            ToolbarSpacer(.fixed, placement: .topBarTrailing)
+        }
         ToolbarItem(placement: .topBarTrailing) {
-            // Single trash button instead of a Menu — Preview moved to Home,
-            // so Abandon is the only action left here. A direct Button avoids
-            // the Menu→Alert anchoring issue (the alert was being attached to
-            // the Menu's popover which dismissed before the alert presented).
             Button(role: .destructive) {
                 showAbandonConfirmation = true
             } label: {
@@ -104,6 +120,22 @@ struct LiveWorkoutView: View {
             }
             .disabled(viewModel.isAbandoning)
         }
+    }
+
+    private var leadingTitleContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(headerTitle)
+                .font(.headline)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: true, vertical: false)
+            // Linear ProgressView ignores .frame(height:); scaleEffect on Y
+            // is the standard trick to make the bar visually thicker.
+            ProgressView(value: progressFraction)
+                .tint(.green)
+                .frame(width: 120)
+                .scaleEffect(x: 1, y: 1.5, anchor: .leading)
+        }
+        .allowsHitTesting(false)
     }
 
     // MARK: - Exercise sections
@@ -136,6 +168,9 @@ struct LiveWorkoutView: View {
                             },
                             onShowTrend: {
                                 presentedSheet = .trend(TrendTarget(exerciseId: exercise.exercise.id, exerciseName: exercise.exercise.name))
+                            },
+                            onShowNotes: {
+                                presentedSheet = .notes(NotesTarget(exerciseId: exercise.exercise.id, exerciseName: exercise.exercise.name))
                             }
                         )
                     }
@@ -182,42 +217,35 @@ struct LiveWorkoutView: View {
         }
     }
 
-    // MARK: - Notes
-
-    private var notesSection: some View {
-        Section {
-            TextField("Workout notes", text: $viewModel.notes, axis: .vertical)
-                .lineLimit(3...6)
-            HStack {
-                Spacer()
-                NotesSaveStatusLabel(state: viewModel.notesSaveState)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        } header: {
-            Text("Notes")
-        }
-    }
-
     // MARK: - Completion
 
     private var completionSection: some View {
         Section {
-            HStack {
-                Label("\(viewModel.loggedTemplateSetCount) of \(viewModel.totalTemplateSets) template sets", systemImage: "checklist")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
             Button {
                 showCompleteConfirmation = true
             } label: {
-                HStack {
-                    if viewModel.isCompleting { ProgressView().controlSize(.small) }
-                    Text(viewModel.isCompleting ? "Completing…" : "Complete workout")
-                }
+                // Text owns the centering via .frame(maxWidth: .infinity); the
+                // spinner is a leading overlay so it doesn't share the label's
+                // width budget and push the text off-center.
+                Text(viewModel.isCompleting ? "Completing…" : "Complete Workout")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 4)
+                    .overlay(alignment: .leading) {
+                        if viewModel.isCompleting {
+                            ProgressView()
+                                .controlSize(.small)
+                                .padding(.leading, 16)
+                        }
+                    }
             }
             .buttonStyle(.borderedProminent)
+            .controlSize(.large)
             .disabled(viewModel.isCompleting)
+            // Zero row insets so the button extends edge-to-edge.
+            .listRowInsets(EdgeInsets())
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
         }
     }
 
@@ -226,11 +254,21 @@ struct LiveWorkoutView: View {
     @ViewBuilder
     private func sheetContent(for target: PresentedSheet) -> some View {
         switch target {
-        case .setLog(let t): setLogSheet(for: t)
+        case .setLog(let t):
+            // Half-height presentation — the set-log form is small enough that
+            // a medium detent keeps the row above visible while editing.
+            setLogSheet(for: t)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         case .swap(let t): swapSheet(for: t)
         case .trend(let t): trendSheet(for: t)
+        case .notes(let t): notesSheet(for: t)
         case .adHocSearch: adHocSearchSheet()
         }
+    }
+
+    private func notesSheet(for target: NotesTarget) -> some View {
+        ExerciseNotesSheet(exerciseId: target.exerciseId, exerciseName: target.exerciseName)
     }
 
     private func setLogSheet(for target: SetEditTarget) -> some View {
@@ -355,6 +393,7 @@ struct LiveWorkoutView: View {
         case setLog(SetEditTarget)
         case swap(SwapTarget)
         case trend(TrendTarget)
+        case notes(NotesTarget)
         case adHocSearch
 
         var id: String {
@@ -362,6 +401,7 @@ struct LiveWorkoutView: View {
             case .setLog(let t): return "setLog-\(t.id)"
             case .swap(let t): return "swap-\(t.id)"
             case .trend(let t): return "trend-\(t.id)"
+            case .notes(let t): return "notes-\(t.id)"
             case .adHocSearch: return "adHocSearch"
             }
         }
@@ -390,20 +430,11 @@ struct LiveWorkoutView: View {
         let exerciseName: String
         var id: String { exerciseId }
     }
-}
 
-// MARK: - Notes status label
-
-private struct NotesSaveStatusLabel: View {
-    let state: NotesSaveState
-
-    var body: some View {
-        switch state {
-        case .idle: EmptyView()
-        case .pending: Text("Saving…")
-        case .saving: Text("Saving…")
-        case .saved: Text("Saved")
-        case .failed: Text("Save failed").foregroundStyle(.red)
-        }
+    fileprivate struct NotesTarget: Identifiable {
+        let exerciseId: String
+        let exerciseName: String
+        var id: String { exerciseId }
     }
 }
+

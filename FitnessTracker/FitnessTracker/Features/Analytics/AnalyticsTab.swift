@@ -10,7 +10,6 @@ struct AnalyticsTab: View {
         let viewModel = AnalyticsViewModel(repository: repo)
         NavigationStack {
             AnalyticsView(viewModel: viewModel)
-                .settingsToolbarItem()
         }
     }
 }

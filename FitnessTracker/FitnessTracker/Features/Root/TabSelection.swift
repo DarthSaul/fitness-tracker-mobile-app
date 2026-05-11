@@ -2,7 +2,7 @@ import SwiftUI
 import Observation
 
 enum AppTab: Hashable, Sendable {
-    case home, programs, analytics
+    case home, history, analytics, programs, settings
 }
 
 /// Lightweight selection store so non-tab views (e.g. Home's quick links) can

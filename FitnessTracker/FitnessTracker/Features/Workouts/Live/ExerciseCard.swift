@@ -14,23 +14,26 @@ struct ExerciseCard: View {
     let onAddExtraSet: () -> Void
     let onSwap: () -> Void
     let onShowTrend: () -> Void
+    let onShowNotes: () -> Void
 
     @State private var isExpanded: Bool = false
 
-    private var isComplete: Bool {
-        guard !exercise.sets.isEmpty else { return false }
-        return exercise.sets.allSatisfy { viewModel.completedSet(forExerciseSetId: $0.id) != nil }
+    private var isMarkedComplete: Bool {
+        viewModel.isMarkedComplete(programExerciseId: exercise.id)
     }
 
     var body: some View {
         VStack(spacing: 0) {
             header
             if isExpanded {
-                Divider()
                 setsGrid
             }
         }
         .padding(.vertical, 4)
+        // Force the Form's row separator to span the full card width — by
+        // default the leading edge aligns with the exercise name (which leaves
+        // a half-width gap between superset rows).
+        .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
     }
 
     // MARK: - Header (always visible)
@@ -40,16 +43,17 @@ struct ExerciseCard: View {
         // and a separate chips row outside the Button. Nesting the chips inside
         // the toggle Button caused tap-routing ambiguity — chip taps could
         // bubble up to the expand/collapse handler in some cases.
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 10) {
             Button {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    isExpanded.toggle()
-                }
+                // Toggling without `withAnimation` keeps the header text
+                // anchored in place — animating the resize caused the title
+                // to bounce vertically as the row grew to fit the set grid.
+                isExpanded.toggle()
             } label: {
                 HStack(spacing: 10) {
                     nameRow
                     Spacer()
-                    if isComplete {
+                    if isMarkedComplete {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                     }
@@ -90,6 +94,9 @@ struct ExerciseCard: View {
                 systemImage: "arrow.triangle.2.circlepath",
                 action: deferredSwap
             )
+            // Notes chip — opens a per-exercise notes editor (lifetime notes
+            // for this exercise across all sessions, not per-set).
+            chip(label: "Notes", systemImage: "note.text", action: deferredNotes)
         }
     }
 
@@ -99,11 +106,11 @@ struct ExerciseCard: View {
                 Image(systemName: systemImage)
                 Text(label)
             }
-            .font(.caption2.weight(.medium))
-            .foregroundStyle(.secondary)
+            .font(.caption2.weight(.semibold))
+            .foregroundStyle(.primary)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
-            .background(Color.secondary.opacity(0.12), in: Capsule())
+            .background(Color.secondary.opacity(0.18), in: Capsule())
         }
         .buttonStyle(.borderless)
     }
@@ -122,7 +129,7 @@ struct ExerciseCard: View {
                 )
             }
             extraSetsList
-            addSetButton
+            actionButtons
         }
         .padding(.vertical, 8)
     }
@@ -156,15 +163,28 @@ struct ExerciseCard: View {
         }
     }
 
-    private var addSetButton: some View {
-        Button(action: onAddExtraSet) {
-            Label("Add set", systemImage: "plus")
-                .font(.caption.weight(.medium))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
+    private var actionButtons: some View {
+        VStack(spacing: 8) {
+            Button(action: onAddExtraSet) {
+                Text("Add set")
+                    .font(.subheadline.weight(.medium))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
+
+            Button {
+                viewModel.toggleMarkedComplete(programExerciseId: exercise.id)
+            } label: {
+                Text(isMarkedComplete ? "Completed" : "Complete")
+                    .font(.subheadline.weight(.medium))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(isMarkedComplete ? .green : .accentColor)
+            .controlSize(.regular)
         }
-        .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
+        .padding(.top, 4)
     }
 
     // MARK: - Deferred actions
@@ -184,6 +204,13 @@ struct ExerciseCard: View {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(80))
             onSwap()
+        }
+    }
+
+    private func deferredNotes() {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(80))
+            onShowNotes()
         }
     }
 }

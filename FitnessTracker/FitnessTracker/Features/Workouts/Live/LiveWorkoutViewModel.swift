@@ -24,27 +24,9 @@ final class LiveWorkoutViewModel {
     private(set) var extraSetsByProgramExerciseId: [String: [CompletedSetDTO]] = [:]
     private(set) var adhocSets: [CompletedSetDTO] = []
     private(set) var swapsByProgramExerciseId: [String: WorkoutExerciseSwapDTO] = [:]
-
-    /// Bound to a TextEditor in the view; user edits schedule a debounced save.
-    /// Server-driven assignments (apply / swap-then-load) toggle
-    /// `isApplyingServerState` so they don't loop back through the debounced
-    /// save (which would re-POST the value the server just sent us, and could
-    /// even clobber a newer in-flight local edit).
-    var notes: String = "" {
-        didSet {
-            guard !isApplyingServerState else { return }
-            isNotesDirty = true
-            scheduleNotesSave()
-        }
-    }
-    private(set) var notesSaveState: NotesSaveState = .idle
-    /// True after a user edit until the next successful `persistNotes` for
-    /// the same value. Prevents `apply()` from overwriting unsaved local edits
-    /// with the older server value mid-debounce.
-    private var isNotesDirty = false
-    /// Set to true while assigning server-loaded state so `notes.didSet`
-    /// can distinguish user-driven edits from internal hydration.
-    private var isApplyingServerState = false
+    /// Per-exercise "user pressed Complete" flag. Lives in memory only — the
+    /// data model has no field for it, so marks reset on workout reload.
+    private(set) var markedCompleteExerciseIds: Set<String> = []
 
     var isLoading = false
     var isCompleting = false
@@ -55,15 +37,11 @@ final class LiveWorkoutViewModel {
     // MARK: - Dependencies
     private let repository: WorkoutRepository
     private let sessionManager: SessionManager
-    private var notesSaveTask: Task<Void, Never>?
 
     init(repository: WorkoutRepository, sessionManager: SessionManager) {
         self.repository = repository
         self.sessionManager = sessionManager
     }
-    // No deinit cleanup needed: scheduleNotesSave's Task uses [weak self] so
-    // it doesn't keep this VM alive after the view goes away. If the VM is
-    // released mid-debounce, the closure resolves to a nil self and is a no-op.
 
     // MARK: - Derived
 
@@ -90,6 +68,20 @@ final class LiveWorkoutViewModel {
         swapsByProgramExerciseId[programExerciseId] != nil
     }
 
+    // MARK: - Mark complete (in-memory)
+
+    func isMarkedComplete(programExerciseId: String) -> Bool {
+        markedCompleteExerciseIds.contains(programExerciseId)
+    }
+
+    func toggleMarkedComplete(programExerciseId: String) {
+        if markedCompleteExerciseIds.contains(programExerciseId) {
+            markedCompleteExerciseIds.remove(programExerciseId)
+        } else {
+            markedCompleteExerciseIds.insert(programExerciseId)
+        }
+    }
+
     // MARK: - Load
 
     func load() async {
@@ -112,18 +104,8 @@ final class LiveWorkoutViewModel {
     }
 
     private func apply(_ response: ActiveWorkoutResponseDTO) {
-        isApplyingServerState = true
-        defer { isApplyingServerState = false }
-
         self.session = response.session
         self.day = response.day
-        // Don't clobber an in-progress local edit. If the user has typed
-        // something the server hasn't seen yet, leave `notes` alone — the
-        // pending debounce (or an explicit flush) will get it across.
-        if !isNotesDirty {
-            self.notes = response.session.notes ?? ""
-            self.notesSaveState = .idle
-        }
         rebuildCompletedSetBuckets(from: response.session.completedSets)
         self.swapsByProgramExerciseId = Dictionary(
             response.session.workoutExerciseSwaps.map { ($0.programExerciseId, $0) },
@@ -301,50 +283,6 @@ final class LiveWorkoutViewModel {
         }
     }
 
-    // MARK: - Notes auto-save
-
-    private func scheduleNotesSave() {
-        notesSaveTask?.cancel()
-        notesSaveState = .pending
-        let snapshot = notes
-        notesSaveTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 600_000_000)  // 0.6s quiet window
-            if Task.isCancelled { return }
-            await self?.persistNotes(snapshot)
-        }
-    }
-
-    private func persistNotes(_ value: String) async {
-        guard let session else { return }
-        notesSaveState = .saving
-        do {
-            _ = try await repository.updateNotes(workoutId: session.id, notes: value)
-            notesSaveState = .saved
-            // Only clear the dirty flag if no newer edit slipped in while we
-            // were saving — otherwise the next debounce will pick it up.
-            if value == notes {
-                isNotesDirty = false
-            }
-        } catch let apiError as APIError where apiError == .unauthorized {
-            await sessionManager.signOut()
-        } catch {
-            Logger.data.error("notes save failed: \(error)")
-            notesSaveState = .failed
-        }
-    }
-
-    /// Synchronously persist any pending debounced notes save before tearing
-    /// down the session. Used by `completeWorkout()` so a user who taps
-    /// Complete inside the 0.6s debounce window doesn't lose their last edit.
-    private func flushPendingNotes() async {
-        // Cancel the in-flight debounce so it can't race us, then save now if
-        // there are unsaved local edits.
-        notesSaveTask?.cancel()
-        notesSaveTask = nil
-        guard isNotesDirty, session != nil else { return }
-        await persistNotes(notes)
-    }
-
     // MARK: - Finalize / discard
 
     func completeWorkout() async -> Bool {
@@ -352,11 +290,6 @@ final class LiveWorkoutViewModel {
         isCompleting = true
         actionError = nil
         defer { isCompleting = false }
-
-        // Flush any pending debounced notes save first — otherwise a user who
-        // tapped Complete inside the 0.6s debounce window would lose the last
-        // edit when the sheet dismisses and the debounce task is cancelled.
-        await flushPendingNotes()
 
         do {
             // completedAt: nil → server uses "now".
@@ -393,10 +326,3 @@ final class LiveWorkoutViewModel {
     }
 }
 
-enum NotesSaveState: Sendable, Equatable {
-    case idle
-    case pending
-    case saving
-    case saved
-    case failed
-}

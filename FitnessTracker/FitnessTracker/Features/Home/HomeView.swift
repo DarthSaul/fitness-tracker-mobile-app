@@ -49,11 +49,13 @@ struct HomeView: View {
                         workoutRepository: workoutRepository
                     )
                     .padding(.horizontal)
-
-                    sectionHeader("My Fitness")
-                    HomeQuickLinksRow()
-                        .padding(.horizontal)
                 }
+
+                HomeRecentHistorySection(
+                    recentHistory: viewModel.recentHistory,
+                    workoutRepository: workoutRepository,
+                    hasLoadedOnce: viewModel.hasLoadedOnce
+                )
 
                 if let loadError = viewModel.loadError {
                     Text(loadError.localizedDescription)
@@ -87,13 +89,5 @@ struct HomeView: View {
         }
         let f = DateFormatter(); f.dateFormat = "EEEE, MMM d"
         return f.string(from: viewModel.selectedDate)
-    }
-
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title.uppercased())
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal)
-            .padding(.top, 8)
     }
 }
