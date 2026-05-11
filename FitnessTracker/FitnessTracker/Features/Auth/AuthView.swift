@@ -8,48 +8,44 @@ struct AuthView: View {
     }
 
     var body: some View {
-        ZStack {
-            Color(.systemBackground).ignoresSafeArea()
+        ZStack(alignment: .bottom) {
+            Image("Login")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .offset(x: -45)
+                .ignoresSafeArea()
+                .accessibilityLabel("Fitness Tracker")
 
-            VStack(spacing: 48) {
+            VStack(spacing: 0) {
                 Spacer()
-
-                // MARK: - Branding
-                VStack(spacing: 12) {
-                    Image(systemName: "figure.strengthtraining.traditional")
-                        .font(.system(size: 64))
-                        .foregroundStyle(.primary)
-
-                    Text("Fitness Tracker")
-                        .font(.largeTitle.bold())
-
-                    Text("Track every rep. Own your progress.")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-
-                Spacer()
-
-                // MARK: - Sign In
-                VStack(spacing: 16) {
-                    SignInWithAppleButton(
-                        onCredential: { credential in
-                            Task { await viewModel.handleAppleCredential(credential) }
-                        },
-                        onError: { error in
-                            viewModel.handleAuthorizationError(error)
-                        }
-                    )
-                    .frame(height: 50)
-                    .padding(.horizontal, 32)
-
-                    if viewModel.isLoading {
-                        ProgressView()
-                    }
-                }
-                .padding(.bottom, 48)
+                LinearGradient(
+                    colors: [.clear, .black.opacity(0.65)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 360)
             }
+            .ignoresSafeArea()
+            .allowsHitTesting(false)
+
+            VStack(spacing: 16) {
+                SignInWithAppleButton(
+                    onCredential: { credential in
+                        Task { await viewModel.handleAppleCredential(credential) }
+                    },
+                    onError: { error in
+                        viewModel.handleAuthorizationError(error)
+                    }
+                )
+                .frame(height: 50)
+                .padding(.horizontal, 32)
+
+                if viewModel.isLoading {
+                    ProgressView()
+                        .tint(.white)
+                }
+            }
+            .padding(.bottom, 16)
         }
         .alert("Sign In Failed", isPresented: Binding(
             get: { viewModel.error != nil },

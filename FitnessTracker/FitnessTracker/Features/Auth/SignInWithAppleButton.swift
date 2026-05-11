@@ -12,6 +12,10 @@ struct SignInWithAppleButton: UIViewRepresentable {
 
     func makeUIView(context: Context) -> ASAuthorizationAppleIDButton {
         let button = ASAuthorizationAppleIDButton(type: .signIn, style: .black)
+        button.cornerRadius = 8
+        button.layer.cornerRadius = 8
+        button.layer.borderColor = UIColor.white.cgColor
+        button.layer.borderWidth = 1
         button.addTarget(context.coordinator, action: #selector(Coordinator.handleTap), for: .touchUpInside)
         return button
     }
