@@ -14,7 +14,7 @@ struct AuthView: View {
                 .aspectRatio(contentMode: .fill)
                 .offset(x: -45)
                 .ignoresSafeArea()
-                .accessibilityLabel("Fitness Tracker")
+                .accessibilityHidden(true)
 
             VStack(spacing: 0) {
                 Spacer()
@@ -39,6 +39,7 @@ struct AuthView: View {
                 )
                 .frame(height: 50)
                 .padding(.horizontal, 32)
+                .disabled(viewModel.isLoading)
 
                 if viewModel.isLoading {
                     ProgressView()
