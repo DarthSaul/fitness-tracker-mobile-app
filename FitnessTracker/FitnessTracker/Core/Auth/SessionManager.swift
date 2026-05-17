@@ -57,17 +57,22 @@ final class SessionManager {
             Logger.auth.error("loadProfile called before apiClient was wired")
             return
         }
+        // Capture the user this request is for. If the session changes while
+        // the request is in flight (sign-out, or sign-out then sign-in as a
+        // different user), the result must not be written into the new session.
+        guard case .authenticated(let initiatingUserId) = authState else { return }
         do {
             let profile: UserProfile = try await apiClient.send(.getMe)
-            // Drop the result if the user signed out while the request was in
-            // flight — otherwise we'd reintroduce profile data into a session
-            // that's already .unauthenticated.
-            guard case .authenticated(let userId) = authState else { return }
+            // Drop the result if the session changed while the request was in
+            // flight — otherwise we'd write this profile/identity into a
+            // signed-out or different-user session.
+            guard case .authenticated(let currentUserId) = authState,
+                  currentUserId == initiatingUserId else { return }
             self.userProfile = profile
             // Enrich the Sentry identity with email now that the profile has
             // landed. ID was already set at sign-in/bootstrap so events stay
             // attributable even if this fetch failed.
-            let sentryUser = Sentry.User(userId: userId)
+            let sentryUser = Sentry.User(userId: currentUserId)
             sentryUser.email = profile.email
             SentrySDK.setUser(sentryUser)
         } catch {
