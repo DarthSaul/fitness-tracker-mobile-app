@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import OSLog
+import Sentry
 
 @Observable
 final class SessionManager {
@@ -37,7 +38,8 @@ final class SessionManager {
             let userId = extractUserId(from: token)
             authState = userId.map { .authenticated(userId: $0) } ?? .unauthenticated
             Logger.auth.info("Session bootstrap: authenticated as \(userId ?? "unknown", privacy: .private)")
-            if userId != nil {
+            if let userId {
+                SentrySDK.setUser(Sentry.User(userId: userId))
                 await loadProfile()
             }
         } catch {
@@ -60,8 +62,14 @@ final class SessionManager {
             // Drop the result if the user signed out while the request was in
             // flight — otherwise we'd reintroduce profile data into a session
             // that's already .unauthenticated.
-            guard case .authenticated = authState else { return }
+            guard case .authenticated(let userId) = authState else { return }
             self.userProfile = profile
+            // Enrich the Sentry identity with email now that the profile has
+            // landed. ID was already set at sign-in/bootstrap so events stay
+            // attributable even if this fetch failed.
+            let sentryUser = Sentry.User(userId: userId)
+            sentryUser.email = profile.email
+            SentrySDK.setUser(sentryUser)
         } catch {
             Logger.auth.error("loadProfile failed: \(error)")
         }
@@ -88,6 +96,7 @@ final class SessionManager {
         await tokenStore.clear()
         userProfile = nil
         authState = .unauthenticated
+        SentrySDK.setUser(nil)
     }
 
     // MARK: - Authenticated Transition
@@ -100,6 +109,7 @@ final class SessionManager {
         await tokenStore.set(access: accessToken)
         let userId = extractUserId(from: accessToken) ?? "unknown"
         authState = .authenticated(userId: userId)
+        SentrySDK.setUser(Sentry.User(userId: userId))
         await loadProfile()
     }
 

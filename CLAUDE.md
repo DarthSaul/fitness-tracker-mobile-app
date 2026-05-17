@@ -14,7 +14,7 @@ A SwiftUI iOS client for the Fitness Tracker fitness program platform. Talks to 
 - **Networking**: `Core/Networking/` — `APIClient` + `APIEndpoint` enum. JSON keys are camelCase end-to-end (no snake_case conversion — the server speaks camelCase).
 - **Auth**: `Core/Auth/` + `Features/Auth/`. Sign in with Apple via `AuthenticationServices`. Tokens (access + refresh) stored in Keychain via `KeychainService`. `TokenStore` is an `actor` (in-memory access token); `TokenRefresher` is also an `actor` with an in-flight Task pattern to coalesce concurrent 401s.
 - **Logging**: OSLog via `Logger.networking`, `Logger.auth`, `Logger.data`, `Logger.app` in `Core/Logging/AppLogger.swift`.
-- **Crash/error reporting**: Sentry, configured in `FitnessTrackerApp.init()` (skipped when DSN is the placeholder).
+- **Crash/error reporting**: Sentry, configured in `FitnessTrackerApp.init()` (skipped when DSN is the placeholder). User identity is set in `SessionManager` (`SentrySDK.setUser(...)`): user ID at bootstrap/sign-in, enriched with email once `loadProfile()` lands, cleared on sign-out. dSYMs upload to Sentry from a Release-only Run Script build phase using `sentry-cli` (installed via `brew install getsentry/tools/sentry-cli` — it is *not* bundled in the sentry-cocoa SPM artifact); auth via a local `.sentryclirc` (gitignored). The Debug skip is first in the script so dev builds don't even check for the CLI.
 - **Config**: `Debug.xcconfig` / `Release.xcconfig` populate `API_BASE_URL` and `SENTRY_DSN` into `Info.plist`. Read via `APIConfig`.
 
 ## Server contract

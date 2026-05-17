@@ -120,6 +120,7 @@
 				6B3F86B82FA727F900E010E4 /* Sources */,
 				6B3F86B92FA727F900E010E4 /* Frameworks */,
 				6B3F86BA2FA727F900E010E4 /* Resources */,
+				6BC095962FB6992B00DE0358 /* Upload Debug Symbols to Sentry */,
 			);
 			buildRules = (
 			);
@@ -252,6 +253,28 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		6BC095962FB6992B00DE0358 /* Upload Debug Symbols to Sentry */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Upload Debug Symbols to Sentry";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# Skip dSYM upload for Debug builds — keeps inner-loop builds fast.\n# Crash captures still work in Debug; they just won't be symbolicated in Sentry.\nif [ \"${CONFIGURATION}\" = \"Debug\" ]; then\n    exit 0\nfi\n\n# Xcode build phases run with a stripped PATH, so locate sentry-cli by hand.\nif [ -x /opt/homebrew/bin/sentry-cli ]; then\n    SENTRY_CLI=/opt/homebrew/bin/sentry-cli\nelif [ -x /usr/local/bin/sentry-cli ]; then\n    SENTRY_CLI=/usr/local/bin/sentry-cli\nelif command -v sentry-cli >/dev/null 2>&1; then\n    SENTRY_CLI=sentry-cli\nelse\n    echo \"error: sentry-cli not found. Install with: brew install getsentry/tools/sentry-cli\"\n    exit 1\nfi\n\n\"$SENTRY_CLI\" debug-files upload --include-sources \"$DWARF_DSYM_FOLDER_PATH\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		6B3F86B82FA727F900E010E4 /* Sources */ = {
