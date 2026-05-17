@@ -63,3 +63,6 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Sentry CLI auth — contains an org auth token, never check in
+.sentryclirc

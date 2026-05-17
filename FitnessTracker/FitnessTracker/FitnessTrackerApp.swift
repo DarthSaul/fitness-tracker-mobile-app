@@ -31,6 +31,13 @@ struct FitnessTrackerApp: App {
                 options.environment = isDebug ? "debug" : "release"
                 options.enableAutoSessionTracking = true
                 options.tracesSampleRate = isDebug ? 1.0 : 0.2
+                options.profilesSampleRate = isDebug ? 1.0 : 0.1
+                // Resolve async/await stacks through suspension points — without
+                // this, errors thrown from actors (TokenStore, TokenRefresher)
+                // and `async` APIClient calls land in Sentry with stacks that
+                // stop at the suspension boundary.
+                options.swiftAsyncStacktraces = true
+                options.attachStacktrace = true
             }
         } else {
             Logger.app.info("Sentry disabled — DSN not configured (xcconfig still has the placeholder).")
