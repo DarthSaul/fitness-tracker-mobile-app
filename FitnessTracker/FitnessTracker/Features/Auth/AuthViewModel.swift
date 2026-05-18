@@ -88,11 +88,17 @@ final class AuthViewModel {
 // MARK: - Errors
 enum AuthError: LocalizedError {
     case missingIdentityToken
+    case googleMissingIDToken
+    case googleNoPresentingViewController
 
     var errorDescription: String? {
         switch self {
         case .missingIdentityToken:
             return "Sign in with Apple did not return a valid token. Please try again."
+        case .googleMissingIDToken:
+            return "Google sign-in did not return a valid token. Please try again."
+        case .googleNoPresentingViewController:
+            return "Unable to start Google sign-in. Please try again."
         }
     }
 }

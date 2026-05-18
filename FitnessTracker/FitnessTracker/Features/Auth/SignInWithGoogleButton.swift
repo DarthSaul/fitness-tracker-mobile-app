@@ -33,7 +33,10 @@ struct SignInWithGoogleButton: View {
             .compactMap({ $0 as? UIWindowScene })
             .flatMap({ $0.windows })
             .first(where: { $0.isKeyWindow })?.rootViewController
-        else { return }
+        else {
+            onError(AuthError.googleNoPresentingViewController)
+            return
+        }
 
         GIDSignIn.sharedInstance.signIn(withPresenting: root) { result, error in
             if let error {
@@ -41,7 +44,7 @@ struct SignInWithGoogleButton: View {
                 return
             }
             guard let idToken = result?.user.idToken?.tokenString else {
-                onError(AuthError.missingIdentityToken)
+                onError(AuthError.googleMissingIDToken)
                 return
             }
             onIDToken(idToken)
