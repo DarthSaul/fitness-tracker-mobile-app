@@ -29,9 +29,13 @@ struct WorkoutNotesSheet: View {
             }
             .navigationTitle("Notes")
             .navigationBarTitleDisplayMode(.inline)
+            // Block Cancel and swipe-to-dismiss while a save is in flight so
+            // the outcome isn't left ambiguous mid-request.
+            .interactiveDismissDisabled(isSaving)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Cancel") { dismiss() }
+                        .disabled(isSaving)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Save") { saveAndDismiss() }
