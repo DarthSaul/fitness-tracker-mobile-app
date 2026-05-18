@@ -48,7 +48,17 @@ struct HistoryView: View {
                 )
             }
         } else {
-            List {
+            VStack(alignment: .leading, spacing: 0) {
+                // Matches the "Strength progress" subtitle treatment on the
+                // Analytics tab: subheadline/secondary, 12pt below the title
+                // (same as Analytics' scroll content top padding).
+                Text("Completed workouts")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+                    .padding(.top, 12)
+
+                List {
                 ForEach(viewModel.sessions) { session in
                     NavigationLink(value: session.id) {
                         HistoryRow(session: session)
@@ -73,6 +83,10 @@ struct HistoryView: View {
                         .font(.footnote)
                         .foregroundStyle(.red)
                 }
+                }
+                // Pull the list up under the subtitle — matches the
+                // subtitle → content spacing used on the Analytics tab (16pt).
+                .contentMargins(.top, 16, for: .scrollContent)
             }
         }
     }

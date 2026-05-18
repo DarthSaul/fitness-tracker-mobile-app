@@ -49,8 +49,15 @@ struct ProgramListView: View {
             }
             .pickerStyle(.segmented)
             .padding(.horizontal)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
+            // Match the Home tab's title → first-element gap (12pt).
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+            // Opaque full-width backing so the list scrolls *behind* a solid
+            // bar instead of showing through the transparent picker — keeps
+            // the toggle visually fixed in place.
+            .frame(maxWidth: .infinity)
+            .background(Color(.systemGroupedBackground))
+            .zIndex(1)
 
             if viewModel.filteredPrograms.isEmpty {
                 ContentUnavailableView(
@@ -92,6 +99,9 @@ struct ProgramListView: View {
             }
         }
         .listStyle(.insetGrouped)
+        // Pull the list up close to the filter bar — the default grouped-list
+        // top inset leaves them too far apart.
+        .contentMargins(.top, 8, for: .scrollContent)
     }
 
     // MARK: - Empty state copy
