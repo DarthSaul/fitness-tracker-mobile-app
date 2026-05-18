@@ -64,6 +64,9 @@ final class AuthViewModel {
     func handleGoogleError(_ error: any Error) {
         if let signInError = error as? GIDSignInError, signInError.code == .canceled {
             Logger.auth.info("Google sign-in canceled by user.")
+            // Clear any previously displayed error so a retry-then-cancel
+            // doesn't leave a stale message on screen.
+            self.error = nil
             return
         }
         Logger.auth.error("Google sign-in error: \(error)")
