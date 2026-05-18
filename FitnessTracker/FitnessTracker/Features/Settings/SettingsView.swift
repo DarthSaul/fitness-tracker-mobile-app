@@ -61,8 +61,10 @@ struct SettingsView: View {
                 .disabled(isSigningOut)
             }
         }
-        .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .top, spacing: 0) {
+            ScreenTitleHeader(title: "Settings", emoji: "⚙️")
+        }
+        .toolbar(.hidden, for: .navigationBar)
     }
 
     private func performSignOut() async {

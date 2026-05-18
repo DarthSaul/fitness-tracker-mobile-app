@@ -30,7 +30,10 @@ struct AnalyticsView: View {
             .padding(.horizontal)
             .padding(.vertical, 12)
         }
-        .navigationTitle("Analytics")
+        .safeAreaInset(edge: .top, spacing: 0) {
+            ScreenTitleHeader(title: "Analytics", emoji: "📈")
+        }
+        .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.load() }
         .refreshable { await viewModel.load() }
         .sheet(isPresented: $isSelectorPresented) {

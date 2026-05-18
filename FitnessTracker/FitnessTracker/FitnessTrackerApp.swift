@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import Sentry
+import GoogleSignIn
 import OSLog
 
 @main
@@ -73,6 +74,7 @@ struct FitnessTrackerApp: App {
                 .environment(apiClient)
                 .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
                 .task { await sessionManager.bootstrap() }
+                .onOpenURL { url in GIDSignIn.sharedInstance.handle(url) }
         }
         .modelContainer(modelContainer)
     }

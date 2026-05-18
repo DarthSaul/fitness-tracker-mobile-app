@@ -13,6 +13,7 @@ enum HTTPMethod: String {
 enum APIEndpoint {
     // Auth
     case appleSignIn(AppleSignInBody)
+    case googleSignIn(GoogleSignInBody)
     case refreshToken(RefreshTokenBody)
     case logout
     case getMe
@@ -80,6 +81,7 @@ extension APIEndpoint {
         switch self {
         // Auth
         case .appleSignIn: return "/api/auth/native/apple"
+        case .googleSignIn: return "/api/auth/native/google"
         case .refreshToken: return "/api/auth/refresh"
         case .logout: return "/api/auth/logout"
         case .getMe: return "/api/auth/me"
@@ -155,7 +157,7 @@ extension APIEndpoint {
              .getFeedback:
             return .get
 
-        case .appleSignIn, .refreshToken, .logout,
+        case .appleSignIn, .googleSignIn, .refreshToken, .logout,
              .saveProgram,
              .scheduleWorkout,
              .createWorkout, .recordSet, .addExtraSet, .swapExercise, .addAdHocSet,
@@ -181,6 +183,7 @@ extension APIEndpoint {
     var body: (any Encodable)? {
         switch self {
         case .appleSignIn(let b): return b
+        case .googleSignIn(let b): return b
         case .refreshToken(let b): return b
         case .saveProgram(let id): return SaveProgramBody(programId: id)
         case .scheduleWorkout(let b): return b
@@ -283,6 +286,10 @@ nonisolated struct AppleSignInBody: Encodable, Sendable {
         let givenName: String?
         let familyName: String?
     }
+}
+
+nonisolated struct GoogleSignInBody: Encodable, Sendable {
+    let idToken: String
 }
 
 nonisolated struct RefreshTokenBody: Encodable, Sendable {

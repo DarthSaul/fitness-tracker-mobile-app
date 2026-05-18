@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		6BAEF1F12FA7356800D96133 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 6BAEF1F02FA7356800D96133 /* Sentry */; };
+		6BC0A0010000000000000004 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 6BC0A0010000000000000002 /* GoogleSignIn */; };
+		6BC0A0010000000000000005 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 6BC0A0010000000000000003 /* GoogleSignInSwift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -70,6 +72,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				6BAEF1F12FA7356800D96133 /* Sentry in Frameworks */,
+				6BC0A0010000000000000004 /* GoogleSignIn in Frameworks */,
+				6BC0A0010000000000000005 /* GoogleSignInSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -132,6 +136,8 @@
 			name = FitnessTracker;
 			packageProductDependencies = (
 				6BAEF1F02FA7356800D96133 /* Sentry */,
+				6BC0A0010000000000000002 /* GoogleSignIn */,
+				6BC0A0010000000000000003 /* GoogleSignInSwift */,
 			);
 			productName = FitnessTracker;
 			productReference = 6B3F86BC2FA727F900E010E4 /* FitnessTracker.app */;
@@ -217,6 +223,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				6BAEF1EF2FA7356800D96133 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
+				6BC0A0010000000000000001 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 6B3F86BD2FA727F900E010E4 /* Products */;
@@ -661,6 +668,14 @@
 				minimumVersion = 8.0.0;
 			};
 		};
+		6BC0A0010000000000000001 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -668,6 +683,16 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 6BAEF1EF2FA7356800D96133 /* XCRemoteSwiftPackageReference "sentry-cocoa" */;
 			productName = Sentry;
+		};
+		6BC0A0010000000000000002 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6BC0A0010000000000000001 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+		6BC0A0010000000000000003 /* GoogleSignInSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6BC0A0010000000000000001 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignInSwift;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

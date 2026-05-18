@@ -1,5 +1,6 @@
 import Foundation
 import AuthenticationServices
+import GoogleSignIn
 import Observation
 import OSLog
 
@@ -44,6 +45,34 @@ final class AuthViewModel {
         }
     }
 
+    // MARK: - Google Sign-In Handler
+    @MainActor
+    func handleGoogleIDToken(_ idToken: String) async {
+        isLoading = true
+        error = nil
+        defer { isLoading = false }
+
+        do {
+            try await repository.signInWithGoogle(idToken: idToken)
+        } catch {
+            Logger.auth.error("Sign-in with Google failed: \(error)")
+            self.error = error
+        }
+    }
+
+    @MainActor
+    func handleGoogleError(_ error: any Error) {
+        if let signInError = error as? GIDSignInError, signInError.code == .canceled {
+            Logger.auth.info("Google sign-in canceled by user.")
+            // Clear any previously displayed error so a retry-then-cancel
+            // doesn't leave a stale message on screen.
+            self.error = nil
+            return
+        }
+        Logger.auth.error("Google sign-in error: \(error)")
+        self.error = error
+    }
+
     // MARK: - Authorization Error Handler
     @MainActor
     func handleAuthorizationError(_ error: any Error) {
@@ -62,11 +91,17 @@ final class AuthViewModel {
 // MARK: - Errors
 enum AuthError: LocalizedError {
     case missingIdentityToken
+    case googleMissingIDToken
+    case googleNoPresentingViewController
 
     var errorDescription: String? {
         switch self {
         case .missingIdentityToken:
             return "Sign in with Apple did not return a valid token. Please try again."
+        case .googleMissingIDToken:
+            return "Google sign-in did not return a valid token. Please try again."
+        case .googleNoPresentingViewController:
+            return "Unable to start Google sign-in. Please try again."
         }
     }
 }
