@@ -44,16 +44,17 @@ final class HistoryViewModel {
         }
     }
 
-    /// Loads the next older page using the last session's `completedAt` as the
-    /// cursor. No-op when already loading, when there is nothing to page from,
-    /// or when the previous page indicated we've reached the end.
+    /// Loads the next older page using the last session's `completedAt` + `id`
+    /// as the cursor (the server requires both together). No-op when already
+    /// loading, when there is nothing to page from, or when the previous page
+    /// indicated we've reached the end.
     func loadMore() async {
         guard !isLoading, !isLoadingMore, !reachedEnd else { return }
-        guard let cursor = sessions.last?.completedAt else { return }
+        guard let last = sessions.last, let cursor = last.completedAt else { return }
         isLoadingMore = true
         defer { isLoadingMore = false }
         do {
-            let page = try await repository.fetchHistory(limit: pageSize, before: cursor)
+            let page = try await repository.fetchHistory(limit: pageSize, before: cursor, beforeId: last.id)
             sessions.append(contentsOf: page)
             reachedEnd = page.count < pageSize
         } catch let apiError as APIError where apiError == .unauthorized {

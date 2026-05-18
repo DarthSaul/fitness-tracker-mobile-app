@@ -39,7 +39,7 @@ enum APIEndpoint {
 
     // Workouts
     case getActiveWorkout
-    case getWorkoutHistory(limit: Int?, before: Date?)
+    case getWorkoutHistory(limit: Int?, before: Date?, beforeId: String?)
     case createWorkout(CreateWorkoutBody?)
     case getWorkout(id: String)
     case abandonWorkout(id: String)
@@ -222,13 +222,17 @@ extension APIEndpoint {
             guard let tzOffsetMinutes else { return nil }
             return [URLQueryItem(name: "tzOffset", value: String(tzOffsetMinutes))]
 
-        case .getWorkoutHistory(let limit, let before):
+        case .getWorkoutHistory(let limit, let before, let beforeId):
             var items: [URLQueryItem] = []
             if let limit, limit > 0 {
                 items.append(URLQueryItem(name: "limit", value: String(limit)))
             }
-            if let before {
+            // The server requires the cursor pair together — sending `before`
+            // without `beforeId` 400s ("before and beforeId must be provided
+            // together"). Only emit the cursor when both are present.
+            if let before, let beforeId {
                 items.append(URLQueryItem(name: "before", value: APIEndpoint.iso8601String(before)))
+                items.append(URLQueryItem(name: "beforeId", value: beforeId))
             }
             return items.isEmpty ? nil : items
 

@@ -70,6 +70,7 @@ struct LiveWorkoutView: View {
 
             exerciseSections
             adhocSection
+            actionsSection
             completionSection
 
             if let actionError = viewModel.actionError {
@@ -87,7 +88,9 @@ struct LiveWorkoutView: View {
     // MARK: - Header
 
     private var headerTitle: String {
-        guard let s = viewModel.session else { return "Workout" }
+        guard let s = viewModel.session else {
+            return viewModel.isLoading ? "Workout loading…" : "Workout"
+        }
         return "Week \(s.weekNumber) · Day \(s.dayNumber)"
     }
 
@@ -128,12 +131,17 @@ struct LiveWorkoutView: View {
                 .font(.headline)
                 .foregroundStyle(.primary)
                 .fixedSize(horizontal: true, vertical: false)
-            // Linear ProgressView ignores .frame(height:); scaleEffect on Y
-            // is the standard trick to make the bar visually thicker.
-            ProgressView(value: progressFraction)
-                .tint(.green)
-                .frame(width: 120)
-                .scaleEffect(x: 1, y: 1.5, anchor: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Progress")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                // Linear ProgressView ignores .frame(height:); scaleEffect on Y
+                // is the standard trick to make the bar visually thicker.
+                ProgressView(value: progressFraction)
+                    .tint(.green)
+                    .frame(width: 120)
+                    .scaleEffect(x: 1, y: 1.5, anchor: .leading)
+            }
         }
         .allowsHitTesting(false)
     }
@@ -145,7 +153,7 @@ struct LiveWorkoutView: View {
         if let day = viewModel.day {
             ForEach(day.exerciseGroups, id: \.id) { group in
                 Section {
-                    ForEach(group.exercises, id: \.id) { exercise in
+                    ForEach(Array(group.exercises.enumerated()), id: \.element.id) { index, exercise in
                         ExerciseCard(
                             viewModel: viewModel,
                             exercise: exercise,
@@ -171,7 +179,8 @@ struct LiveWorkoutView: View {
                             },
                             onShowNotes: {
                                 presentedSheet = .notes(NotesTarget(exerciseId: exercise.exercise.id, exerciseName: exercise.exercise.name))
-                            }
+                            },
+                            restSeconds: restSeconds(at: index, in: group)
                         )
                     }
                 } header: {
@@ -179,6 +188,16 @@ struct LiveWorkoutView: View {
                 }
             }
         }
+    }
+
+    /// Rest to show on a given exercise's collapsed card. Standard groups show
+    /// it on every exercise; supersets show it only on the final exercise,
+    /// since rest is taken after the whole superset round.
+    private func restSeconds(at index: Int, in group: ExerciseGroupDTO) -> Int? {
+        if group.type == .superset && index != group.exercises.count - 1 {
+            return nil
+        }
+        return group.restSeconds
     }
 
     // MARK: - Ad-hoc
@@ -210,39 +229,76 @@ struct LiveWorkoutView: View {
             }
         }
 
+    }
+
+    // MARK: - Actions (Add exercise · Notes · Complete)
+
+    /// The three primary actions collapsed into one contiguous vertical bar —
+    /// no inter-section spacing between them. All share the "Add exercise"
+    /// layout (leading icon + label); only color/background differs.
+    /// "Add exercise" + "Notes" share one inset-grouped card, styled exactly
+    /// like the exercise-group cards: default row insets, with the separator
+    /// leading guide pinned to 0 so the divider spans the full card width
+    /// (the same trick `ExerciseCard` uses).
+    private var actionsSection: some View {
         Section {
-            Button { presentedSheet = .adHocSearch } label: {
-                Label("Add exercise", systemImage: "plus.circle")
+            actionRow(title: "Add exercise", systemImage: "plus.circle", color: .accentColor) {
+                presentedSheet = .adHocSearch
+            }
+            // "Notes" stays in the default primary color (not an accent action).
+            actionRow(title: "Notes", systemImage: "note.text", color: .primary) {
+                presentedSheet = .workoutNotes
             }
         }
     }
 
+    private func actionRow(
+        title: String,
+        systemImage: String,
+        color: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.vertical, 6)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(color)
+        .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+    }
+
     // MARK: - Completion
 
+    /// Standalone CTA in its own section — keeps the leading icon + label
+    /// layout, blue background, and white font from the prominent style.
     private var completionSection: some View {
         Section {
             Button {
                 showCompleteConfirmation = true
             } label: {
-                // Text owns the centering via .frame(maxWidth: .infinity); the
-                // spinner is a leading overlay so it doesn't share the label's
-                // width budget and push the text off-center.
-                Text(viewModel.isCompleting ? "Completing…" : "Complete Workout")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 4)
-                    .overlay(alignment: .leading) {
-                        if viewModel.isCompleting {
-                            ProgressView()
-                                .controlSize(.small)
-                                .padding(.leading, 16)
-                        }
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.white)
+                    Text(viewModel.isCompleting ? "Completing…" : "Complete Workout")
+                        .foregroundStyle(.white)
+                }
+                .font(.body.weight(.semibold))
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 4)
+                .overlay(alignment: .trailing) {
+                    if viewModel.isCompleting {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.white)
                     }
+                }
             }
             .buttonStyle(.borderedProminent)
             .controlSize(.large)
             .disabled(viewModel.isCompleting)
-            // Zero row insets so the button extends edge-to-edge.
+            // Edge-to-edge standalone button (not part of the card above).
             .listRowInsets(EdgeInsets())
             .listRowBackground(Color.clear)
             .listRowSeparator(.hidden)
@@ -263,6 +319,12 @@ struct LiveWorkoutView: View {
         case .swap(let t): swapSheet(for: t)
         case .trend(let t): trendSheet(for: t)
         case .notes(let t): notesSheet(for: t)
+        case .workoutNotes:
+            // Starts shorter than the Log-set drawer (.medium); expandable to
+            // large for longer notes.
+            WorkoutNotesSheet(viewModel: viewModel)
+                .presentationDetents([.fraction(0.35), .large])
+                .presentationDragIndicator(.visible)
         case .adHocSearch: adHocSearchSheet()
         }
     }
@@ -394,6 +456,7 @@ struct LiveWorkoutView: View {
         case swap(SwapTarget)
         case trend(TrendTarget)
         case notes(NotesTarget)
+        case workoutNotes
         case adHocSearch
 
         var id: String {
@@ -402,6 +465,7 @@ struct LiveWorkoutView: View {
             case .swap(let t): return "swap-\(t.id)"
             case .trend(let t): return "trend-\(t.id)"
             case .notes(let t): return "notes-\(t.id)"
+            case .workoutNotes: return "workoutNotes"
             case .adHocSearch: return "adHocSearch"
             }
         }

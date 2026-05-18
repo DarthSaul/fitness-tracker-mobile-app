@@ -33,9 +33,11 @@ struct ResumeWorkoutBanner: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-            .padding(.horizontal, 12)
-            .padding(.bottom, 4)
+            // Capsule + matching horizontal inset so it reads as the same
+            // floating pill as the tab bar directly below it.
+            .background(.regularMaterial, in: Capsule())
+            .padding(.horizontal, 22)
+            .padding(.bottom, 6)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)

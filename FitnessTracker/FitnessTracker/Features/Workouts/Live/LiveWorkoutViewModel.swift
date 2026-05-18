@@ -283,6 +283,33 @@ final class LiveWorkoutViewModel {
         }
     }
 
+    // MARK: - Workout notes
+
+    var workoutNotes: String {
+        session?.notes ?? ""
+    }
+
+    /// Persists workout-level notes via PATCH /api/workouts/:id. Returns true
+    /// on success. Mirrors the server `notes` back onto the local session so
+    /// the collapsed card's "has notes" state stays accurate without a reload.
+    @discardableResult
+    func updateNotes(_ notes: String) async -> Bool {
+        guard let session else { return false }
+        actionError = nil
+        do {
+            let response = try await repository.updateNotes(workoutId: session.id, notes: notes)
+            self.session?.notes = response.notes
+            return true
+        } catch let apiError as APIError where apiError == .unauthorized {
+            await sessionManager.signOut()
+            return false
+        } catch {
+            Logger.data.error("updateNotes failed: \(error)")
+            actionError = error.localizedDescription
+            return false
+        }
+    }
+
     // MARK: - Finalize / discard
 
     func completeWorkout() async -> Bool {

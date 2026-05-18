@@ -61,6 +61,9 @@ struct SettingsView: View {
                 .disabled(isSigningOut)
             }
         }
+        // Match the Home tab's title → first-element gap (12pt); the default
+        // grouped-list top inset is otherwise inconsistent with other tabs.
+        .contentMargins(.top, 12, for: .scrollContent)
         .safeAreaInset(edge: .top, spacing: 0) {
             ScreenTitleHeader(title: "Settings", emoji: "⚙️")
         }

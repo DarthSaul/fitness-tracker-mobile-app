@@ -15,6 +15,10 @@ struct ExerciseCard: View {
     let onSwap: () -> Void
     let onShowTrend: () -> Void
     let onShowNotes: () -> Void
+    /// Group rest period, surfaced as the first chip. The parent passes nil
+    /// when it shouldn't render here (e.g. a non-final exercise of a superset,
+    /// where rest is only taken after the whole round).
+    let restSeconds: Int?
 
     @State private var isExpanded: Bool = false
 
@@ -86,6 +90,11 @@ struct ExerciseCard: View {
 
     private var chipsRow: some View {
         HStack(spacing: 6) {
+            // Rest chip — informational (not a button), first of the row.
+            // Mirrors the web's un-expanded card showing the group's rest.
+            if let restSeconds, restSeconds > 0 {
+                restChip(seconds: restSeconds)
+            }
             // Trend chip — same idiom as the web's "📈 Trend" tag.
             chip(label: "Trend", systemImage: "chart.line.uptrend.xyaxis", action: deferredTrend)
             // Swap chip
@@ -113,6 +122,30 @@ struct ExerciseCard: View {
             .background(Color.secondary.opacity(0.18), in: Capsule())
         }
         .buttonStyle(.borderless)
+    }
+
+    /// Read-only rest pill. Same capsule visual as `chip` but not a Button —
+    /// rest is informational, not an action.
+    private func restChip(seconds: Int) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: "clock")
+            Text(formatRest(seconds))
+        }
+        .font(.caption2.weight(.semibold))
+        .foregroundStyle(.primary)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Color.secondary.opacity(0.18), in: Capsule())
+    }
+
+    /// 150 → "2.5 min", 120 → "2 min", 45 → "45 sec".
+    private func formatRest(_ seconds: Int) -> String {
+        if seconds < 60 { return "\(seconds) sec" }
+        let f = NumberFormatter()
+        f.maximumFractionDigits = 2
+        f.minimumFractionDigits = 0
+        let minutes = f.string(from: NSNumber(value: Double(seconds) / 60)) ?? "\(seconds / 60)"
+        return "\(minutes) min"
     }
 
     // MARK: - Sets grid (expanded)
