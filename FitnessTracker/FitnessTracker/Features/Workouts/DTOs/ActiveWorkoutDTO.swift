@@ -16,7 +16,9 @@ nonisolated struct ActiveWorkoutResponseDTO: Codable, Sendable, Equatable {
         let status: SessionStatus
         let startedAt: Date
         let completedAt: Date?
-        let notes: String?
+        // `var` so the live VM can mirror a persisted notes update back onto
+        // the session without a full reload (see LiveWorkoutViewModel.updateNotes).
+        var notes: String?
         let completedSets: [CompletedSetDTO]
         let userProgram: UserProgramDTO
         let workoutExerciseSwaps: [WorkoutExerciseSwapDTO]

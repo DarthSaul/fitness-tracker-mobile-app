@@ -21,7 +21,6 @@ struct SetLogSheet: View {
     @State private var repsText: String
     @State private var weightText: String
     @State private var rpeText: String
-    @State private var notes: String
     @State private var isSaving = false
     @State private var isDeleting = false
 
@@ -46,7 +45,6 @@ struct SetLogSheet: View {
         _repsText = State(initialValue: initialReps.map(String.init) ?? "")
         _weightText = State(initialValue: initialWeight.map { Self.formatDouble($0) } ?? "")
         _rpeText = State(initialValue: initialRPE.map { Self.formatDouble($0) } ?? "")
-        _notes = State(initialValue: existing?.notes ?? "")
     }
 
     var body: some View {
@@ -64,11 +62,6 @@ struct SetLogSheet: View {
                     LabeledTextField(label: "Reps", placeholder: placeholderInt(templateSet.reps), text: $repsText, keyboard: .numberPad)
                     LabeledTextField(label: "Weight (lb)", placeholder: placeholderDouble(templateSet.weight), text: $weightText, keyboard: .decimalPad)
                     LabeledTextField(label: "RPE", placeholder: placeholderDouble(templateSet.rpe), text: $rpeText, keyboard: .decimalPad)
-                }
-
-                Section("Notes") {
-                    TextField("Add a note", text: $notes, axis: .vertical)
-                        .lineLimit(2...4)
                 }
 
                 if let onDelete, existing != nil {
@@ -115,7 +108,10 @@ struct SetLogSheet: View {
         guard !isDeleting else { return }
         isSaving = true
         Task {
-            let ok = await onSave(parseInt(repsText), parseDouble(weightText), parseDouble(rpeText), notes.isEmpty ? nil : notes)
+            // Per-set notes were removed from this sheet — set notes now live
+            // at the exercise level (Notes chip) and workout level (Workout
+            // Notes card). Pass nil so the field is left untouched server-side.
+            let ok = await onSave(parseInt(repsText), parseDouble(weightText), parseDouble(rpeText), nil)
             isSaving = false
             if ok { dismiss() }
         }
