@@ -34,4 +34,16 @@ final class AuthRepository {
             refreshToken: response.refreshToken
         )
     }
+
+    // MARK: - Sign In With Google
+    func signInWithGoogle(idToken: String) async throws {
+        let response: AuthTokensResponse = try await apiClient.send(
+            .googleSignIn(GoogleSignInBody(idToken: idToken))
+        )
+        Logger.auth.info("Google sign-in succeeded — persisting tokens.")
+        try await sessionManager.didSignIn(
+            accessToken: response.accessToken,
+            refreshToken: response.refreshToken
+        )
+    }
 }

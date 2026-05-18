@@ -2,3 +2,8 @@
 SLASH = /
 API_BASE_URL = https:$(SLASH)/fitness-app.me
 SENTRY_DSN = https:$(SLASH)/5bc134b4fa06e64af71153c23cf637c7@o4511323003092992.ingest.us.sentry.io/4511323005648896
+
+// Google Sign-In — iOS OAuth client (Google Cloud Console). Bundle-ID-scoped, same in all configs.
+GOOGLE_IOS_CLIENT_ID = 677251793444-j1am8iii2fgnqchmoumu1makjdk5thop.apps.googleusercontent.com
+GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.677251793444-j1am8iii2fgnqchmoumu1makjdk5thop
+

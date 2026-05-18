@@ -41,6 +41,18 @@ struct AuthView: View {
                 .padding(.horizontal, 32)
                 .disabled(viewModel.isLoading)
 
+                SignInWithGoogleButton(
+                    onIDToken: { token in
+                        Task { await viewModel.handleGoogleIDToken(token) }
+                    },
+                    onError: { error in
+                        viewModel.handleGoogleError(error)
+                    }
+                )
+                .frame(height: 50)
+                .padding(.horizontal, 32)
+                .disabled(viewModel.isLoading)
+
                 if viewModel.isLoading {
                     ProgressView()
                         .tint(.white)
