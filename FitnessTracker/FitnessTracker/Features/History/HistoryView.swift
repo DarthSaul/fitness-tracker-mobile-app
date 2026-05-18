@@ -12,7 +12,10 @@ struct HistoryView: View {
 
     var body: some View {
         content
-            .navigationTitle("History")
+            .safeAreaInset(edge: .top, spacing: 0) {
+                ScreenTitleHeader(title: "History", emoji: "🕒")
+            }
+            .toolbar(.hidden, for: .navigationBar)
             .task { if viewModel.sessions.isEmpty { await viewModel.load() } }
             .refreshable { await viewModel.load() }
             .navigationDestination(for: String.self) { workoutId in

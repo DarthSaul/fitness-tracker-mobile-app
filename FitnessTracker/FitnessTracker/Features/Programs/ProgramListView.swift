@@ -20,7 +20,10 @@ struct ProgramListView: View {
                 content
             }
         }
-        .navigationTitle("Programs")
+        .safeAreaInset(edge: .top, spacing: 0) {
+            ScreenTitleHeader(title: "Programs", emoji: "🏋️")
+        }
+        .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.load() }
         .refreshable { await viewModel.load() }
         .alert("Error", isPresented: errorBinding) {

@@ -66,7 +66,10 @@ struct HomeView: View {
             }
             .padding(.vertical, 12)
         }
-        .navigationTitle("Home")
+        .safeAreaInset(edge: .top, spacing: 0) {
+            ScreenTitleHeader(title: "Home", emoji: "💪")
+        }
+        .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.load() }
         .refreshable { await viewModel.load() }
         // Refresh on transitions of the live-workout sheet so the today card
