@@ -34,7 +34,7 @@ struct HistoryViewModelTests {
         let s1 = makeSession(id: "a", completedAt: Date(timeIntervalSince1970: 100))
         let s2 = makeSession(id: "b", completedAt: Date(timeIntervalSince1970: 90))
         client.stub(
-            .getWorkoutHistory(limit: 2, before: nil),
+            .getWorkoutHistory(limit: 2, before: nil, beforeId: nil),
             response: WorkoutHistoryResponseDTO(sessions: [s1, s2])
         )
 
@@ -50,7 +50,7 @@ struct HistoryViewModelTests {
     func loadPartialPage() async throws {
         let (vm, client) = makeViewModel(pageSize: 5)
         client.stub(
-            .getWorkoutHistory(limit: 5, before: nil),
+            .getWorkoutHistory(limit: 5, before: nil, beforeId: nil),
             response: WorkoutHistoryResponseDTO(sessions: [
                 makeSession(id: "a", completedAt: Date(timeIntervalSince1970: 100))
             ])
@@ -73,16 +73,18 @@ struct HistoryViewModelTests {
             makeSession(id: "c", completedAt: Date(timeIntervalSince1970: 50)),
         ]
         client.stub(
-            .getWorkoutHistory(limit: 2, before: nil),
+            .getWorkoutHistory(limit: 2, before: nil, beforeId: nil),
             response: WorkoutHistoryResponseDTO(sessions: firstPage)
         )
         await vm.load()
 
         // Capture the cursor passed on the next fetch.
         var capturedBefore: Date?
+        var capturedBeforeId: String?
         client.handlers["/api/workouts/history"] = { endpoint in
-            if case .getWorkoutHistory(_, let before) = endpoint {
+            if case .getWorkoutHistory(_, let before, let beforeId) = endpoint {
                 capturedBefore = before
+                capturedBeforeId = beforeId
             }
             return try JSONCoding.encoder.encode(WorkoutHistoryResponseDTO(sessions: secondPage))
         }
@@ -90,6 +92,7 @@ struct HistoryViewModelTests {
         await vm.loadMore()
 
         #expect(capturedBefore == Date(timeIntervalSince1970: 100))
+        #expect(capturedBeforeId == "b")
         #expect(vm.sessions.map(\.id) == ["a", "b", "c"])
         #expect(vm.reachedEnd == true) // 1 < pageSize 2
     }
@@ -98,7 +101,7 @@ struct HistoryViewModelTests {
     func loadMoreNoOpAtEnd() async throws {
         let (vm, client) = makeViewModel(pageSize: 5)
         client.stub(
-            .getWorkoutHistory(limit: 5, before: nil),
+            .getWorkoutHistory(limit: 5, before: nil, beforeId: nil),
             response: WorkoutHistoryResponseDTO(sessions: [
                 makeSession(id: "a", completedAt: Date(timeIntervalSince1970: 100))
             ])

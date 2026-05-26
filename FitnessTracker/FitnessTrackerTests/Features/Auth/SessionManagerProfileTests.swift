@@ -31,7 +31,7 @@ struct SessionManagerProfileTests {
     func loadProfileSwallowsErrors() async throws {
         let (manager, client) = makeManager()
         client.handlers["/api/auth/me"] = { _ in
-            throw APIError.httpError(statusCode: 500, data: Data())
+            throw APIError.httpError(statusCode: 500, message: nil, data: Data())
         }
 
         await manager.loadProfile()

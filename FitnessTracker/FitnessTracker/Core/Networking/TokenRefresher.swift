@@ -81,7 +81,8 @@ actor TokenRefresher {
         }
 
         guard (200..<300).contains(http.statusCode) else {
-            throw APIError.httpError(statusCode: http.statusCode, data: data)
+            let message = APIError.decodeServerMessage(from: data)
+            throw APIError.httpError(statusCode: http.statusCode, message: message, data: data)
         }
 
         let tokens = try JSONCoding.decoder.decode(AuthTokensResponse.self, from: data)

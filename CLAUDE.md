@@ -34,19 +34,15 @@ The server is at `/Users/saulgraves/code/fitness-tracker` (Nuxt 4 + h3 + Prisma 
 
 - Build/run: open `FitnessTracker/FitnessTracker.xcodeproj` in Xcode → ⌘R. Synchronized folders (`PBXFileSystemSynchronizedRootGroup`) auto-include new Swift files.
 - Clean build: ⇧⌘K.
-- Test: ⌘U in Xcode (see Verification workflow below for why we don't run `xcodebuild test` from the terminal).
+- Test: `xcodebuild test` from the terminal, or ⌘U in Xcode.
 
 ## Verification workflow
 
-I keep an iOS Simulator running in Xcode during development. Do not invoke `xcodebuild test` or spawn simulators from the terminal — they conflict with my running sim and cause `ipc/mig server died` errors.
+- **Compile check**: run `xcodebuild build` or `xcodebuild build-for-testing` yourself.
+- **Test suite**: run `xcodebuild test` yourself (scheme `FitnessTracker`, an iOS Simulator destination) and report results. The previous `ipc/mig server died` conflict with my running sim is resolved.
+- **Smoke test**: tell me to run ⌘⇧K then ⌘R in Xcode — I want to keep driving smoke tests myself.
 
-For verification, delegate execution to me:
-
-- **Compile check**: `xcodebuild build` and `xcodebuild build-for-testing` (no simulator launch) are fine to run yourself.
-- **Test suite**: tell me to run ⌘U in Xcode and report results back.
-- **Smoke test**: tell me to run ⌘⇧K then ⌘R in Xcode.
-
-Keep recommending test runs and smoke tests in your verification steps — just don't execute the simulator-dependent ones.
+Keep recommending smoke tests in your verification steps.
 
 ## Local dev server
 

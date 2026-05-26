@@ -23,7 +23,7 @@ final class ResumeWorkoutViewModel {
         do {
             let response: ActiveWorkoutResponseDTO = try await apiClient.send(.getActiveWorkout)
             activeSession = response.session
-        } catch APIError.httpError(let statusCode, _) where statusCode == 404 {
+        } catch APIError.httpError(let statusCode, _, _) where statusCode == 404 {
             // Expected: no active session.
             activeSession = nil
         } catch {

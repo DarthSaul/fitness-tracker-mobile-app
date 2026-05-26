@@ -161,7 +161,7 @@ struct WorkoutRepositoryTests {
     func getActiveWorkoutNotFound() async throws {
         let client = MockAPIClient()
         client.handlers["/api/workouts/active"] = { _ in
-            throw APIError.httpError(statusCode: 404, data: Data())
+            throw APIError.httpError(statusCode: 404, message: nil, data: Data())
         }
         let repo = WorkoutRepository(apiClient: client)
 
@@ -227,16 +227,30 @@ struct WorkoutRepositoryTests {
         #expect(result.adhocExerciseName == "Pull-up")
     }
 
-    @Test("updateNotes patches and decodes the {id, notes} response")
+    @Test("updateNotes patches and decodes the {id, notes, completedAt} response")
     func updateNotesDispatch() async throws {
         let client = MockAPIClient()
         client.stub(
             .updateWorkoutNotes(id: "ws1", body: UpdateWorkoutNotesBody(notes: "felt strong today")),
-            response: UpdateWorkoutNotesResponseDTO(id: "ws1", notes: "felt strong today")
+            response: UpdateWorkoutResponseDTO(id: "ws1", notes: "felt strong today", completedAt: nil)
         )
         let repo = WorkoutRepository(apiClient: client)
 
         let result = try await repo.updateNotes(workoutId: "ws1", notes: "felt strong today")
         #expect(result.notes == "felt strong today")
+    }
+
+    @Test("updateWorkoutDate patches /api/workouts/:id with the new completedAt")
+    func updateWorkoutDateDispatch() async throws {
+        let client = MockAPIClient()
+        let newDate = Date(timeIntervalSince1970: 1_716_206_400) // 2024-05-20T12:00:00Z, arbitrary fixed point
+        client.stub(
+            .updateWorkoutDate(id: "ws1", body: UpdateWorkoutDateBody(completedAt: newDate)),
+            response: UpdateWorkoutResponseDTO(id: "ws1", notes: nil, completedAt: newDate)
+        )
+        let repo = WorkoutRepository(apiClient: client)
+
+        let result = try await repo.updateWorkoutDate(id: "ws1", completedAt: newDate)
+        #expect(result.completedAt == newDate)
     }
 }

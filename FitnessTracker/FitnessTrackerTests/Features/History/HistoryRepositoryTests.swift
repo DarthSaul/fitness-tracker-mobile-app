@@ -23,7 +23,7 @@ struct HistoryRepositoryTests {
     func unwrapsSessions() async throws {
         let client = MockAPIClient()
         client.stub(
-            .getWorkoutHistory(limit: nil, before: nil),
+            .getWorkoutHistory(limit: nil, before: nil, beforeId: nil),
             response: WorkoutHistoryResponseDTO(sessions: [makeSession()])
         )
         let repo = HistoryRepository(apiClient: client)
@@ -35,7 +35,7 @@ struct HistoryRepositoryTests {
         #expect(result[0].count.completedSets == 7)
     }
 
-    @Test("fetchHistory passes limit + before through to the endpoint URL")
+    @Test("fetchHistory passes limit + cursor pair through to the endpoint URL")
     func appendsQueryItems() async throws {
         let client = MockAPIClient()
         let cursor = Date(timeIntervalSince1970: 1_700_500_000)
@@ -46,25 +46,28 @@ struct HistoryRepositoryTests {
         }
         let repo = HistoryRepository(apiClient: client)
 
-        _ = try await repo.fetchHistory(limit: 25, before: cursor)
+        _ = try await repo.fetchHistory(limit: 25, before: cursor, beforeId: "ws9")
 
-        guard case .getWorkoutHistory(let limit, let before) = seenEndpoint else {
+        guard case .getWorkoutHistory(let limit, let before, let beforeId) = seenEndpoint else {
             Issue.record("Expected getWorkoutHistory endpoint")
             return
         }
         #expect(limit == 25)
         #expect(before == cursor)
+        #expect(beforeId == "ws9")
 
         let items = seenEndpoint!.queryItems ?? []
         let names = items.map(\.name)
         #expect(names.contains("limit"))
         #expect(names.contains("before"))
+        #expect(names.contains("beforeId"))
         #expect(items.first(where: { $0.name == "limit" })?.value == "25")
+        #expect(items.first(where: { $0.name == "beforeId" })?.value == "ws9")
     }
 
     @Test("fetchHistory with both params nil produces no query items")
     func noQueryItemsWhenAllNil() async throws {
-        let endpoint = APIEndpoint.getWorkoutHistory(limit: nil, before: nil)
+        let endpoint = APIEndpoint.getWorkoutHistory(limit: nil, before: nil, beforeId: nil)
         #expect(endpoint.queryItems == nil)
     }
 

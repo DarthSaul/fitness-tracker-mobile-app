@@ -79,7 +79,7 @@ struct HomeRepositoryTests {
     func fetchActiveNotFound() async throws {
         let client = MockAPIClient()
         client.handlers["/api/user-programs/active"] = { _ in
-            throw APIError.httpError(statusCode: 404, data: Data())
+            throw APIError.httpError(statusCode: 404, message: nil, data: Data())
         }
         let repo = HomeRepository(apiClient: client)
 
@@ -91,7 +91,7 @@ struct HomeRepositoryTests {
     func fetchActiveWorkoutNotFound() async throws {
         let client = MockAPIClient()
         client.handlers["/api/workouts/active"] = { _ in
-            throw APIError.httpError(statusCode: 404, data: Data())
+            throw APIError.httpError(statusCode: 404, message: nil, data: Data())
         }
         let repo = HomeRepository(apiClient: client)
 
@@ -103,7 +103,7 @@ struct HomeRepositoryTests {
     func fetchSessionsNotFound() async throws {
         let client = MockAPIClient()
         client.handlers["/api/user-programs/active/sessions"] = { _ in
-            throw APIError.httpError(statusCode: 404, data: Data())
+            throw APIError.httpError(statusCode: 404, message: nil, data: Data())
         }
         let repo = HomeRepository(apiClient: client)
 
