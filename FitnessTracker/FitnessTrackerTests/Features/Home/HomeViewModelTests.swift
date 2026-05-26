@@ -70,14 +70,14 @@ struct HomeViewModelTests {
             )
         } else {
             client.handlers["/api/user-programs/active"] = { _ in
-                throw APIError.httpError(statusCode: 404, data: Data())
+                throw APIError.httpError(statusCode: 404, message: nil, data: Data())
             }
         }
         if let activeWorkout {
             client.stub(.getActiveWorkout, response: activeWorkout)
         } else {
             client.handlers["/api/workouts/active"] = { _ in
-                throw APIError.httpError(statusCode: 404, data: Data())
+                throw APIError.httpError(statusCode: 404, message: nil, data: Data())
             }
         }
         client.stub(
@@ -85,7 +85,7 @@ struct HomeViewModelTests {
             response: ActiveProgramSessionsResponseDTO(sessions: sessions)
         )
         client.stub(
-            .getWorkoutHistory(limit: 5, before: nil),
+            .getWorkoutHistory(limit: 5, before: nil, beforeId: nil),
             response: WorkoutHistoryResponseDTO(sessions: [])
         )
 

@@ -92,7 +92,7 @@ struct LiveWorkoutViewModelTests {
     func loadNoActive() async {
         let client = MockAPIClient()
         client.handlers["/api/workouts/active"] = { _ in
-            throw APIError.httpError(statusCode: 404, data: Data())
+            throw APIError.httpError(statusCode: 404, message: nil, data: Data())
         }
 
         let vm = makeViewModel(client: client)

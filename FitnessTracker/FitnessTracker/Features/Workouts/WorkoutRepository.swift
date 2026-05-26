@@ -75,9 +75,18 @@ final class WorkoutRepository {
     }
 
     @discardableResult
-    func updateNotes(workoutId: String, notes: String) async throws -> UpdateWorkoutNotesResponseDTO {
+    func updateNotes(workoutId: String, notes: String) async throws -> UpdateWorkoutResponseDTO {
         let body = UpdateWorkoutNotesBody(notes: notes)
         return try await apiClient.send(.updateWorkoutNotes(id: workoutId, body: body))
+    }
+
+    /// PATCH /api/workouts/:id with `{ completedAt }`. Use this to edit the
+    /// date of a session that's already COMPLETED — `/complete` 409s in that
+    /// case because it's a one-way state transition, not a field-patch endpoint.
+    @discardableResult
+    func updateWorkoutDate(id: String, completedAt: Date) async throws -> UpdateWorkoutResponseDTO {
+        let body = UpdateWorkoutDateBody(completedAt: completedAt)
+        return try await apiClient.send(.updateWorkoutDate(id: id, body: body))
     }
 
     // MARK: - Finalize / discard
@@ -95,7 +104,7 @@ final class WorkoutRepository {
     // MARK: - Helpers
     private static func isNotFound(_ error: any Error) -> Bool {
         guard let apiError = error as? APIError else { return false }
-        if case .httpError(let statusCode, _) = apiError, statusCode == 404 {
+        if case .httpError(let statusCode, _, _) = apiError, statusCode == 404 {
             return true
         }
         return false

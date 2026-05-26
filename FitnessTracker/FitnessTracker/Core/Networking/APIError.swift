@@ -2,7 +2,11 @@ import Foundation
 
 nonisolated enum APIError: Error, LocalizedError, Equatable {
     case unauthorized
-    case httpError(statusCode: Int, data: Data)
+    /// Non-2xx HTTP response. `message` is the server-supplied human-readable
+    /// reason (h3 `statusMessage` / `message`) when one could be decoded from
+    /// the body — otherwise nil and `errorDescription` falls back to a generic
+    /// status-code string. The raw body stays attached for diagnostic logging.
+    case httpError(statusCode: Int, message: String?, data: Data)
     case decoding(DecodingError)
     case network(URLError)
     case unknown(any Error)
@@ -16,7 +20,8 @@ nonisolated enum APIError: Error, LocalizedError, Equatable {
         switch self {
         case .unauthorized:
             return "Your session has expired. Please sign in again."
-        case .httpError(let code, _):
+        case .httpError(let code, let message, _):
+            if let message, !message.isEmpty { return message }
             return "Server error (HTTP \(code))."
         case .decoding:
             return "Unexpected response from the server."
@@ -35,9 +40,28 @@ nonisolated enum APIError: Error, LocalizedError, Equatable {
     static func == (lhs: APIError, rhs: APIError) -> Bool {
         switch (lhs, rhs) {
         case (.unauthorized, .unauthorized): return true
-        case (.httpError(let a, _), .httpError(let b, _)): return a == b
+        case (.httpError(let a, _, _), .httpError(let b, _, _)): return a == b
         case (.missingHandler(let a), .missingHandler(let b)): return a == b
         default: return false
         }
+    }
+
+    // MARK: - Server message decoding
+    /// h3's `createError` serializes 4xx/5xx bodies as JSON with `statusMessage`
+    /// and `message` fields. Pull either out (prefer `statusMessage`) so the UI
+    /// can show "Session already completed" instead of "Server error (HTTP 409)".
+    /// Returns nil on any decode failure or non-string fields — the caller falls
+    /// back to the generic code-only message.
+    static func decodeServerMessage(from data: Data) -> String? {
+        guard !data.isEmpty else { return nil }
+        let envelope = try? JSONDecoder().decode(ServerErrorEnvelope.self, from: data)
+        let raw = envelope?.statusMessage ?? envelope?.message
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (trimmed?.isEmpty == false) ? trimmed : nil
+    }
+
+    private struct ServerErrorEnvelope: Decodable {
+        let statusMessage: String?
+        let message: String?
     }
 }

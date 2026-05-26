@@ -178,7 +178,11 @@ final class ProgramDayEditViewModel {
     // MARK: - Finalize / discard
 
     /// Sends completedAt as a noon-local date so the server stores a date that
-    /// reads correctly across reasonable time-zone shifts.
+    /// reads correctly across reasonable time-zone shifts. For sessions still
+    /// in EDITING, this also flips the status to COMPLETED via /complete. For
+    /// sessions already COMPLETED (the user is just editing the date of a past
+    /// workout), it patches /api/workouts/:id directly — calling /complete on
+    /// an already-completed session 409s.
     func completeWithBackdate() async -> Bool {
         guard let session, !isCompleting else { return false }
         isCompleting = true
@@ -186,7 +190,11 @@ final class ProgramDayEditViewModel {
         defer { isCompleting = false }
         let backdated = noonLocal(workoutDate)
         do {
-            _ = try await repository.completeWorkout(id: session.id, completedAt: backdated)
+            if session.status == .completed {
+                _ = try await repository.updateWorkoutDate(id: session.id, completedAt: backdated)
+            } else {
+                _ = try await repository.completeWorkout(id: session.id, completedAt: backdated)
+            }
             onChange()
             return true
         } catch {

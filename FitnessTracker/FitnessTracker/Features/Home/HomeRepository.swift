@@ -92,7 +92,7 @@ final class HomeRepository {
     // MARK: - Helpers
     private static func isNotFound(_ error: any Error) -> Bool {
         guard let apiError = error as? APIError else { return false }
-        if case .httpError(let statusCode, _) = apiError, statusCode == 404 {
+        if case .httpError(let statusCode, _, _) = apiError, statusCode == 404 {
             return true
         }
         return false

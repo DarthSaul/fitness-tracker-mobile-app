@@ -44,6 +44,10 @@ enum APIEndpoint {
     case getWorkout(id: String)
     case abandonWorkout(id: String)
     case updateWorkoutNotes(id: String, body: UpdateWorkoutNotesBody)
+    /// PATCH /api/workouts/:id with just `{ completedAt }`. Used to edit the
+    /// date of an already-completed session — the `/complete` endpoint 409s on
+    /// re-completion, so date-only edits route here instead.
+    case updateWorkoutDate(id: String, body: UpdateWorkoutDateBody)
     case completeWorkout(id: String, body: CompleteWorkoutBody?)
     case recordSet(workoutId: String, body: RecordSetBody)
     case updateSet(workoutId: String, setId: String, body: UpdateSetBody)
@@ -112,6 +116,7 @@ extension APIEndpoint {
         case .getWorkout(let id): return "/api/workouts/\(id)"
         case .abandonWorkout(let id): return "/api/workouts/\(id)"
         case .updateWorkoutNotes(let id, _): return "/api/workouts/\(id)"
+        case .updateWorkoutDate(let id, _): return "/api/workouts/\(id)"
         case .completeWorkout(let id, _): return "/api/workouts/\(id)/complete"
         case .recordSet(let id, _): return "/api/workouts/\(id)/sets"
         case .updateSet(let workoutId, let setId, _): return "/api/workouts/\(workoutId)/sets/\(setId)"
@@ -166,7 +171,7 @@ extension APIEndpoint {
             return .post
 
         case .activateProgram, .deactivateProgram,
-             .updateWorkoutNotes, .completeWorkout, .updateSet,
+             .updateWorkoutNotes, .updateWorkoutDate, .completeWorkout, .updateSet,
              .updateFeedback:
             return .patch
 
@@ -189,6 +194,7 @@ extension APIEndpoint {
         case .scheduleWorkout(let b): return b
         case .createWorkout(let b): return b
         case .updateWorkoutNotes(_, let b): return b
+        case .updateWorkoutDate(_, let b): return b
         case .completeWorkout(_, let b): return b
         case .recordSet(_, let b): return b
         case .updateSet(_, _, let b): return b
@@ -319,6 +325,13 @@ nonisolated struct CreateWorkoutBody: Encodable, Sendable {
 
 nonisolated struct UpdateWorkoutNotesBody: Encodable, Sendable {
     let notes: String
+}
+
+/// PATCH /api/workouts/:id with `{ completedAt }`. Sent as-is, no `notes`
+/// field — keeping the body shape narrow means the server's `'notes' in body`
+/// check correctly leaves notes untouched.
+nonisolated struct UpdateWorkoutDateBody: Encodable, Sendable {
+    let completedAt: Date
 }
 
 /// PATCH /api/workouts/[id]/complete. `completedAt: nil` means "now" on the server.

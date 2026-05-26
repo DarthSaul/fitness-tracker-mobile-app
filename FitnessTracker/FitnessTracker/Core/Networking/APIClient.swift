@@ -156,7 +156,8 @@ final class APIClient: APIClientProtocol {
             // PII, or other sensitive material. Status code and path stay public
             // so the log line is still useful in production.
             Logger.networking.error("HTTP \(http.statusCode) on \(endpoint.path): \(body, privacy: .private)")
-            throw .httpError(statusCode: http.statusCode, data: data)
+            let message = APIError.decodeServerMessage(from: data)
+            throw .httpError(statusCode: http.statusCode, message: message, data: data)
         }
 
         return .data(data)

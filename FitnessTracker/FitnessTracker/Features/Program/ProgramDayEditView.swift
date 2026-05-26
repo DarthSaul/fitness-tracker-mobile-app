@@ -47,7 +47,7 @@ struct ProgramDayEditView: View {
                 isPresented: $showSaveConfirmation,
                 titleVisibility: .visible,
                 actions: { saveDialogActions },
-                message: { Text("This marks the workout complete on \(formattedWorkoutDate).") }
+                message: { Text(saveDialogMessage) }
             )
     }
 
@@ -221,6 +221,13 @@ struct ProgramDayEditView: View {
         let f = DateFormatter()
         f.dateStyle = .medium
         return f.string(from: viewModel.workoutDate)
+    }
+
+    private var saveDialogMessage: String {
+        if viewModel.session?.status == .completed {
+            return "This updates the workout date to \(formattedWorkoutDate)."
+        }
+        return "This marks the workout complete on \(formattedWorkoutDate)."
     }
 
     fileprivate struct SetEditTarget: Identifiable {

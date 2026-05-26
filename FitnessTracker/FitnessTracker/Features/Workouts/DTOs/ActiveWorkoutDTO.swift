@@ -38,8 +38,15 @@ nonisolated struct CompleteWorkoutResponseDTO: Codable, Sendable, Equatable {
     let programCompleted: Bool
 }
 
-/// PATCH /api/workouts/[id] (notes update) returns `{ id, notes }`.
-nonisolated struct UpdateWorkoutNotesResponseDTO: Codable, Sendable, Equatable {
+/// PATCH /api/workouts/[id] returns `{ id, notes, completedAt }` regardless of
+/// which field(s) were updated. Callers pick the field they care about.
+nonisolated struct UpdateWorkoutResponseDTO: Codable, Sendable, Equatable {
     let id: String
     let notes: String?
+    let completedAt: Date?
 }
+
+/// Back-compat alias for the notes-update call site. Same wire shape as
+/// UpdateWorkoutResponseDTO; kept so existing tests reading `.notes` continue
+/// to work without churn.
+typealias UpdateWorkoutNotesResponseDTO = UpdateWorkoutResponseDTO
