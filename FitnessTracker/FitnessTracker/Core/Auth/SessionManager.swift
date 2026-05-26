@@ -118,6 +118,15 @@ final class SessionManager {
         await loadProfile()
     }
 
+    #if DEBUG
+    /// Test/preview only: directly install an authState without going through
+    /// `bootstrap()` / `didSignIn()`. Production callers must use those entry
+    /// points so the keychain, token store, and Sentry identity stay in sync.
+    func _setAuthStateForTesting(_ state: AuthState) {
+        self.authState = state
+    }
+    #endif
+
     // MARK: - Helpers
     // Decodes userId from the JWT access token's payload without validating the signature.
     // Validation happens server-side; we only need the subject claim locally.

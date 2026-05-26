@@ -69,14 +69,14 @@ struct HomeViewModelTests {
                 response: ScheduledWorkoutsResponseDTO(scheduledWorkouts: scheduled)
             )
         } else {
-            client.handlers["/api/user-programs/active"] = { _ in
+            client.handlers["GET /api/user-programs/active"] = { _ in
                 throw APIError.httpError(statusCode: 404, message: nil, data: Data())
             }
         }
         if let activeWorkout {
             client.stub(.getActiveWorkout, response: activeWorkout)
         } else {
-            client.handlers["/api/workouts/active"] = { _ in
+            client.handlers["GET /api/workouts/active"] = { _ in
                 throw APIError.httpError(statusCode: 404, message: nil, data: Data())
             }
         }

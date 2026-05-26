@@ -3,9 +3,12 @@ import Foundation
 
 // MARK: - Mock
 final class MockAPIClient: APIClientProtocol {
-    // One handler per endpoint path. Hit an unstubbed endpoint and resolve()
-    // throws APIError.missingHandler — silent empty-Data success masks
-    // missing test setup.
+    /// Handlers keyed by `"METHOD path"` (e.g. `"GET /api/feedback"`) so the
+    /// same wire path can dispatch independently across HTTP methods —
+    /// `getFeedback` (GET) and `createFeedback` (POST) both hit `/api/feedback`
+    /// but need distinct stubs. Hit an unstubbed key and resolve() throws
+    /// `APIError.missingHandler` — silent empty-Data success would mask
+    /// missing test setup.
     var handlers: [String: (APIEndpoint) throws -> Data] = [:]
 
     func send<T: Decodable>(_ endpoint: APIEndpoint) async throws(APIError) -> T {
@@ -25,7 +28,7 @@ final class MockAPIClient: APIClientProtocol {
 
     /// Records the most recent multipart call so tests can assert the parts
     /// that were sent (e.g. that an attached screenshot reached the wire).
-    /// Resolves through the same path-based handler map as `send`.
+    /// Resolves through the same key-based handler map as `send`.
     var lastMultipartParts: [MultipartPart]?
     func sendMultipart<T: Decodable>(_ endpoint: APIEndpoint, parts: [MultipartPart]) async throws(APIError) -> T {
         lastMultipartParts = parts
@@ -39,10 +42,22 @@ final class MockAPIClient: APIClientProtocol {
         }
     }
 
+    // MARK: - Key helpers
+    /// Build the handler key for an endpoint case. Used by both the typed
+    /// `stub(...)` convenience and tests that index `handlers` directly.
+    static func key(for endpoint: APIEndpoint) -> String {
+        key(method: endpoint.method, path: endpoint.path)
+    }
+
+    static func key(method: HTTPMethod, path: String) -> String {
+        "\(method.rawValue) \(path)"
+    }
+
     // MARK: - Helpers
     private func resolve(_ endpoint: APIEndpoint) throws(APIError) -> Data {
-        guard let handler = handlers[endpoint.path] else {
-            throw APIError.missingHandler(path: endpoint.path)
+        let key = Self.key(for: endpoint)
+        guard let handler = handlers[key] else {
+            throw APIError.missingHandler(path: key)
         }
         do {
             return try handler(endpoint)
@@ -55,16 +70,20 @@ final class MockAPIClient: APIClientProtocol {
 
     // MARK: - Convenience Setters
     func stub<T: Encodable>(_ endpoint: APIEndpoint, response: T) {
-        handlers[endpoint.path] = { _ in try JSONCoding.encoder.encode(response) }
+        handlers[Self.key(for: endpoint)] = { _ in try JSONCoding.encoder.encode(response) }
     }
 
-    func stubUnauthorized(for path: String) {
-        handlers[path] = { _ in throw APIError.unauthorized }
-    }
-
-    /// Convenience overload so tests can stub by case rather than by string
-    /// path — fewer typos, and stays in sync with `APIEndpoint.path` automatically.
+    /// Stub a 401 for an endpoint by case — fewer typos, stays in sync with
+    /// `APIEndpoint.path`/`method` automatically.
     func stubUnauthorized(for endpoint: APIEndpoint) {
-        stubUnauthorized(for: endpoint.path)
+        handlers[Self.key(for: endpoint)] = { _ in throw APIError.unauthorized }
+    }
+
+    /// Stub a 401 by method + path for cases where building the full endpoint
+    /// case would require synthetic body fixtures (e.g. PATCH cases that carry
+    /// a body in the associated value). Prefer `stubUnauthorized(for:)` when
+    /// the endpoint case is easy to construct.
+    func stubUnauthorized(method: HTTPMethod, path: String) {
+        handlers[Self.key(method: method, path: path)] = { _ in throw APIError.unauthorized }
     }
 }

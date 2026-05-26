@@ -91,7 +91,7 @@ struct LiveWorkoutViewModelTests {
     @Test("load with no active session leaves session/day nil and no error")
     func loadNoActive() async {
         let client = MockAPIClient()
-        client.handlers["/api/workouts/active"] = { _ in
+        client.handlers["GET /api/workouts/active"] = { _ in
             throw APIError.httpError(statusCode: 404, message: nil, data: Data())
         }
 
@@ -181,7 +181,7 @@ struct LiveWorkoutViewModelTests {
         let client = MockAPIClient()
         client.stub(.getActiveWorkout, response: makeActiveResponse())
         // Path-keyed stub so we don't have to construct an exact body match.
-        client.handlers["/api/workouts/ws1/complete"] = { _ in
+        client.handlers["PATCH /api/workouts/ws1/complete"] = { _ in
             try JSONCoding.encoder.encode(CompleteWorkoutResponseDTO(
                 session: WorkoutSessionDTO(
                     id: "ws1", userId: "u1", userProgramId: "up1",

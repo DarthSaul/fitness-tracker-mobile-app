@@ -40,7 +40,7 @@ struct HistoryRepositoryTests {
         let client = MockAPIClient()
         let cursor = Date(timeIntervalSince1970: 1_700_500_000)
         var seenEndpoint: APIEndpoint?
-        client.handlers["/api/workouts/history"] = { endpoint in
+        client.handlers["GET /api/workouts/history"] = { endpoint in
             seenEndpoint = endpoint
             return try JSONCoding.encoder.encode(WorkoutHistoryResponseDTO(sessions: []))
         }

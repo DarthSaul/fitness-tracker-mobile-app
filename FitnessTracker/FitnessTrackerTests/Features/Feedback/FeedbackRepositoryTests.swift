@@ -64,7 +64,7 @@ struct FeedbackRepositoryTests {
         let client = MockAPIClient()
         // PATCH endpoint returns the bare Prisma row; the repo discards it,
         // so any successful Data response works as long as the path matches.
-        client.handlers["/api/feedback/f1"] = { _ in Data("{}".utf8) }
+        client.handlers["PATCH /api/feedback/f1"] = { _ in Data("{}".utf8) }
         let repo = FeedbackRepository(apiClient: client)
 
         try await repo.setAddressed(id: "f1", addressed: true)

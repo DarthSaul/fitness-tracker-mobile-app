@@ -214,7 +214,7 @@ struct ProgramDayEditViewModelTests {
             response: StartWorkoutResponseDTO(session: session, day: makeProgramDay())
         )
         // The test stub is path-based, so any completedAt value will match.
-        client.handlers["/api/workouts/ws1/complete"] = { _ in
+        client.handlers["PATCH /api/workouts/ws1/complete"] = { _ in
             try JSONCoding.encoder.encode(CompleteWorkoutResponseDTO(
                 session: WorkoutSessionDTO(
                     id: "ws1", userId: "u1", userProgramId: "up1",
