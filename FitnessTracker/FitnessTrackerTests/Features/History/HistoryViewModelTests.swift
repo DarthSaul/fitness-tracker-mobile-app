@@ -80,9 +80,11 @@ struct HistoryViewModelTests {
 
         // Capture the cursor passed on the next fetch.
         var capturedBefore: Date?
+        var capturedBeforeId: String?
         client.handlers["/api/workouts/history"] = { endpoint in
-            if case .getWorkoutHistory(_, let before, _) = endpoint {
+            if case .getWorkoutHistory(_, let before, let beforeId) = endpoint {
                 capturedBefore = before
+                capturedBeforeId = beforeId
             }
             return try JSONCoding.encoder.encode(WorkoutHistoryResponseDTO(sessions: secondPage))
         }
@@ -90,6 +92,7 @@ struct HistoryViewModelTests {
         await vm.loadMore()
 
         #expect(capturedBefore == Date(timeIntervalSince1970: 100))
+        #expect(capturedBeforeId == "b")
         #expect(vm.sessions.map(\.id) == ["a", "b", "c"])
         #expect(vm.reachedEnd == true) // 1 < pageSize 2
     }
