@@ -160,7 +160,7 @@ struct WorkoutRepositoryTests {
     @Test("getActiveWorkout returns nil on 404")
     func getActiveWorkoutNotFound() async throws {
         let client = MockAPIClient()
-        client.handlers["/api/workouts/active"] = { _ in
+        client.handlers["GET /api/workouts/active"] = { _ in
             throw APIError.httpError(statusCode: 404, message: nil, data: Data())
         }
         let repo = WorkoutRepository(apiClient: client)

@@ -60,7 +60,7 @@ struct ProgramRepositoryTests {
     @Test("fetchPrograms propagates .unauthorized from API client")
     func fetchProgramsUnauthorized() async throws {
         let client = MockAPIClient()
-        client.stubUnauthorized(for: "/api/programs")
+        client.stubUnauthorized(method: .get, path: "/api/programs")
         let (repo, _) = try makeRepository(apiClient: client)
 
         await #expect(throws: APIError.unauthorized) {

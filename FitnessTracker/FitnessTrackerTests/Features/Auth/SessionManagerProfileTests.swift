@@ -5,10 +5,15 @@ import Testing
 @Suite("SessionManager profile")
 @MainActor
 struct SessionManagerProfileTests {
-    private func makeManager() -> (SessionManager, MockAPIClient) {
+    private func makeManager(authenticatedAs userId: String? = "user-001") -> (SessionManager, MockAPIClient) {
         let manager = SessionManager(keychain: KeychainService(), tokenStore: TokenStore())
         let client = MockAPIClient()
         manager.apiClient = client
+        // loadProfile() guards on .authenticated — install it directly here so
+        // tests don't have to fake a JWT + Keychain write to flip the state.
+        if let userId {
+            manager._setAuthStateForTesting(.authenticated(userId: userId))
+        }
         return (manager, client)
     }
 
@@ -30,7 +35,7 @@ struct SessionManagerProfileTests {
     @Test("loadProfile swallows errors and leaves userProfile nil")
     func loadProfileSwallowsErrors() async throws {
         let (manager, client) = makeManager()
-        client.handlers["/api/auth/me"] = { _ in
+        client.handlers["GET /api/auth/me"] = { _ in
             throw APIError.httpError(statusCode: 500, message: nil, data: Data())
         }
 

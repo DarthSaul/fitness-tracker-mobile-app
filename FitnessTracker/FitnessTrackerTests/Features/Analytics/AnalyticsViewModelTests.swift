@@ -43,7 +43,7 @@ struct AnalyticsViewModelTests {
         let client = MockAPIClient()
         if let dashboard {
             // Stub by exact path so any tzOffset value resolves to the same handler.
-            client.handlers["/api/analytics/dashboard"] = { _ in
+            client.handlers["GET /api/analytics/dashboard"] = { _ in
                 try JSONCoding.encoder.encode(dashboard)
             }
         }
@@ -75,7 +75,7 @@ struct AnalyticsViewModelTests {
     func loadDashboardError() async {
         let exercises = makeExercises()
         let client = MockAPIClient()
-        client.stubUnauthorized(for: "/api/analytics/dashboard")
+        client.stubUnauthorized(method: .get, path: "/api/analytics/dashboard")
         client.stub(.getAnalyticsExercises, response: exercises)
         let vm = AnalyticsViewModel(repository: AnalyticsRepository(apiClient: client))
 
@@ -126,7 +126,7 @@ struct AnalyticsViewModelTests {
         let client = MockAPIClient()
         // Slow first request so we can sneak a second selection in before it
         // resolves. The second handler returns immediately.
-        client.handlers["/api/analytics/exercises/e1"] = { _ in
+        client.handlers["GET /api/analytics/exercises/e1"] = { _ in
             // In tests we can't easily await, so simulate slowness by failing —
             // either way, the revision check should drop the result.
             throw APIError.unauthorized

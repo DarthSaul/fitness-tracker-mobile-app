@@ -81,7 +81,7 @@ struct HistoryViewModelTests {
         // Capture the cursor passed on the next fetch.
         var capturedBefore: Date?
         var capturedBeforeId: String?
-        client.handlers["/api/workouts/history"] = { endpoint in
+        client.handlers["GET /api/workouts/history"] = { endpoint in
             if case .getWorkoutHistory(_, let before, let beforeId) = endpoint {
                 capturedBefore = before
                 capturedBeforeId = beforeId
@@ -111,7 +111,7 @@ struct HistoryViewModelTests {
 
         // Replace the handler with one that explodes if called — guard ensures
         // loadMore actually short-circuits.
-        client.handlers["/api/workouts/history"] = { _ in
+        client.handlers["GET /api/workouts/history"] = { _ in
             Issue.record("loadMore should not call the API after reachedEnd")
             throw APIError.missingHandler(path: "/api/workouts/history")
         }

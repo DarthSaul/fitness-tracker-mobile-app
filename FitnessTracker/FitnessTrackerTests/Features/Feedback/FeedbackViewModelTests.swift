@@ -122,7 +122,7 @@ struct FeedbackViewModelTests {
         let item = makeFeedback(id: "f1", addressed: false)
         let client = MockAPIClient()
         client.stub(.getFeedback, response: [item])
-        client.handlers["/api/feedback/f1"] = { _ in Data("{}".utf8) }
+        client.handlers["PATCH /api/feedback/f1"] = { _ in Data("{}".utf8) }
         let vm = FeedbackViewModel(repository: FeedbackRepository(apiClient: client))
         await vm.load()
 
@@ -135,7 +135,7 @@ struct FeedbackViewModelTests {
         let item = makeFeedback(id: "f1", addressed: false)
         let client = MockAPIClient()
         client.stub(.getFeedback, response: [item])
-        client.stubUnauthorized(for: "/api/feedback/f1")
+        client.stubUnauthorized(method: .patch, path: "/api/feedback/f1")
         let vm = FeedbackViewModel(repository: FeedbackRepository(apiClient: client))
         await vm.load()
 

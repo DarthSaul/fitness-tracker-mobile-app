@@ -65,7 +65,7 @@ struct ProgramFlowViewModelTests {
         if let active {
             client.stub(.getActiveUserProgram, response: active)
         } else {
-            client.handlers["/api/user-programs/active"] = { _ in throw APIError.httpError(statusCode: 404, message: nil, data: Data()) }
+            client.handlers["GET /api/user-programs/active"] = { _ in throw APIError.httpError(statusCode: 404, message: nil, data: Data()) }
         }
         client.stub(.getActiveProgramSessions, response: ActiveProgramSessionsResponseDTO(sessions: sessions))
 
