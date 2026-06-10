@@ -39,10 +39,10 @@ The server is at `/Users/saulgraves/code/fitness-tracker` (Nuxt 4 + h3 + Prisma 
 ## Verification workflow
 
 - **Compile check**: run `xcodebuild build` or `xcodebuild build-for-testing` yourself.
-- **Test suite**: run `xcodebuild test` yourself (scheme `FitnessTracker`, an iOS Simulator destination) and report results. The previous `ipc/mig server died` conflict with my running sim is resolved.
+- **Test suite**: do **not** run `xcodebuild test` yourself — the simulator devices it spins up are too disruptive right now. Tell me to run the tests myself (⌘U in Xcode, scheme `FitnessTracker`) and report back. When a change warrants it, remind me to run the suite.
 - **Smoke test**: tell me to run ⌘⇧K then ⌘R in Xcode — I want to keep driving smoke tests myself.
 
-Keep recommending smoke tests in your verification steps.
+Keep recommending tests and smoke tests in your verification steps.
 
 ## Local dev server
 

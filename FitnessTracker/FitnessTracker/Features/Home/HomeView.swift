@@ -34,10 +34,21 @@ struct HomeView: View {
                 Group {
                     if viewModel.isViewingToday {
                         HomeTodayCard(viewModel: viewModel)
-                    } else {
+                    } else if let completed = viewModel.completedSessionForSelectedDate {
+                        // Past date with a completed workout → show a preview.
+                        HomeCompletedCard(
+                            viewModel: viewModel,
+                            session: completed,
+                            workoutRepository: workoutRepository
+                        )
+                    } else if viewModel.isSelectedDateInFuture {
+                        // Future date → scheduling lives here.
                         HomeScheduledCard(viewModel: viewModel) {
                             scheduleSheetPresented = true
                         }
+                    } else {
+                        // Past date with nothing completed → neutral placeholder.
+                        HomeNoWorkoutCard()
                     }
                 }
                 .padding(.horizontal)

@@ -86,6 +86,22 @@ final class HomeViewModel {
         calendar.isDate(selectedDate, inSameDayAs: .now)
     }
 
+    /// True when the selected date is strictly after today (drives whether the
+    /// "Schedule a workout" CTA is offered — scheduling is future-only).
+    var isSelectedDateInFuture: Bool {
+        calendar.startOfDay(for: selectedDate) > calendar.startOfDay(for: .now)
+    }
+
+    /// Completed session (if any) for the selected date, used to show a workout
+    /// preview when the user taps a past date. Drawn from the active program's
+    /// sessions (unbounded), not the 5-item recent-history preview.
+    var completedSessionForSelectedDate: ActiveProgramSessionDTO? {
+        sessions.first {
+            $0.status == .completed
+                && ($0.completedAt.map { calendar.isDate($0, inSameDayAs: selectedDate) } ?? false)
+        }
+    }
+
     /// Schedule (if any) for the selected non-today date.
     var scheduledForSelectedDate: ScheduledWorkoutDTO? {
         scheduledWorkouts.first { calendar.isDate($0.scheduledDate, inSameDayAs: selectedDate) }

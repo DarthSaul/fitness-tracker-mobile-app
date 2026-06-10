@@ -50,6 +50,10 @@ struct FeedbackView: View {
             .font(.body)
 
             attachmentRow
+                // Drop the Form's auto separator below the picker so there's no
+                // stray divider between "Attach screenshot" and Submit; the
+                // row's natural padding keeps the spacing.
+                .listRowSeparator(.hidden, edges: .bottom)
 
             Button {
                 Task { await viewModel.submit() }
@@ -280,6 +284,10 @@ private struct FeedbackRow: View {
             .accessibilityLabel(item.addressed ? "Mark unaddressed" : "Mark addressed")
         }
         .padding(.vertical, 4)
+        // Pin the row-separator leading edge to 0 so the divider spans the full
+        // width on every row — otherwise rows with a screenshot Link get an
+        // inset (half-width) separator while plain rows don't.
+        .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
     }
 
     /// Mirrors the Vue page's "first name; default to You" rule.
