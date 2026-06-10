@@ -1,0 +1,113 @@
+# Fastfile — release automation for FitnessTracker iOS.
+#
+# Run with: `bundle exec fastlane beta`
+#
+# Authentication: App Store Connect API key (JWT-based). The .p8 private key
+# lives outside this repo; its path and the matching Key ID / Issuer ID are
+# pulled from environment variables, populated by `fastlane/.env` (gitignored).
+# See `fastlane/.env.example` for the variable names.
+
+# Target the oldest supported Fastlane for this Fastfile. Bump when adopting
+# newer actions.
+fastlane_version "2.225.0"
+
+# Default platform for all lanes below (lets us call lanes without `ios `).
+default_platform(:ios)
+
+# Project paths — kept here so lanes don't repeat magic strings.
+XCODEPROJ = "FitnessTracker/FitnessTracker.xcodeproj"
+SCHEME    = "FitnessTracker"
+
+platform :ios do
+
+  # ---------------------------------------------------------------------------
+  # beta — build the Release configuration and ship it to TestFlight.
+  #
+  # Flow:
+  #   1. Authenticate with App Store Connect via API key
+  #   2. Ask TestFlight what the latest build number is, bump by 1
+  #   3. Write the new build number into the Xcode project
+  #   4. Archive the app (Release config, app-store export)
+  #   5. Upload the .ipa to TestFlight
+  #   6. Commit the build-number bump locally (no push — review and push manually)
+  # ---------------------------------------------------------------------------
+  desc "Build and upload a new beta build to TestFlight"
+  lane :beta do
+
+    # 1. App Store Connect API key authentication.
+    #
+    # Loads the .p8 private key and configures Fastlane's API-key-aware actions
+    # (latest_testflight_build_number, upload_to_testflight, etc.) to use it
+    # automatically. Far more reliable than Apple-ID/password + 2FA.
+    #
+    # The values come from `fastlane/.env` (which Fastlane loads natively).
+    app_store_connect_api_key(
+      key_id:      ENV.fetch("ASC_KEY_ID"),
+      issuer_id:   ENV.fetch("ASC_ISSUER_ID"),
+      key_filepath: File.expand_path(ENV.fetch("ASC_KEY_FILEPATH")),
+      duration:    1200,            # JWT lifetime in seconds (max 1200)
+      in_house:    false,           # false = App Store / TestFlight; true = enterprise
+    )
+
+    # 2. Determine the next build number.
+    #
+    # Asks TestFlight for the highest build number it has seen for this app
+    # (across all train/version groups). `initial_build_number: 0` handles the
+    # first-ever upload, where TestFlight has nothing on record.
+    latest_build = latest_testflight_build_number(
+      app_identifier: "me.fitness-app.tracker",
+      initial_build_number: 0,
+    )
+    next_build = latest_build + 1
+    UI.message("TestFlight latest build: #{latest_build} → bumping to #{next_build}")
+
+    # 3. Write the new CURRENT_PROJECT_VERSION into the project.
+    #
+    # Uses agvtool under the hood, which requires VERSIONING_SYSTEM = apple-generic
+    # in the target's build settings (already configured in project.pbxproj).
+    increment_build_number(
+      build_number: next_build,
+      xcodeproj:    XCODEPROJ,
+    )
+
+    # 4. Archive + export the app for App Store / TestFlight distribution.
+    #
+    # `build_app` is the modern alias for `gym`. With Automatic code signing,
+    # Xcode picks the matching App Store distribution profile from the
+    # developer portal at archive time.
+    build_app(
+      project:        XCODEPROJ,
+      scheme:         SCHEME,
+      configuration:  "Release",
+      export_method:  "app-store",
+      output_directory: "./build",      # .ipa + dSYMs land here (gitignored)
+      clean:          true,             # clean DerivedData for this build
+      include_bitcode: false,           # bitcode is deprecated in Xcode 14+
+      include_symbols: true,            # ship dSYMs so crash reports symbolicate
+    )
+
+    # 5. Upload to TestFlight.
+    #
+    # `skip_waiting_for_build_processing: true` returns as soon as the upload
+    # finishes; Apple's processing happens server-side and can take 5–30 min.
+    # Set to false if you want this lane to block until the build is testable.
+    upload_to_testflight(
+      app_identifier: "me.fitness-app.tracker",
+      skip_waiting_for_build_processing: true,
+      skip_submission: true,            # don't auto-submit for external review
+    )
+
+    # 6. Commit the build-number bump locally.
+    #
+    # Only touches project.pbxproj / Info.plist build-number changes — won't
+    # sweep up unrelated working-tree edits. We deliberately do NOT push;
+    # review with `git show HEAD` and push manually when ready.
+    commit_version_bump(
+      xcodeproj: XCODEPROJ,
+      message:   "Bump build to #{next_build} for TestFlight",
+    )
+
+    UI.success("✓ Build #{next_build} uploaded to TestFlight and committed locally. Push when ready.")
+  end
+
+end

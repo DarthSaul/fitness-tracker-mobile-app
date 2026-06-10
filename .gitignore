@@ -64,5 +64,18 @@ fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
 
+# Fastlane secrets & build artifacts
+# - .env: any dotenv file (root or under fastlane/) — holds API key IDs
+# - *.p8: App Store Connect API private key (NEVER commit)
+# - build/: gym/build_app archive + .ipa output
+.env
+fastlane/.env
+*.p8
+build/
+fastlane/builds/
+
+# Bundler (vendored gems, when `bundle config set --local path 'vendor/bundle'`)
+vendor/bundle/
+
 # Sentry CLI auth — contains an org auth token, never check in
 .sentryclirc
