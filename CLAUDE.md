@@ -2,7 +2,7 @@
 
 A SwiftUI iOS client for the Fitness Tracker fitness program platform. Talks to a Nuxt 4 / Postgres backend at `/Users/saulgraves/code/fitness-tracker` (separate repo) over HTTP.
 
-- **Bundle ID:** `me.fitness-app.fitness` (dev-only — see Backlog before TestFlight)
+- **Bundle ID:** `me.fitness-app.tracker`
 - **Minimum Deployment Target:** iOS 17.6
 - **Swift Version:** 5.0
 - **Xcode Project:** `FitnessTracker/FitnessTracker.xcodeproj`
@@ -52,6 +52,35 @@ Keep recommending test runs and smoke tests in your verification steps — just 
 
 Run the server from `/Users/saulgraves/code/fitness-tracker` with `pnpm dev` — it listens on `localhost:3000`, which `Debug.xcconfig` points at.
 
+## Fastlane (TestFlight releases)
+
+One command builds and ships a beta:
+
+```sh
+bundle exec fastlane beta
+```
+
+The lane authenticates with App Store Connect via API key (JWT), pulls the latest TestFlight build number, bumps `CURRENT_PROJECT_VERSION`, archives the `FitnessTracker` scheme (Release), uploads the `.ipa` to TestFlight, then commits the version bump **locally** (no auto-push — review with `git show HEAD` and push manually).
+
+**One-time setup:**
+1. Generate an App Store Connect API key (App Manager role) at https://appstoreconnect.apple.com/access/integrations/api — download the `.p8` immediately, it's only offered once.
+2. Store it outside the repo: `mkdir -p ~/.appstoreconnect/private_keys && mv ~/Downloads/AuthKey_*.p8 ~/.appstoreconnect/private_keys/`.
+3. `cp fastlane/.env.example fastlane/.env` and fill in `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_FILEPATH`. The `.env` is gitignored.
+4. `bundle install` (Fastlane is pinned in the root `Gemfile`).
+
+**Files:**
+- `Gemfile` / `Gemfile.lock` — pinned Fastlane version
+- `fastlane/Appfile` — app identifier + Team ID (non-secret)
+- `fastlane/Fastfile` — the `beta` lane, fully commented
+- `fastlane/.env.example` — variable documentation
+- `~/.appstoreconnect/private_keys/AuthKey_*.p8` — the actual key (outside repo)
+
+**Versioning:** `VERSIONING_SYSTEM = apple-generic` is set on the app target so `agvtool` / `increment_build_number` work — don't remove it.
+
+**Bundler path:** `.bundle/config` pins `path: vendor/bundle` so Fastlane installs locally (sidesteps system-Ruby sudo). `vendor/bundle/` is gitignored; whether to commit `.bundle/config` itself is up to you (committing makes setup reproducible for a teammate or CI).
+
+**CI later:** GitHub Actions would inject the same three env vars from repo secrets and write the `.p8` to a tempfile before running `bundle exec fastlane beta`. The Fastfile itself wouldn't change.
+
 ## Git command conventions
 
 * Never prefix git commands with `cd`.
@@ -64,8 +93,6 @@ Items deliberately deferred. Roughly ordered by priority within each tier.
 
 ### High
 
-- **Reconcile bundle ID before TestFlight.** Server `.env` `NUXT_APPLE_BUNDLE_ID` is currently set to `me.fitness-app.fitness` to match the iOS scaffold's bundle ID, instead of the canonical `me.fitness-app.tracker` (which matches the repo names and test target IDs). Before TestFlight: pick the canonical ID, register the App ID in Apple Developer with Sign in with Apple capability, generate the provisioning profile, and update both the iOS `PRODUCT_BUNDLE_IDENTIFIER` and the server `.env`. Same value also drives APNs topic.
-- **App icon design.** `AppIcon.appiconset/Contents.json` declares three appearance variants (universal / dark / tinted) with no `filename` fields and no PNG assets. Provide 1024×1024 PNGs (e.g., `AppIcon-1024.png`, `AppIcon-1024-dark.png`, `AppIcon-1024-tinted.png`) and wire filename references so asset-catalog validation passes. Required before TestFlight.
 - **Feedback tab.** Skipped from milestone 2. Web has a full feedback feature: list with addressed/unaddressed filter tabs, submit form with optional screenshot upload (multipart/form-data). iOS port needs `PhotosPicker` for image selection and multipart body construction in `APIClient`.
 
 ### Medium

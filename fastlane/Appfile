@@ -1,0 +1,12 @@
+# Appfile — non-secret identity for this app. Safe to commit.
+# Fastlane reads this automatically; lanes can refer to these values implicitly.
+
+# The app's bundle identifier, as registered in the Apple Developer portal
+# and configured in PRODUCT_BUNDLE_IDENTIFIER in project.pbxproj.
+app_identifier("me.fitness-app.tracker")
+
+# Apple Developer Team ID — matches DEVELOPMENT_TEAM in project.pbxproj.
+team_id("FD6FX7LX2X")
+
+# Note: we do NOT set `apple_id` here because we authenticate via the
+# App Store Connect API key (see Fastfile), not username/password.
