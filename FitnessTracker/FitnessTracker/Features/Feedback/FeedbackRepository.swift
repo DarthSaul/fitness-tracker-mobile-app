@@ -17,8 +17,8 @@ final class FeedbackRepository {
 
     /// Submits a new feedback entry. `screenshot` is the raw image bytes
     /// (JPEG/PNG); pass `nil` for text-only feedback. Server returns the
-    /// stored Prisma row; the caller usually re-fetches the full list to pick
-    /// up the public Supabase URL the GET endpoint adds.
+    /// stored entry in the same shape as the GET list items (including
+    /// `user` and `screenshotUrl`).
     @discardableResult
     func submitFeedback(content: String, screenshot: ScreenshotPayload? = nil) async throws -> FeedbackDTO {
         var parts: [MultipartPart] = [.text(name: "content", value: content)]
