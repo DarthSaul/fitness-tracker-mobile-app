@@ -36,14 +36,16 @@ struct LiveWorkoutViewModelTests {
         programExerciseId: String? = nil,
         adhocExerciseName: String? = nil,
         reps: Int = 5,
-        weight: Double = 100
+        weight: Double = 100,
+        rpe: Double? = nil,
+        completedAt: Date = .now
     ) -> CompletedSetDTO {
         CompletedSetDTO(
             id: id, workoutSessionId: "ws1",
             exerciseSetId: exerciseSetId, programExerciseId: programExerciseId,
             adhocExerciseName: adhocExerciseName,
-            reps: reps, weight: weight, rpe: nil, notes: nil,
-            completedAt: .now
+            reps: reps, weight: weight, rpe: rpe, notes: nil,
+            completedAt: completedAt
         )
     }
 
@@ -62,10 +64,24 @@ struct LiveWorkoutViewModelTests {
         return ActiveWorkoutResponseDTO(session: session, day: makeProgramDay())
     }
 
-    private func makeViewModel(client: MockAPIClient = MockAPIClient()) -> LiveWorkoutViewModel {
+    /// Each VM gets its own UserDefaults suite so the persisted marked-complete
+    /// flags don't leak between tests (or into `.standard`).
+    private func makeIsolatedStore() -> MarkedCompleteStore {
+        let defaults = UserDefaults(suiteName: "test-\(UUID().uuidString)")!
+        return MarkedCompleteStore(defaults: defaults)
+    }
+
+    private func makeViewModel(
+        client: MockAPIClient = MockAPIClient(),
+        store: MarkedCompleteStore? = nil
+    ) -> LiveWorkoutViewModel {
         let repo = WorkoutRepository(apiClient: client)
         let session = SessionManager(keychain: KeychainService(), tokenStore: TokenStore())
-        return LiveWorkoutViewModel(repository: repo, sessionManager: session)
+        return LiveWorkoutViewModel(
+            repository: repo,
+            sessionManager: session,
+            markedCompleteStore: store ?? makeIsolatedStore()
+        )
     }
 
     // MARK: - Load + bucketing
@@ -233,5 +249,89 @@ struct LiveWorkoutViewModelTests {
         #expect(vm.isMarkedComplete(programExerciseId: "pe1") == true)
         vm.toggleMarkedComplete(programExerciseId: "pe1")
         #expect(vm.isMarkedComplete(programExerciseId: "pe1") == false)
+    }
+
+    @Test("marked-complete flag persists across a reload via the store")
+    func markedCompletePersists() async {
+        let store = makeIsolatedStore()
+        let client = MockAPIClient()
+        client.stub(.getActiveWorkout, response: makeActiveResponse())
+
+        // First VM marks pe1 complete, persisting to the shared store.
+        let vm1 = makeViewModel(client: client, store: store)
+        await vm1.load()
+        vm1.toggleMarkedComplete(programExerciseId: "pe1")
+
+        // A fresh VM backed by the same store should reload the flag on load().
+        let vm2 = makeViewModel(client: client, store: store)
+        await vm2.load()
+        #expect(vm2.isMarkedComplete(programExerciseId: "pe1") == true)
+    }
+
+    @Test("completing a workout clears its persisted marked-complete flags")
+    func completeClearsMarkedComplete() async {
+        let store = makeIsolatedStore()
+        let client = MockAPIClient()
+        client.stub(.getActiveWorkout, response: makeActiveResponse())
+        client.handlers["PATCH /api/workouts/ws1/complete"] = { _ in
+            try JSONCoding.encoder.encode(CompleteWorkoutResponseDTO(
+                session: WorkoutSessionDTO(
+                    id: "ws1", userId: "u1", userProgramId: "up1",
+                    weekNumber: 1, dayNumber: 1, status: .completed,
+                    startedAt: .now, completedAt: .now, notes: nil
+                ),
+                userProgram: UserProgramDTO(
+                    id: "up1", userId: "u1", programId: "p1", isActive: true,
+                    currentWeek: 1, currentDay: 2, startedAt: .now
+                ),
+                programCompleted: false
+            ))
+        }
+
+        let vm = makeViewModel(client: client, store: store)
+        await vm.load()
+        vm.toggleMarkedComplete(programExerciseId: "pe1")
+        #expect(store.load(sessionId: "ws1").isEmpty == false)
+
+        _ = await vm.completeWorkout()
+        #expect(store.load(sessionId: "ws1").isEmpty == true)
+    }
+
+    // MARK: - Most recent logged set ("Copy Previous Weight")
+
+    @Test("mostRecentLoggedSet picks the latest by completedAt across template + extra")
+    func mostRecentLoggedSet() async {
+        let client = MockAPIClient()
+        let early = Date(timeIntervalSince1970: 1_000)
+        let late = Date(timeIntervalSince1970: 2_000)
+        // Template set logged earlier; extra set logged later.
+        let template = makeCompletedSet(id: "cs1", exerciseSetId: "es1", reps: 5, weight: 100, completedAt: early)
+        let extra = makeCompletedSet(id: "cs2", programExerciseId: "pe1", reps: 8, weight: 120, completedAt: late)
+        client.stub(.getActiveWorkout, response: makeActiveResponse(completedSets: [template, extra]))
+
+        let vm = makeViewModel(client: client)
+        await vm.load()
+
+        let recent = vm.mostRecentLoggedSet(programExerciseId: "pe1", templateSetIds: ["es1", "es2"])
+        #expect(recent?.id == "cs2")
+        // Weight is what "Copy Previous Weight" pulls from this set.
+        #expect(recent?.weight == 120)
+
+        // Excluding the latest falls back to the next most recent.
+        let prior = vm.mostRecentLoggedSet(
+            programExerciseId: "pe1", templateSetIds: ["es1", "es2"], excludingCompletedSetId: "cs2"
+        )
+        #expect(prior?.id == "cs1")
+    }
+
+    @Test("mostRecentLoggedSet returns nil when nothing is logged for the exercise")
+    func mostRecentLoggedSetEmpty() async {
+        let client = MockAPIClient()
+        client.stub(.getActiveWorkout, response: makeActiveResponse())
+
+        let vm = makeViewModel(client: client)
+        await vm.load()
+
+        #expect(vm.mostRecentLoggedSet(programExerciseId: "pe1", templateSetIds: ["es1", "es2"]) == nil)
     }
 }

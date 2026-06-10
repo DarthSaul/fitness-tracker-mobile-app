@@ -169,6 +169,53 @@ struct HomeViewModelTests {
         #expect(vm.schedule(forWeek: 1, day: 1) == nil)
     }
 
+    @Test("completedSessionForSelectedDate matches a completed session by calendar day")
+    func completedForSelectedDate() async throws {
+        let past = Date(timeIntervalSince1970: 1_700_000_000)
+        let pastSession = ActiveProgramSessionDTO(
+            id: "sp", userId: "u1", userProgramId: "up1",
+            weekNumber: 1, dayNumber: 1, status: .completed,
+            startedAt: past, completedAt: past, notes: nil,
+            count: ActiveProgramSessionDTO.Count(completedSets: 7)
+        )
+        let (vm, _) = makeViewModel(active: makeActiveProgram(), sessions: [pastSession])
+        vm.sessions = [pastSession]
+
+        vm.selectedDate = Calendar.current.startOfDay(for: past)
+        #expect(vm.completedSessionForSelectedDate?.id == "sp")
+        #expect(vm.completedSessionForSelectedDate?.count.completedSets == 7)
+
+        // A different day has no completed session.
+        vm.selectedDate = Calendar.current.startOfDay(for: .now)
+        #expect(vm.completedSessionForSelectedDate == nil)
+    }
+
+    @Test("an in-progress session on the selected date is not treated as completed")
+    func inProgressNotCompleted() async throws {
+        let past = Date(timeIntervalSince1970: 1_700_000_000)
+        let inProgress = ActiveProgramSessionDTO(
+            id: "sip", userId: "u1", userProgramId: "up1",
+            weekNumber: 1, dayNumber: 1, status: .inProgress,
+            startedAt: past, completedAt: nil, notes: nil,
+            count: ActiveProgramSessionDTO.Count(completedSets: 2)
+        )
+        let (vm, _) = makeViewModel(active: makeActiveProgram())
+        vm.sessions = [inProgress]
+        vm.selectedDate = Calendar.current.startOfDay(for: past)
+        #expect(vm.completedSessionForSelectedDate == nil)
+    }
+
+    @Test("isSelectedDateInFuture is true only for dates after today")
+    func futureDetection() async throws {
+        let (vm, _) = makeViewModel(active: makeActiveProgram())
+        vm.selectedDate = Calendar.current.date(byAdding: .day, value: 3, to: .now)!
+        #expect(vm.isSelectedDateInFuture == true)
+        vm.selectedDate = Calendar.current.date(byAdding: .day, value: -3, to: .now)!
+        #expect(vm.isSelectedDateInFuture == false)
+        vm.selectedDate = Calendar.current.startOfDay(for: .now)
+        #expect(vm.isSelectedDateInFuture == false)
+    }
+
     // MARK: - Schedule mutations
 
     @Test("schedule POSTs and refreshes the scheduled list")

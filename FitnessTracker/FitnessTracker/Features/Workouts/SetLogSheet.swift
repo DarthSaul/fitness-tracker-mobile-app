@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Sheet for logging or editing one set: reps, weight, RPE, notes.
+/// Sheet for logging or editing one set: reps and weight.
 /// Designed to be reused across the M6 retroactive flow and the M7 live workout
 /// view — neither owns the persistence logic, that's left to the caller via
 /// `onSave` and `onDelete` closures so each flow can route to the right endpoint.
@@ -11,6 +11,9 @@ struct SetLogSheet: View {
     let templateSet: ExerciseSetDTO
     /// Existing log, if any. When non-nil, the sheet shows a Delete button.
     let existing: CompletedSetDTO?
+    /// Values of the most recent set logged for this exercise, if any. When
+    /// non-nil, a "Copy previous set" button is shown that fills the form.
+    let previousSet: PreviousSetValues?
     /// Returns `true` on successful persistence, `false` on failure. The sheet
     /// only dismisses on `true` so the user can see and recover from errors
     /// the caller already surfaces (e.g. via `viewModel.actionError`).
@@ -20,15 +23,33 @@ struct SetLogSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var repsText: String
     @State private var weightText: String
-    @State private var rpeText: String
     @State private var isSaving = false
     @State private var isDeleting = false
+
+    /// Enabled only when there's an earlier logged set whose weight we can copy.
+    /// False for the first set logged in the group → button shows disabled.
+    private var canCopyPreviousWeight: Bool {
+        previousSet?.weight != nil
+    }
+
+    /// Accent fill when the copy action is available, otherwise a neutral grey
+    /// that reads as "disabled" in both light (light grey) and dark (dark grey).
+    private var copyButtonBackground: Color {
+        canCopyPreviousWeight ? Color.accentColor : Color(uiColor: .systemGray5)
+    }
+
+    /// White label on the accent fill; a single subtle grey (icon == text) on
+    /// the disabled fill, distinct from the grey background in both modes.
+    private var copyButtonForeground: Color {
+        canCopyPreviousWeight ? Color.white : Color(uiColor: .systemGray)
+    }
 
     init(
         exerciseName: String,
         setNumber: Int,
         templateSet: ExerciseSetDTO,
         existing: CompletedSetDTO?,
+        previousSet: PreviousSetValues? = nil,
         onSave: @escaping (_ reps: Int?, _ weight: Double?, _ rpe: Double?, _ notes: String?) async -> Bool,
         onDelete: (() async -> Bool)? = nil
     ) {
@@ -36,15 +57,14 @@ struct SetLogSheet: View {
         self.setNumber = setNumber
         self.templateSet = templateSet
         self.existing = existing
+        self.previousSet = previousSet
         self.onSave = onSave
         self.onDelete = onDelete
 
         let initialReps = existing?.reps ?? templateSet.reps
         let initialWeight = existing?.weight ?? templateSet.weight
-        let initialRPE = existing?.rpe ?? templateSet.rpe
         _repsText = State(initialValue: initialReps.map(String.init) ?? "")
         _weightText = State(initialValue: initialWeight.map { Self.formatDouble($0) } ?? "")
-        _rpeText = State(initialValue: initialRPE.map { Self.formatDouble($0) } ?? "")
     }
 
     var body: some View {
@@ -59,9 +79,60 @@ struct SetLogSheet: View {
                 }
 
                 Section {
-                    LabeledTextField(label: "Reps", placeholder: placeholderInt(templateSet.reps), text: $repsText, keyboard: .numberPad)
-                    LabeledTextField(label: "Weight (lb)", placeholder: placeholderDouble(templateSet.weight), text: $weightText, keyboard: .decimalPad)
-                    LabeledTextField(label: "RPE", placeholder: placeholderDouble(templateSet.rpe), text: $rpeText, keyboard: .decimalPad)
+                    // Fields laid out side-by-side, each label left-aligned above
+                    // its input, so the drawer stays short.
+                    HStack(alignment: .top, spacing: 12) {
+                        LabeledField(label: "Reps") {
+                            // Number on the left, −/+ steppers on the right, all
+                            // inside one boxed container (no per-button chrome).
+                            HStack(spacing: 14) {
+                                TextField(placeholderInt(templateSet.reps), text: $repsText)
+                                    .keyboardType(.numberPad)
+                                Button { adjustReps(by: -1) } label: {
+                                    Image(systemName: "minus")
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.tint)
+                                Button { adjustReps(by: 1) } label: {
+                                    Image(systemName: "plus")
+                                        .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(.tint)
+                            }
+                            .boxedField()
+                        }
+                        LabeledField(label: "Weight (lb)") {
+                            TextField(placeholderDouble(templateSet.weight), text: $weightText)
+                                .keyboardType(.decimalPad)
+                                .boxedField()
+                        }
+                    }
+
+                    // Always shown; unavailable on the first set logged in the
+                    // group. Copies weight only — reps are usually prefilled
+                    // from the template. Colors are set explicitly (rather than
+                    // via the prominent style's automatic states) so the
+                    // disabled look reads clearly in both light and dark mode:
+                    //   enabled  → accent background, white label
+                    //   disabled → grey background, matching subtle-grey label
+                    Button {
+                        if let previousSet { applyPrevious(previousSet) }
+                    } label: {
+                        Label("Copy Previous Weight", systemImage: "doc.on.doc")
+                            .font(.body.weight(.medium))
+                            .foregroundStyle(copyButtonForeground)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .background(copyButtonBackground, in: RoundedRectangle(cornerRadius: 10))
+                            .contentShape(RoundedRectangle(cornerRadius: 10))
+                    }
+                    .buttonStyle(.plain)
+                    // Non-tappable when there's nothing to copy, without the
+                    // opacity dimming `.disabled` would apply over our colors.
+                    .allowsHitTesting(canCopyPreviousWeight)
+                    .padding(.top, 4)
                 }
 
                 if let onDelete, existing != nil {
@@ -88,7 +159,10 @@ struct SetLogSheet: View {
                     }
                 }
             }
-            .navigationTitle(existing == nil ? "Log set" : "Edit set")
+            // Pull the header card up closer to the inline "Log set" title by
+            // trimming the Form's default top inset.
+            .contentMargins(.top, 8, for: .scrollContent)
+            .navigationTitle(existing == nil ? "Log Set" : "Edit Set")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -110,11 +184,26 @@ struct SetLogSheet: View {
         Task {
             // Per-set notes were removed from this sheet — set notes now live
             // at the exercise level (Notes chip) and workout level (Workout
-            // Notes card). Pass nil so the field is left untouched server-side.
-            let ok = await onSave(parseInt(repsText), parseDouble(weightText), parseDouble(rpeText), nil)
+            // Notes card). RPE was dropped from this form too. Pass nil for both
+            // so those fields are left untouched server-side.
+            let ok = await onSave(parseInt(repsText), parseDouble(weightText), nil, nil)
             isSaving = false
             if ok { dismiss() }
         }
+    }
+
+    /// Steps the reps field up or down via the inline −/+ buttons. Bases off the
+    /// current text (falling back to the template default) and clamps at 0.
+    private func adjustReps(by delta: Int) {
+        let base = parseInt(repsText) ?? templateSet.reps ?? 0
+        repsText = String(max(0, base + delta))
+    }
+
+    /// Copies the previous set's weight into the form, leaving reps untouched
+    /// (the template prefill is usually the right rep count). Weight round-trips
+    /// through the locale-aware formatter.
+    private func applyPrevious(_ prev: PreviousSetValues) {
+        weightText = prev.weight.map { Self.formatDouble($0) } ?? ""
     }
 
     // MARK: - Helpers
@@ -154,21 +243,48 @@ struct SetLogSheet: View {
     }
 }
 
-// MARK: - Labeled text field
-private struct LabeledTextField: View {
+// MARK: - Previous-set values
+
+/// Snapshot of a previously logged set, used to prefill the form via the
+/// "Copy Previous Weight" button. Decoupled from `CompletedSetDTO` so the sheet
+/// stays agnostic about where the value came from. Only weight is carried —
+/// reps are intentionally left to the template prefill.
+struct PreviousSetValues: Equatable {
+    let weight: Double?
+}
+
+// MARK: - Boxed text field
+
+private extension View {
+    /// Rounded, filled text-field box that's a little taller than the default
+    /// `.roundedBorder` style — gives the reps / weight inputs more height.
+    func boxedField() -> some View {
+        self
+            .padding(.vertical, 10)
+            .padding(.horizontal, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(uiColor: .tertiarySystemFill))
+            )
+    }
+}
+
+// MARK: - Labeled field
+
+/// One column of the side-by-side input row: a caption label stacked above an
+/// arbitrary field, expanding to share width equally with its siblings. The
+/// label sits at the leading edge above its input.
+private struct LabeledField<Content: View>: View {
     let label: String
-    let placeholder: String
-    @Binding var text: String
-    let keyboard: UIKeyboardType
+    @ViewBuilder var content: Content
 
     var body: some View {
-        HStack {
+        VStack(alignment: .leading, spacing: 4) {
             Text(label)
-            Spacer()
-            TextField(placeholder, text: $text)
-                .multilineTextAlignment(.trailing)
-                .keyboardType(keyboard)
-                .frame(maxWidth: 120)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            content
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

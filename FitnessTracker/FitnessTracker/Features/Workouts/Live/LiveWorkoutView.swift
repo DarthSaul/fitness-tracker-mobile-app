@@ -15,6 +15,9 @@ struct LiveWorkoutView: View {
     @State private var presentedSheet: PresentedSheet?
     @State private var showCompleteConfirmation = false
     @State private var showAbandonConfirmation = false
+    /// Rest stopwatch — owned here (not in the sheet) so it keeps counting
+    /// while the timer drawer is dismissed and reopened.
+    @State private var restStopwatch = RestStopwatch()
     @Environment(\.dismiss) private var dismiss
 
     init(viewModel: LiveWorkoutViewModel) {
@@ -122,6 +125,18 @@ struct LiveWorkoutView: View {
                 Image(systemName: "trash")
             }
             .disabled(viewModel.isAbandoning)
+        }
+        // Rest stopwatch — same icon-button sizing as the trash button. Keep it
+        // in its own glass container on iOS 26 with a fixed spacer.
+        if #available(iOS 26.0, *) {
+            ToolbarSpacer(.fixed, placement: .topBarTrailing)
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                presentedSheet = .restTimer
+            } label: {
+                Image(systemName: "clock")
+            }
         }
     }
 
@@ -311,11 +326,14 @@ struct LiveWorkoutView: View {
     private func sheetContent(for target: PresentedSheet) -> some View {
         switch target {
         case .setLog(let t):
-            // Half-height presentation — the set-log form is small enough that
-            // a medium detent keeps the row above visible while editing.
+            // Sized to show the header, both fields, and the "Copy previous set"
+            // button without scrolling (expandable to large).
             setLogSheet(for: t)
-                .presentationDetents([.medium, .large])
+                .presentationDetents([.fraction(0.52), .large])
                 .presentationDragIndicator(.visible)
+                // Opaque grouped background so the live-workout content behind
+                // the drawer doesn't bleed through (the default is translucent).
+                .presentationBackground(Color(uiColor: .systemGroupedBackground))
         case .swap(let t): swapSheet(for: t)
         case .trend(let t): trendSheet(for: t)
         case .notes(let t): notesSheet(for: t)
@@ -326,6 +344,7 @@ struct LiveWorkoutView: View {
                 .presentationDetents([.fraction(0.35), .large])
                 .presentationDragIndicator(.visible)
         case .adHocSearch: adHocSearchSheet()
+        case .restTimer: RestTimerSheet(stopwatch: restStopwatch)
         }
     }
 
@@ -336,7 +355,7 @@ struct LiveWorkoutView: View {
     private func setLogSheet(for target: SetEditTarget) -> some View {
         let vm = viewModel
         switch target {
-        case .template(let name, _, let templateSet):
+        case .template(let name, let peId, let templateSet):
             let exerciseSetId = templateSet.id
             let existing = vm.completedSet(forExerciseSetId: exerciseSetId)
             let onSave: (Int?, Double?, Double?, String?) async -> Bool = { reps, weight, rpe, notes in
@@ -351,6 +370,7 @@ struct LiveWorkoutView: View {
                 setNumber: templateSet.setNumber,
                 templateSet: templateSet,
                 existing: existing,
+                previousSet: previousSet(forProgramExerciseId: peId, excludingCompletedSetId: existing?.id),
                 onSave: onSave,
                 onDelete: onDelete
             ))
@@ -370,6 +390,7 @@ struct LiveWorkoutView: View {
                 setNumber: nextSetNumber,
                 templateSet: placeholderTemplate,
                 existing: nil,
+                previousSet: previousSet(forProgramExerciseId: peId, excludingCompletedSetId: nil),
                 onSave: onSave,
                 onDelete: nil
             ))
@@ -395,6 +416,22 @@ struct LiveWorkoutView: View {
 
     private func trendSheet(for target: TrendTarget) -> some View {
         ExerciseTrendSheet(exerciseId: target.exerciseId, exerciseName: target.exerciseName)
+    }
+
+    /// Values of the most recent set logged for an exercise, for the Log-set
+    /// sheet's "Copy previous set" button. Returns nil when nothing's been
+    /// logged yet (button hidden). Excludes the set currently being edited.
+    private func previousSet(forProgramExerciseId id: String, excludingCompletedSetId: String?) -> PreviousSetValues? {
+        let templateSetIds = viewModel.day?.exerciseGroups
+            .flatMap(\.exercises)
+            .first(where: { $0.id == id })?
+            .sets.map(\.id) ?? []
+        guard let recent = viewModel.mostRecentLoggedSet(
+            programExerciseId: id,
+            templateSetIds: templateSetIds,
+            excludingCompletedSetId: excludingCompletedSetId
+        ) else { return nil }
+        return PreviousSetValues(weight: recent.weight)
     }
 
     /// True when the specific programExercise has any logged sets — either a
@@ -458,6 +495,7 @@ struct LiveWorkoutView: View {
         case notes(NotesTarget)
         case workoutNotes
         case adHocSearch
+        case restTimer
 
         var id: String {
             switch self {
@@ -467,6 +505,7 @@ struct LiveWorkoutView: View {
             case .notes(let t): return "notes-\(t.id)"
             case .workoutNotes: return "workoutNotes"
             case .adHocSearch: return "adHocSearch"
+            case .restTimer: return "restTimer"
             }
         }
     }

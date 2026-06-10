@@ -24,8 +24,9 @@ final class LiveWorkoutViewModel {
     private(set) var extraSetsByProgramExerciseId: [String: [CompletedSetDTO]] = [:]
     private(set) var adhocSets: [CompletedSetDTO] = []
     private(set) var swapsByProgramExerciseId: [String: WorkoutExerciseSwapDTO] = [:]
-    /// Per-exercise "user pressed Complete" flag. Lives in memory only — the
-    /// data model has no field for it, so marks reset on workout reload.
+    /// Per-exercise "user pressed Complete" flag. The server has no field for
+    /// it, so it's persisted device-locally via `MarkedCompleteStore` (keyed by
+    /// session id) and reloaded in `apply(_:)` — surviving view dismissal.
     private(set) var markedCompleteExerciseIds: Set<String> = []
 
     var isLoading = false
@@ -37,10 +38,17 @@ final class LiveWorkoutViewModel {
     // MARK: - Dependencies
     private let repository: WorkoutRepository
     private let sessionManager: SessionManager
+    /// Persists the per-exercise "marked complete" flags locally (see store doc).
+    private let markedCompleteStore: MarkedCompleteStore
 
-    init(repository: WorkoutRepository, sessionManager: SessionManager) {
+    init(
+        repository: WorkoutRepository,
+        sessionManager: SessionManager,
+        markedCompleteStore: MarkedCompleteStore = MarkedCompleteStore()
+    ) {
         self.repository = repository
         self.sessionManager = sessionManager
+        self.markedCompleteStore = markedCompleteStore
     }
 
     // MARK: - Derived
@@ -62,6 +70,22 @@ final class LiveWorkoutViewModel {
         extraSetsByProgramExerciseId[id] ?? []
     }
 
+    /// Most recently logged set for one exercise — across its template sets and
+    /// any extra sets — picked by `completedAt`. Drives the "Copy previous set"
+    /// button. `excludingCompletedSetId` skips the set currently being edited so
+    /// re-opening an existing log doesn't offer to copy itself.
+    func mostRecentLoggedSet(
+        programExerciseId: String,
+        templateSetIds: [String],
+        excludingCompletedSetId: String? = nil
+    ) -> CompletedSetDTO? {
+        let templateLogged = templateSetIds.compactMap { completedByExerciseSetId[$0] }
+        let extras = extraSets(forProgramExerciseId: programExerciseId)
+        return (templateLogged + extras)
+            .filter { $0.id != excludingCompletedSetId }
+            .max { $0.completedAt < $1.completedAt }
+    }
+
     /// Server pre-applies swaps to `day`, so the displayed exercise is the new one;
     /// this map only tells the UI which slots have a swap badge.
     func isSwapped(programExerciseId: String) -> Bool {
@@ -79,6 +103,10 @@ final class LiveWorkoutViewModel {
             markedCompleteExerciseIds.remove(programExerciseId)
         } else {
             markedCompleteExerciseIds.insert(programExerciseId)
+        }
+        // Persist locally so the checkmark survives leaving/returning the view.
+        if let sessionId = session?.id {
+            markedCompleteStore.save(markedCompleteExerciseIds, sessionId: sessionId)
         }
     }
 
@@ -106,6 +134,7 @@ final class LiveWorkoutViewModel {
     private func apply(_ response: ActiveWorkoutResponseDTO) {
         self.session = response.session
         self.day = response.day
+        self.markedCompleteExerciseIds = markedCompleteStore.load(sessionId: response.session.id)
         rebuildCompletedSetBuckets(from: response.session.completedSets)
         self.swapsByProgramExerciseId = Dictionary(
             response.session.workoutExerciseSwaps.map { ($0.programExerciseId, $0) },
@@ -321,6 +350,7 @@ final class LiveWorkoutViewModel {
         do {
             // completedAt: nil → server uses "now".
             _ = try await repository.completeWorkout(id: session.id, completedAt: nil)
+            markedCompleteStore.clear(sessionId: session.id)
             return true
         } catch let apiError as APIError where apiError == .unauthorized {
             await sessionManager.signOut()
@@ -339,6 +369,7 @@ final class LiveWorkoutViewModel {
         defer { isAbandoning = false }
         do {
             try await repository.abandonWorkout(id: session.id)
+            markedCompleteStore.clear(sessionId: session.id)
             self.session = nil
             self.day = nil
             return true
