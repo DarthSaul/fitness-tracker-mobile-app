@@ -29,6 +29,7 @@ struct LiveWorkoutView: View {
             content
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar { toolbarContent }
+                .safeAreaInset(edge: .bottom) { bottomBar }
                 .task { await viewModel.load() }
                 .sheet(item: $presentedSheet, content: sheetContent(for:))
                 // Centered .alert avoids the popover-anchor weirdness that
@@ -108,16 +109,10 @@ struct LiveWorkoutView: View {
         } else {
             ToolbarItem(placement: .topBarLeading) { leadingTitleContent }
         }
-        // Trailing: Close (text) and Abandon (trash) as two independent
+        // Trailing: Abandon (trash) and Settings (gear) as two independent
         // toolbar items. iOS 26 auto-merges same-placement items into one
         // glass capsule, so insert a fixed ToolbarSpacer between them to keep
-        // each in its own container.
-        ToolbarItem(placement: .topBarTrailing) {
-            Button("Close") { dismiss() }
-        }
-        if #available(iOS 26.0, *) {
-            ToolbarSpacer(.fixed, placement: .topBarTrailing)
-        }
+        // each in its own container. (Close lives in the bottom bar now.)
         ToolbarItem(placement: .topBarTrailing) {
             Button(role: .destructive) {
                 showAbandonConfirmation = true
@@ -126,16 +121,14 @@ struct LiveWorkoutView: View {
             }
             .disabled(viewModel.isAbandoning)
         }
-        // Rest stopwatch — same icon-button sizing as the trash button. Keep it
-        // in its own glass container on iOS 26 with a fixed spacer.
         if #available(iOS 26.0, *) {
             ToolbarSpacer(.fixed, placement: .topBarTrailing)
         }
         ToolbarItem(placement: .topBarTrailing) {
             Button {
-                presentedSheet = .restTimer
+                presentedSheet = .workoutSettings
             } label: {
-                Image(systemName: "clock")
+                Image(systemName: "gearshape")
             }
         }
     }
@@ -159,6 +152,81 @@ struct LiveWorkoutView: View {
             }
         }
         .allowsHitTesting(false)
+    }
+
+    // MARK: - Bottom bar
+
+    /// Custom bottom bar via `.safeAreaInset` (not a UIKit `.bottomBar` toolbar,
+    /// which is unsupported in this fullScreenCover + NavigationStack hosting
+    /// context). The workout content scrolls underneath it, and the `.bar`
+    /// material + glass / circular buttons are chosen to match the system bar —
+    /// and the header — as closely as possible. Starting point — to be iterated on.
+    private var bottomBar: some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                bottomBarStack.buttonStyle(.glass)
+            } else {
+                bottomBarStack
+            }
+        }
+        .padding(.horizontal)
+        // Slightly more top padding nudges the buttons down, away from the top edge.
+        .padding(.top, 8)
+        .padding(.bottom, 4)
+        .frame(maxWidth: .infinity)
+        // Pure color gradient (no blur material): fully opaque at the bottom,
+        // fading to near-transparent at the top so the actual content behind
+        // shows through there. A `.ultraThinMaterial` previously sat under this
+        // gradient, but as a uniform frosted layer it obscured the content
+        // regardless of the gradient's opacity — so it's removed.
+        // Bleeds into the bottom safe area so it fills behind the home indicator.
+        .background {
+            LinearGradient(
+                colors: [
+                    Color(uiColor: .systemBackground),
+                    Color(uiColor: .systemBackground).opacity(0.75)
+                ],
+                startPoint: .bottom,
+                endPoint: .top
+            )
+            .ignoresSafeArea(edges: .bottom)
+        }
+        // Hairline at the top edge, matching the system bar's separator.
+        .overlay(alignment: .top) { Divider() }
+    }
+
+    private var bottomBarStack: some View {
+        // Close on the left, rest timer on the right, pushed to opposite edges.
+        // Circular glass buttons, enlarged via control size + image scale.
+        HStack {
+            bottomCloseButton
+            Spacer()
+            bottomRestTimerButton
+        }
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        // Glyphs sized a touch smaller than `.title`, which also trims the
+        // content-sized glass circles slightly.
+        .imageScale(.large)
+        .font(.title2)
+    }
+
+    private var bottomCloseButton: some View {
+        Button {
+            dismiss()
+        } label: {
+            Image(systemName: "chevron.left")
+        }
+    }
+
+    private var bottomRestTimerButton: some View {
+        Button {
+            presentedSheet = .restTimer
+        } label: {
+            // Same glyph size as the close button so the two glass circles match
+            // (a `.glass` button sizes itself to its icon).
+            Image(systemName: "clock")
+        }
     }
 
     // MARK: - Exercise sections
@@ -345,6 +413,10 @@ struct LiveWorkoutView: View {
                 .presentationDragIndicator(.visible)
         case .adHocSearch: adHocSearchSheet()
         case .restTimer: RestTimerSheet(stopwatch: restStopwatch)
+        case .workoutSettings:
+            ActiveWorkoutSettingsSheet()
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
         }
     }
 
@@ -496,6 +568,7 @@ struct LiveWorkoutView: View {
         case workoutNotes
         case adHocSearch
         case restTimer
+        case workoutSettings
 
         var id: String {
             switch self {
@@ -506,6 +579,7 @@ struct LiveWorkoutView: View {
             case .workoutNotes: return "workoutNotes"
             case .adHocSearch: return "adHocSearch"
             case .restTimer: return "restTimer"
+            case .workoutSettings: return "workoutSettings"
             }
         }
     }

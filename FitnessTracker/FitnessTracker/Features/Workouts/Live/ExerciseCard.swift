@@ -19,6 +19,10 @@ struct ExerciseCard: View {
     /// when it shouldn't render here (e.g. a non-final exercise of a superset,
     /// where rest is only taken after the whole round).
     let restSeconds: Int?
+    /// When true (paged/single-exercise view), the set grid is always visible
+    /// and the header drops its expand/collapse toggle and chevron. Defaults to
+    /// false so the stacked list view keeps its tap-to-expand behavior.
+    var alwaysExpanded: Bool = false
 
     @State private var isExpanded: Bool = false
 
@@ -26,10 +30,14 @@ struct ExerciseCard: View {
         viewModel.isMarkedComplete(programExerciseId: exercise.id)
     }
 
+    /// Sets show when the card is force-expanded (paged view) or the user has
+    /// tapped to expand it (list view).
+    private var showSets: Bool { alwaysExpanded || isExpanded }
+
     var body: some View {
         VStack(spacing: 0) {
             header
-            if isExpanded {
+            if showSets {
                 setsGrid
             }
         }
@@ -48,12 +56,9 @@ struct ExerciseCard: View {
         // the toggle Button caused tap-routing ambiguity — chip taps could
         // bubble up to the expand/collapse handler in some cases.
         VStack(alignment: .leading, spacing: 10) {
-            Button {
-                // Toggling without `withAnimation` keeps the header text
-                // anchored in place — animating the resize caused the title
-                // to bounce vertically as the row grew to fit the set grid.
-                isExpanded.toggle()
-            } label: {
+            if alwaysExpanded {
+                // Paged view: the grid is always shown, so the header is a
+                // static row with no toggle Button and no chevron.
                 HStack(spacing: 10) {
                     nameRow
                     Spacer()
@@ -61,13 +66,29 @@ struct ExerciseCard: View {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                     }
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
                 }
-                .contentShape(Rectangle())
+            } else {
+                Button {
+                    // Toggling without `withAnimation` keeps the header text
+                    // anchored in place — animating the resize caused the title
+                    // to bounce vertically as the row grew to fit the set grid.
+                    isExpanded.toggle()
+                } label: {
+                    HStack(spacing: 10) {
+                        nameRow
+                        Spacer()
+                        if isMarkedComplete {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                        }
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
 
             chipsRow
         }
