@@ -101,4 +101,4 @@ Items deliberately deferred. Roughly ordered by priority within each tier.
 
 ### Low
 
-- **Calendar strip enhancements.** MVP is a basic week-scrolling carousel. Future polish: month-view zoom, gesture-driven scrubbing, stronger accessibility (VoiceOver labels per day, dynamic type sizing).
+- **Calendar strip enhancements.** MVP is a basic week-scrolling carousel; a tappable month/year caret now opens a full month-grid sheet (`MonthCalendarView`) and a return-to-today button jumps back to the current day. Future polish: gesture-driven scrubbing, stronger accessibility (VoiceOver labels per day, dynamic type sizing).

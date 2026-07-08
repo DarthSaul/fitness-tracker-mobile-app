@@ -9,14 +9,16 @@ import SwiftUI
 struct CalendarStripView: View {
     @Binding var selectedDate: Date
     let scheduledDateKeys: Set<String>
+    let completedDateKeys: Set<String>
 
     @State private var weekOffset: Int = 0
+    @State private var monthSheetPresented = false
     private let calendar: Calendar = .current
     private let pageRange = -52...52  // ~one year either side
 
     var body: some View {
         VStack(spacing: 4) {
-            monthLabel
+            header
 
             TabView(selection: $weekOffset) {
                 ForEach(pageRange, id: \.self) { offset in
@@ -32,17 +34,54 @@ struct CalendarStripView: View {
             // Jump to the week containing the currently-selected date.
             weekOffset = weekOffsetForDate(selectedDate)
         }
+        // Keep the strip scrolled to the week of the selected date when it
+        // changes externally (month sheet pick, jump-to-today).
+        .onChange(of: selectedDate) { _, newValue in
+            weekOffset = weekOffsetForDate(newValue)
+        }
+        .sheet(isPresented: $monthSheetPresented) {
+            MonthCalendarView(
+                selectedDate: $selectedDate,
+                scheduledDateKeys: scheduledDateKeys,
+                completedDateKeys: completedDateKeys
+            )
+        }
     }
 
-    // MARK: - Month label
+    // MARK: - Header
     @ViewBuilder
-    private var monthLabel: some View {
+    private var header: some View {
         let weekStart = startOfWeek(weekOffset: weekOffset)
-        Text(monthLabelText(for: weekStart))
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal)
+        HStack {
+            // Month/year label + caret → opens the full month calendar.
+            Button { monthSheetPresented = true } label: {
+                HStack(spacing: 4) {
+                    Text(monthLabelText(for: weekStart))
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open month calendar")
+
+            Spacer()
+
+            // Return-to-today, shown only when browsing a day other than today.
+            if !calendar.isDate(selectedDate, inSameDayAs: .now) {
+                Button {
+                    selectedDate = calendar.startOfDay(for: .now)
+                } label: {
+                    Image(systemName: "arrow.uturn.backward")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(Color.accentColor)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Return to today")
+            }
+        }
+        .padding(.horizontal)
     }
 
     // MARK: - Week row
@@ -55,7 +94,9 @@ struct CalendarStripView: View {
                     date: date,
                     isSelected: calendar.isDate(date, inSameDayAs: selectedDate),
                     isToday: calendar.isDateInToday(date),
-                    hasSchedule: scheduledDateKeys.contains(HomeViewModel.dayKey(date, calendar: calendar))
+                    hasSchedule: scheduledDateKeys.contains(HomeViewModel.dayKey(date, calendar: calendar)),
+                    hasCompleted: isPastDate(date)
+                        && completedDateKeys.contains(HomeViewModel.dayKey(date, calendar: calendar))
                 ) {
                     selectedDate = calendar.startOfDay(for: date)
                 }
@@ -86,6 +127,10 @@ struct CalendarStripView: View {
         formatter.dateFormat = "MMMM yyyy"
         return formatter.string(from: weekStart)
     }
+
+    private func isPastDate(_ date: Date) -> Bool {
+        calendar.startOfDay(for: date) < calendar.startOfDay(for: .now)
+    }
 }
 
 // MARK: - Day cell
@@ -94,6 +139,7 @@ private struct DayCell: View {
     let isSelected: Bool
     let isToday: Bool
     let hasSchedule: Bool
+    let hasCompleted: Bool
     let onTap: () -> Void
 
     var body: some View {
@@ -116,12 +162,21 @@ private struct DayCell: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .stroke(isToday && !isSelected ? Color.accentColor.opacity(0.5) : .clear, lineWidth: 1)
+                    .stroke(borderColor, lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    /// Selection is shown with a fill, so no border then. Otherwise today gets an
+    /// accent border and a past completed day gets a green border.
+    private var borderColor: Color {
+        if isSelected { return .clear }
+        if isToday { return Color.accentColor.opacity(0.5) }
+        if hasCompleted { return Color.green.opacity(0.5) }
+        return .clear
     }
 
     private var weekdayLabel: String {
@@ -141,6 +196,7 @@ private struct DayCell: View {
         formatter.dateStyle = .full
         var label = formatter.string(from: date)
         if hasSchedule { label += ", scheduled workout" }
+        if hasCompleted { label += ", completed workout" }
         if isToday { label += ", today" }
         return label
     }

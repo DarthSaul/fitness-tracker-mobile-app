@@ -117,6 +117,15 @@ final class HomeViewModel {
         Set(scheduledWorkouts.map { Self.dayKey($0.scheduledDate, calendar: calendar) })
     }
 
+    /// Day-string keys ("yyyy-MM-dd") for dates with a completed session, used by
+    /// the calendar to mark days the user finished a workout.
+    var completedDateKeys: Set<String> {
+        Set(sessions.compactMap { session in
+            guard session.status == .completed, let completedAt = session.completedAt else { return nil }
+            return Self.dayKey(completedAt, calendar: calendar)
+        })
+    }
+
     /// Day name from the active program tree, when present.
     func dayName(forWeek weekNumber: Int, day dayNumber: Int) -> String? {
         guard let activeProgram else { return nil }
