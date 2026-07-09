@@ -57,8 +57,14 @@ enum APIEndpoint {
     case swapExercise(workoutId: String, programExerciseId: String, body: SwapExerciseBody)
     case addAdHocSet(workoutId: String, body: AddAdHocSetBody)
 
+    // Core workout (per-session timed circuit)
+    case saveCoreWorkout(sessionId: String, body: SaveCoreWorkoutBody)
+    case completeCoreWorkout(sessionId: String, body: CompleteCoreWorkoutBody?)
+    case deleteCoreWorkout(sessionId: String)
+
     // Exercises
     case getExercises(search: String?)
+    case getCoreExercises
     case getExerciseNotes(exerciseId: String)
     case updateExerciseNotes(exerciseId: String, body: UpdateExerciseNotesBody)
 
@@ -128,9 +134,13 @@ extension APIEndpoint {
         case .swapExercise(let workoutId, let programExerciseId, _):
             return "/api/workouts/\(workoutId)/exercises/\(programExerciseId)/swap"
         case .addAdHocSet(let workoutId, _): return "/api/workouts/\(workoutId)/ad-hoc-sets"
+        case .saveCoreWorkout(let sessionId, _): return "/api/workouts/\(sessionId)/core-workout"
+        case .completeCoreWorkout(let sessionId, _): return "/api/workouts/\(sessionId)/core-workout/complete"
+        case .deleteCoreWorkout(let sessionId): return "/api/workouts/\(sessionId)/core-workout"
 
         // Exercises
         case .getExercises: return "/api/exercises"
+        case .getCoreExercises: return "/api/exercises/core"
         case .getExerciseNotes(let id): return "/api/exercises/\(id)/notes"
         case .updateExerciseNotes(let id, _): return "/api/exercises/\(id)/notes"
 
@@ -157,7 +167,7 @@ extension APIEndpoint {
              .getUserPrograms, .getActiveUserProgram, .getActiveProgramSessions,
              .getScheduledWorkouts,
              .getActiveWorkout, .getWorkoutHistory, .getWorkout,
-             .getExercises, .getExerciseNotes,
+             .getExercises, .getCoreExercises, .getExerciseNotes,
              .getDashboard, .getAnalyticsExercises, .getAnalyticsExercise,
              .getFeedback:
             return .get
@@ -172,14 +182,15 @@ extension APIEndpoint {
 
         case .activateProgram, .deactivateProgram,
              .updateWorkoutNotes, .updateWorkoutDate, .completeWorkout, .updateSet,
+             .completeCoreWorkout,
              .updateFeedback:
             return .patch
 
-        case .updateExerciseNotes:
+        case .updateExerciseNotes, .saveCoreWorkout:
             return .put
 
         case .unsaveProgram, .unscheduleWorkout,
-             .abandonWorkout, .deleteSet, .deleteExtraSet,
+             .abandonWorkout, .deleteSet, .deleteExtraSet, .deleteCoreWorkout,
              .unregisterDevice:
             return .delete
         }
@@ -201,6 +212,8 @@ extension APIEndpoint {
         case .addExtraSet(_, _, let b): return b
         case .swapExercise(_, _, let b): return b
         case .addAdHocSet(_, let b): return b
+        case .saveCoreWorkout(_, let b): return b
+        case .completeCoreWorkout(_, let b): return b
         case .updateExerciseNotes(_, let b): return b
         case .registerDevice(let b): return b
         case .updateFeedback(_, let b): return b
@@ -367,6 +380,21 @@ nonisolated struct SwapExerciseBody: Encodable, Sendable {
 
 nonisolated struct AddAdHocSetBody: Encodable, Sendable {
     let exerciseName: String
+}
+
+/// PUT /api/workouts/:sessionId/core-workout. `exerciseIds` is ordered (array
+/// index → 1-based order); the server sets sets = array length. Saving replaces
+/// any existing circuit and resets completion.
+nonisolated struct SaveCoreWorkoutBody: Encodable, Sendable {
+    let timeSeconds: Int
+    let restSeconds: Int
+    let exerciseIds: [String]
+}
+
+/// PATCH /api/workouts/:sessionId/core-workout/complete. Sent only when we have
+/// an explicit timestamp; a nil body lets the server default to "now".
+nonisolated struct CompleteCoreWorkoutBody: Encodable, Sendable {
+    let completedAt: Date
 }
 
 nonisolated struct UpdateExerciseNotesBody: Encodable, Sendable {

@@ -49,7 +49,10 @@ struct LiveWorkoutViewModelTests {
         )
     }
 
-    private func makeActiveResponse(completedSets: [CompletedSetDTO] = []) -> ActiveWorkoutResponseDTO {
+    private func makeActiveResponse(
+        completedSets: [CompletedSetDTO] = [],
+        coreWorkout: CoreWorkoutDTO? = nil
+    ) -> ActiveWorkoutResponseDTO {
         let session = ActiveWorkoutResponseDTO.ActiveWorkoutSession(
             id: "ws1", userId: "u1", userProgramId: "up1",
             weekNumber: 1, dayNumber: 1, status: .inProgress,
@@ -59,9 +62,30 @@ struct LiveWorkoutViewModelTests {
                 id: "up1", userId: "u1", programId: "p1", isActive: true,
                 currentWeek: 1, currentDay: 1, startedAt: .now
             ),
-            workoutExerciseSwaps: []
+            workoutExerciseSwaps: [],
+            coreWorkout: coreWorkout
         )
         return ActiveWorkoutResponseDTO(session: session, day: makeProgramDay())
+    }
+
+    private func makeExercise(_ id: String, name: String) -> ExerciseDTO {
+        ExerciseDTO(id: id, name: name, description: nil)
+    }
+
+    private func makeCoreWorkout(
+        timeSeconds: Int = 45,
+        restSeconds: Int = 15,
+        completedAt: Date? = nil,
+        exercises: [ExerciseDTO]
+    ) -> CoreWorkoutDTO {
+        CoreWorkoutDTO(
+            id: "cw1", workoutSessionId: "ws1",
+            timeSeconds: timeSeconds, restSeconds: restSeconds,
+            completedAt: completedAt, createdAt: .now, updatedAt: .now,
+            exercises: exercises.enumerated().map { index, ex in
+                CoreWorkoutExerciseDTO(id: "cwe\(index)", order: index + 1, exercise: ex)
+            }
+        )
     }
 
     /// Each VM gets its own UserDefaults suite so the persisted marked-complete
@@ -333,5 +357,119 @@ struct LiveWorkoutViewModelTests {
         await vm.load()
 
         #expect(vm.mostRecentLoggedSet(programExerciseId: "pe1", templateSetIds: ["es1", "es2"]) == nil)
+    }
+
+    // MARK: - Core workout
+
+    @Test("addCoreExercise appends by catalog exercise and is idempotent")
+    func addCoreExerciseIdempotent() async {
+        let client = MockAPIClient()
+        client.stub(.getActiveWorkout, response: makeActiveResponse())
+
+        let vm = makeViewModel(client: client)
+        await vm.load()
+        #expect(vm.coreSelectedExercises.isEmpty)
+
+        let plank = makeExercise("ex1", name: "Plank")
+        vm.addCoreExercise(plank)
+        vm.addCoreExercise(plank)  // same id → no-op
+
+        #expect(vm.coreSelectedExercises.map(\.id) == ["ex1"])
+    }
+
+    @Test("removeCoreExercise drops the exercise locally")
+    func removeCoreExercise() async {
+        let vm = makeViewModel()
+        vm.addCoreExercise(makeExercise("ex1", name: "Plank"))
+        vm.addCoreExercise(makeExercise("ex2", name: "Dead Bug"))
+
+        vm.removeCoreExercise(makeExercise("ex1", name: "Plank"))
+
+        #expect(vm.coreSelectedExercises.map(\.id) == ["ex2"])
+    }
+
+    @Test("coreEstimatedSeconds computes exerciseCount × (time + rest)")
+    func coreEstimate() {
+        let vm = makeViewModel()
+        vm.addCoreExercise(makeExercise("ex1", name: "Plank"))
+        vm.addCoreExercise(makeExercise("ex2", name: "Dead Bug"))
+        vm.addCoreExercise(makeExercise("ex3", name: "Cable Crunch"))  // 3 → 3 sets
+        vm.coreSetupTimeText = "45"
+        vm.coreSetupRestText = "15"
+        #expect(vm.coreEstimatedSeconds == 180)  // 3 * (45 + 15)
+    }
+
+    @Test("coreEstimatedSeconds needs an exercise and a positive time/rest total")
+    func coreEstimateEdges() {
+        let vm = makeViewModel()
+        vm.coreSetupTimeText = "45"
+        vm.coreSetupRestText = "15"
+        #expect(vm.coreEstimatedSeconds == nil)   // no exercises yet
+
+        vm.addCoreExercise(makeExercise("ex1", name: "Plank"))
+        #expect(vm.coreEstimatedSeconds == 60)    // 1 * (45 + 15)
+
+        vm.coreSetupTimeText = ""                  // blank time/rest → total 0 → nil
+        vm.coreSetupRestText = ""
+        #expect(vm.coreEstimatedSeconds == nil)
+    }
+
+    @Test("load restores a saved core circuit into Setup + selected list, locked")
+    func loadRestoresCoreWorkout() async {
+        let client = MockAPIClient()
+        let cw = makeCoreWorkout(
+            timeSeconds: 40, restSeconds: 20,
+            exercises: [makeExercise("ex1", name: "Plank"), makeExercise("ex2", name: "Dead Bug")]
+        )
+        client.stub(.getActiveWorkout, response: makeActiveResponse(coreWorkout: cw))
+
+        let vm = makeViewModel(client: client)
+        await vm.load()
+
+        #expect(vm.coreSelectedExercises.map(\.id) == ["ex1", "ex2"])
+        #expect(vm.coreSetupTimeText == "40")
+        #expect(vm.coreSetupRestText == "20")
+        #expect(vm.isCoreWorkoutLocked == true)
+        #expect(vm.coreEstimatedSeconds == 120)  // 2 * (40 + 20)
+    }
+
+    @Test("saveCoreWorkout PUTs the circuit, then adopts + locks it")
+    func saveCoreWorkoutPersistsAndLocks() async {
+        let client = MockAPIClient()
+        client.stub(.getActiveWorkout, response: makeActiveResponse())
+        let saved = makeCoreWorkout(
+            timeSeconds: 45, restSeconds: 15,
+            exercises: [makeExercise("ex1", name: "Plank")]
+        )
+        // Path-keyed: PUT /api/workouts/ws1/core-workout (body not matched).
+        client.stub(.saveCoreWorkout(sessionId: "ws1", body: SaveCoreWorkoutBody(timeSeconds: 45, restSeconds: 15, exerciseIds: ["ex1"])), response: saved)
+
+        let vm = makeViewModel(client: client)
+        await vm.load()
+        vm.addCoreExercise(makeExercise("ex1", name: "Plank"))
+        vm.coreSetupTimeText = "45"
+        vm.coreSetupRestText = "15"
+
+        let ok = await vm.saveCoreWorkout()
+
+        #expect(ok == true)
+        #expect(vm.isCoreWorkoutLocked == true)
+        #expect(vm.coreWorkout?.id == "cw1")
+        #expect(vm.session?.coreWorkout?.id == "cw1")  // mirrored onto the session
+    }
+
+    @Test("saveCoreWorkout refuses an empty circuit without hitting the network")
+    func saveCoreWorkoutRequiresExerciseAndTime() async {
+        let client = MockAPIClient()
+        client.stub(.getActiveWorkout, response: makeActiveResponse())
+
+        let vm = makeViewModel(client: client)
+        await vm.load()
+        // No exercises / no time → guard fails; no stub needed for the PUT.
+        let ok = await vm.saveCoreWorkout()
+
+        #expect(ok == false)
+        #expect(vm.isCoreWorkoutLocked == false)
+        #expect(vm.actionError != nil)
     }
 }

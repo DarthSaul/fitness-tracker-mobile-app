@@ -15,6 +15,10 @@ struct LiveWorkoutView: View {
     @State private var presentedSheet: PresentedSheet?
     @State private var showCompleteConfirmation = false
     @State private var showAbandonConfirmation = false
+    /// Local UI scaffolding for the "Add core" action. There's no server/DTO
+    /// concept of a "core" group yet, so this stays in the view for now — once
+    /// added, the "Add core" row hides (single Core group per session).
+    @State private var showCoreGroup = false
     /// Rest stopwatch — owned here (not in the sheet) so it keeps counting
     /// while the timer drawer is dismissed and reopened.
     @State private var restStopwatch = RestStopwatch()
@@ -73,6 +77,7 @@ struct LiveWorkoutView: View {
             }
 
             exerciseSections
+            coreSection
             adhocSection
             actionsSection
             completionSection
@@ -283,6 +288,35 @@ struct LiveWorkoutView: View {
         return group.restSeconds
     }
 
+    // MARK: - Core
+
+    /// The "Core" exercise-group button, added on demand from the "Add core"
+    /// action. Unlike the exercise-group cards (which expand inline via a
+    /// downward chevron), this is a `NavigationLink` — it renders the standard
+    /// right-facing disclosure chevron and pushes `CoreView` (slides in from
+    /// the right) within the live workout's `NavigationStack`.
+    @ViewBuilder
+    private var coreSection: some View {
+        // Visible once the user taps "Add core" — and stays visible while any
+        // core exercises are in the circuit (`showCoreGroup` is transient;
+        // `coreSelectedExercises` is restored from the saved circuit on reload).
+        if showCoreGroup || !viewModel.coreSelectedExercises.isEmpty {
+            Section {
+                NavigationLink {
+                    CoreView(viewModel: viewModel)
+                } label: {
+                    HStack(spacing: 8) {
+                        Text("Core")
+                            .font(.headline)
+                        BetaTag()
+                    }
+                    .padding(.vertical, 4)
+                }
+                .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+            }
+        }
+    }
+
     // MARK: - Ad-hoc
 
     @ViewBuilder
@@ -327,6 +361,14 @@ struct LiveWorkoutView: View {
         Section {
             actionRow(title: "Add exercise", systemImage: "plus.circle", color: .accentColor) {
                 presentedSheet = .adHocSearch
+            }
+            // "Add core" — same plus icon/accent as "Add exercise". Hidden once
+            // the Core group is showing (either just added, or already has core
+            // exercises from a prior visit). Single Core group per session.
+            if !(showCoreGroup || !viewModel.coreSelectedExercises.isEmpty) {
+                actionRow(title: "Add core", systemImage: "plus.circle", color: .accentColor) {
+                    showCoreGroup = true
+                }
             }
             // "Notes" stays in the default primary color (not an accent action).
             actionRow(title: "Notes", systemImage: "note.text", color: .primary) {

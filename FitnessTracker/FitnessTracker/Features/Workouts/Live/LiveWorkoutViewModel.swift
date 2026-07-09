@@ -28,6 +28,23 @@ final class LiveWorkoutViewModel {
     /// it, so it's persisted device-locally via `MarkedCompleteStore` (keyed by
     /// session id) and reloaded in `apply(_:)` — surviving view dismissal.
     private(set) var markedCompleteExerciseIds: Set<String> = []
+    // MARK: Core workout (server-backed)
+    /// The fetched core-exercise catalog (GET /api/exercises/core), for the picker.
+    private(set) var coreCatalog: [ExerciseDTO] = []
+    /// The exercises the user has added to the circuit, in order. Seeded from the
+    /// saved `coreWorkout` on load; edited locally until "Save" persists it.
+    private(set) var coreSelectedExercises: [ExerciseDTO] = []
+    /// Last-known server state of the saved circuit (also mirrored onto `session`).
+    private(set) var coreWorkout: CoreWorkoutDTO?
+    /// Raw text inputs for the per-set work / rest seconds. Number of sets is the
+    /// number of selected exercises.
+    var coreSetupTimeText: String = ""
+    var coreSetupRestText: String = ""
+    /// Whether the circuit is "Saved" (locked) — freezes the setup fields and
+    /// hides the per-exercise delete controls until the user taps "Edit".
+    var isCoreWorkoutLocked = false
+    /// In-flight PUT for the circuit.
+    var isSavingCore = false
 
     var isLoading = false
     var isCompleting = false
@@ -136,6 +153,13 @@ final class LiveWorkoutViewModel {
         self.day = response.day
         self.markedCompleteExerciseIds = markedCompleteStore.load(sessionId: response.session.id)
         rebuildCompletedSetBuckets(from: response.session.completedSets)
+        // Restore a saved core circuit (Setup + ordered list). When none is
+        // saved, leave any in-progress local edits untouched.
+        if let cw = response.session.coreWorkout {
+            adoptCoreWorkout(cw)
+        } else {
+            self.coreWorkout = nil
+        }
         self.swapsByProgramExerciseId = Dictionary(
             response.session.workoutExerciseSwaps.map { ($0.programExerciseId, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -283,6 +307,106 @@ final class LiveWorkoutViewModel {
             Logger.data.error("deleteAdHocSet failed: \(error)")
             actionError = error.localizedDescription
         }
+    }
+
+    // MARK: - Core workout
+    //
+    // A per-session timed circuit persisted server-side (see CoreWorkoutDTO).
+    // The exercise list is edited locally, then persisted with `saveCoreWorkout`.
+
+    /// Estimated total duration in seconds: `sets × (time + rest)`, where sets is
+    /// the number of selected exercises. Nil unless there's at least one exercise
+    /// and a positive time/rest total; blank time/rest count as 0.
+    var coreEstimatedSeconds: Int? {
+        let sets = coreSelectedExercises.count
+        guard sets > 0 else { return nil }
+        let total = sets * (coreTimeSeconds + coreRestSeconds)
+        return total > 0 ? total : nil
+    }
+
+    var coreTimeSeconds: Int { Int(coreSetupTimeText.trimmingCharacters(in: .whitespaces)) ?? 0 }
+    var coreRestSeconds: Int { Int(coreSetupRestText.trimmingCharacters(in: .whitespaces)) ?? 0 }
+
+    /// Fetches the core-exercise catalog once (idempotent).
+    func loadCoreCatalog() async {
+        guard coreCatalog.isEmpty else { return }
+        do {
+            coreCatalog = try await repository.getCoreExercises()
+        } catch let apiError as APIError where apiError == .unauthorized {
+            await sessionManager.signOut()
+        } catch {
+            Logger.data.error("loadCoreCatalog failed: \(error)")
+            actionError = error.localizedDescription
+        }
+    }
+
+    /// Appends a catalog exercise to the circuit (no-op if already present).
+    /// Local only — persisted on the next `saveCoreWorkout`.
+    func addCoreExercise(_ exercise: ExerciseDTO) {
+        guard !coreSelectedExercises.contains(where: { $0.id == exercise.id }) else { return }
+        coreSelectedExercises.append(exercise)
+    }
+
+    /// Removes an exercise from the circuit (local only).
+    func removeCoreExercise(_ exercise: ExerciseDTO) {
+        coreSelectedExercises.removeAll { $0.id == exercise.id }
+    }
+
+    /// Persists the circuit (PUT), then locks it. Requires a session, ≥1 exercise
+    /// and a positive work time. Mirrors the saved circuit back onto `session`.
+    @discardableResult
+    func saveCoreWorkout() async -> Bool {
+        guard let session, !isSavingCore else { return false }
+        let exerciseIds = coreSelectedExercises.map(\.id)
+        guard !exerciseIds.isEmpty, coreTimeSeconds > 0 else {
+            actionError = "Add at least one exercise and a work time before saving."
+            return false
+        }
+        isSavingCore = true
+        actionError = nil
+        defer { isSavingCore = false }
+        do {
+            let saved = try await repository.saveCoreWorkout(
+                sessionId: session.id,
+                timeSeconds: coreTimeSeconds,
+                restSeconds: coreRestSeconds,
+                exerciseIds: exerciseIds
+            )
+            adoptCoreWorkout(saved)
+            return true
+        } catch let apiError as APIError where apiError == .unauthorized {
+            await sessionManager.signOut()
+            return false
+        } catch {
+            Logger.data.error("saveCoreWorkout failed: \(error)")
+            actionError = error.localizedDescription
+            return false
+        }
+    }
+
+    /// Marks the saved circuit complete (best-effort) — called when the timer
+    /// finishes naturally. No-op if nothing is saved or it's already complete.
+    func completeCoreWorkoutIfNeeded() async {
+        guard let session, let cw = coreWorkout, cw.completedAt == nil else { return }
+        do {
+            let updated = try await repository.completeCoreWorkout(sessionId: session.id)
+            self.coreWorkout = updated
+            self.session?.coreWorkout = updated
+        } catch {
+            // Best-effort — the timer already ran; don't surface a UI error.
+            Logger.data.error("completeCoreWorkout failed: \(error)")
+        }
+    }
+
+    /// Adopts a saved circuit as the source of truth: restores Setup + the
+    /// ordered exercise list, locks the view, and mirrors it onto `session`.
+    private func adoptCoreWorkout(_ cw: CoreWorkoutDTO) {
+        self.coreWorkout = cw
+        self.session?.coreWorkout = cw
+        self.coreSetupTimeText = String(cw.timeSeconds)
+        self.coreSetupRestText = String(cw.restSeconds)
+        self.coreSelectedExercises = cw.orderedExercises
+        self.isCoreWorkoutLocked = true
     }
 
     // MARK: - Swap

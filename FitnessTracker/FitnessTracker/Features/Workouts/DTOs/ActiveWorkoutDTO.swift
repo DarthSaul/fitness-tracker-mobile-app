@@ -22,6 +22,10 @@ nonisolated struct ActiveWorkoutResponseDTO: Codable, Sendable, Equatable {
         let completedSets: [CompletedSetDTO]
         let userProgram: UserProgramDTO
         let workoutExerciseSwaps: [WorkoutExerciseSwapDTO]
+        // The saved core circuit for this session, or nil. `var` so the live VM
+        // can mirror a save/complete back onto the session without a reload.
+        // Defaulted so existing memberwise-init call sites (tests) stay valid.
+        var coreWorkout: CoreWorkoutDTO? = nil
     }
 }
 
