@@ -230,16 +230,19 @@ struct LiveWorkoutView: View {
     @ViewBuilder
     private var coreSection: some View {
         // Visible once the user taps "Add core" — and stays visible while any
-        // core exercises are in the workout (`showCoreGroup` is transient;
-        // `addedCoreExercises` is re-seeded from logged core sets on reload).
-        if showCoreGroup || !viewModel.addedCoreExercises.isEmpty {
+        // core exercises are in the circuit (`showCoreGroup` is transient;
+        // `coreSelectedExercises` is restored from the saved circuit on reload).
+        if showCoreGroup || !viewModel.coreSelectedExercises.isEmpty {
             Section {
                 NavigationLink {
                     CoreView(viewModel: viewModel)
                 } label: {
-                    Text("Core")
-                        .font(.headline)
-                        .padding(.vertical, 4)
+                    HStack(spacing: 8) {
+                        Text("Core")
+                            .font(.headline)
+                        BetaTag()
+                    }
+                    .padding(.vertical, 4)
                 }
                 .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
             }
@@ -250,11 +253,9 @@ struct LiveWorkoutView: View {
 
     @ViewBuilder
     private var adhocSection: some View {
-        // Excludes core sets — those render in CoreView, not here, even though
-        // both are ad-hoc sets under the hood.
-        if !viewModel.adhocSetsExcludingCore.isEmpty {
+        if !viewModel.adhocSets.isEmpty {
             Section("Ad-hoc") {
-                ForEach(viewModel.adhocSetsExcludingCore) { set in
+                ForEach(viewModel.adhocSets) { set in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(set.adhocExerciseName ?? "Exercise")
@@ -296,7 +297,7 @@ struct LiveWorkoutView: View {
             // "Add core" — same plus icon/accent as "Add exercise". Hidden once
             // the Core group is showing (either just added, or already has core
             // exercises from a prior visit). Single Core group per session.
-            if !(showCoreGroup || !viewModel.addedCoreExercises.isEmpty) {
+            if !(showCoreGroup || !viewModel.coreSelectedExercises.isEmpty) {
                 actionRow(title: "Add core", systemImage: "plus.circle", color: .accentColor) {
                     showCoreGroup = true
                 }

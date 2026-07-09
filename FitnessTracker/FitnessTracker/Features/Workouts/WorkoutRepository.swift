@@ -69,16 +69,35 @@ final class WorkoutRepository {
     }
 
     @discardableResult
-    func addAdHocSet(
-        workoutId: String,
-        exerciseName: String,
-        reps: Int? = nil,
-        weight: Double? = nil,
-        rpe: Double? = nil,
-        notes: String? = nil
-    ) async throws -> CompletedSetDTO {
-        let body = AddAdHocSetBody(exerciseName: exerciseName, reps: reps, weight: weight, rpe: rpe, notes: notes)
+    func addAdHocSet(workoutId: String, exerciseName: String) async throws -> CompletedSetDTO {
+        let body = AddAdHocSetBody(exerciseName: exerciseName)
         return try await apiClient.send(.addAdHocSet(workoutId: workoutId, body: body))
+    }
+
+    // MARK: - Core workout
+
+    /// GET /api/exercises/core — the fixed core-exercise catalog (sorted by name).
+    func getCoreExercises() async throws -> [ExerciseDTO] {
+        try await apiClient.send(.getCoreExercises)
+    }
+
+    /// PUT /api/workouts/:sessionId/core-workout — create or replace the circuit.
+    @discardableResult
+    func saveCoreWorkout(sessionId: String, timeSeconds: Int, restSeconds: Int, exerciseIds: [String]) async throws -> CoreWorkoutDTO {
+        let body = SaveCoreWorkoutBody(timeSeconds: timeSeconds, restSeconds: restSeconds, exerciseIds: exerciseIds)
+        return try await apiClient.send(.saveCoreWorkout(sessionId: sessionId, body: body))
+    }
+
+    /// PATCH /api/workouts/:sessionId/core-workout/complete. Passing nil defers
+    /// the timestamp to the server ("now").
+    @discardableResult
+    func completeCoreWorkout(sessionId: String, completedAt: Date? = nil) async throws -> CoreWorkoutDTO {
+        let body = completedAt.map { CompleteCoreWorkoutBody(completedAt: $0) }
+        return try await apiClient.send(.completeCoreWorkout(sessionId: sessionId, body: body))
+    }
+
+    func deleteCoreWorkout(sessionId: String) async throws {
+        try await apiClient.send(.deleteCoreWorkout(sessionId: sessionId))
     }
 
     @discardableResult

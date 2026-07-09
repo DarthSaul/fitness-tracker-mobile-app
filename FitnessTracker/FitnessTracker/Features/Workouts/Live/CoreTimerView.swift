@@ -5,8 +5,10 @@ import SwiftUI
 /// and "Rest" during rest — with Pause / Resume and End early controls.
 struct CoreTimerView: View {
     let timer: CoreWorkoutTimer
-    /// Called to dismiss (End early, or Done once finished).
-    let onClose: () -> Void
+    /// Called to dismiss. `finished` is true when the circuit ran to completion
+    /// (Done), false when the user ended early — the presenter uses it to decide
+    /// whether to mark the saved circuit complete.
+    let onClose: (_ finished: Bool) -> Void
 
     var body: some View {
         ZStack {
@@ -73,7 +75,7 @@ struct CoreTimerView: View {
     @ViewBuilder
     private var controls: some View {
         if timer.isFinished {
-            Button { onClose() } label: {
+            Button { onClose(true) } label: {
                 Text("Done")
                     .font(.body.weight(.semibold))
                     .frame(maxWidth: .infinity)
@@ -96,7 +98,7 @@ struct CoreTimerView: View {
 
                 Button(role: .destructive) {
                     timer.end()
-                    onClose()
+                    onClose(false)
                 } label: {
                     Text("End early")
                         .font(.body.weight(.semibold))
