@@ -24,7 +24,8 @@ struct HomeView: View {
                         get: { viewModel.selectedDate },
                         set: { viewModel.selectedDate = $0 }
                     ),
-                    scheduledDateKeys: viewModel.scheduledDateKeys
+                    scheduledDateKeys: viewModel.scheduledDateKeys,
+                    completedDateKeys: viewModel.completedDateKeys
                 )
 
                 Text(formattedSelectedDate)
