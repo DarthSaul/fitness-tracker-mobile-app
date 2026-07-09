@@ -36,8 +36,9 @@ struct ActiveWorkoutSettingsSheet: View {
                     Picker("Exercise layout", selection: $layoutMode) {
                         Label("List", systemImage: "list.bullet")
                             .tag(WorkoutLayoutMode.list)
-                        Label("One at a time", systemImage: "square.stack")
+                        Label("One at a time - Coming soon!", systemImage: "square.stack")
                             .tag(WorkoutLayoutMode.paged)
+                            .selectionDisabled()
                     }
                     .pickerStyle(.inline)
                     .labelsHidden()
