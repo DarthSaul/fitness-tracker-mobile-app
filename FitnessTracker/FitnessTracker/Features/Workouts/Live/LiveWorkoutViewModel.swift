@@ -28,6 +28,19 @@ final class LiveWorkoutViewModel {
     /// it, so it's persisted device-locally via `MarkedCompleteStore` (keyed by
     /// session id) and reloaded in `apply(_:)` — surviving view dismissal.
     private(set) var markedCompleteExerciseIds: Set<String> = []
+    /// Core exercises the user has added to "Your core workout" this session, in
+    /// add order. Purely session state (no server concept of a core group yet):
+    /// it lets a just-picked exercise appear before any set is logged. `apply(_:)`
+    /// re-seeds it from any core-named ad-hoc sets so reloaded core work resurfaces.
+    private(set) var addedCoreExercises: [String] = []
+    /// Core "setup" plan (session-only, no server model): raw text inputs for the
+    /// per-set work / rest seconds. The number of sets is the number of added
+    /// core exercises. These drive the estimated duration on the header.
+    var coreSetupTimeText: String = ""
+    var coreSetupRestText: String = ""
+    /// Whether the user has "Saved" (locked) their core workout — freezes the
+    /// setup fields and hides the per-exercise delete controls until they "Edit".
+    var isCoreWorkoutLocked = false
 
     var isLoading = false
     var isCompleting = false
@@ -136,6 +149,11 @@ final class LiveWorkoutViewModel {
         self.day = response.day
         self.markedCompleteExerciseIds = markedCompleteStore.load(sessionId: response.session.id)
         rebuildCompletedSetBuckets(from: response.session.completedSets)
+        // Surface any core exercise that already has logged sets, preserving any
+        // the user added this session.
+        for name in adhocSets.compactMap(\.adhocExerciseName) where CoreExercise.isCore(name) && !addedCoreExercises.contains(name) {
+            addedCoreExercises.append(name)
+        }
         self.swapsByProgramExerciseId = Dictionary(
             response.session.workoutExerciseSwaps.map { ($0.programExerciseId, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -282,6 +300,99 @@ final class LiveWorkoutViewModel {
         } catch {
             Logger.data.error("deleteAdHocSet failed: \(error)")
             actionError = error.localizedDescription
+        }
+    }
+
+    // MARK: - Core sets
+    //
+    // "Core" sets are ad-hoc sets whose `adhocExerciseName` is one of the fixed
+    // `CoreExercise.defaults`. They share the `adhocSets` bucket; membership in
+    // the core list is what routes them to `CoreView` vs. the "Ad-hoc" section.
+
+    /// Adds a core exercise to "Your core workout" (no-op if already present).
+    /// No network call — the exercise only becomes a server entity once a set is
+    /// logged against it via `addCoreSet`.
+    func addCoreExercise(_ name: String) {
+        guard !addedCoreExercises.contains(name) else { return }
+        addedCoreExercises.append(name)
+    }
+
+    /// Removes a core exercise from the list and deletes any sets logged for it.
+    func removeCoreExercise(_ name: String) async {
+        addedCoreExercises.removeAll { $0 == name }
+        for set in coreSets(named: name) {
+            await deleteAdHocSet(id: set.id)
+        }
+    }
+
+    /// Estimated total core-workout duration in seconds: `sets × (time + rest)`,
+    /// where the number of sets is the number of added core exercises (each
+    /// contributes its work + rest). Nil unless there's at least one exercise and
+    /// a positive time/rest total; blank time/rest count as 0.
+    var coreEstimatedSeconds: Int? {
+        let sets = addedCoreExercises.count
+        guard sets > 0 else { return nil }
+        let time = Int(coreSetupTimeText.trimmingCharacters(in: .whitespaces)) ?? 0
+        let rest = Int(coreSetupRestText.trimmingCharacters(in: .whitespaces)) ?? 0
+        let total = sets * (time + rest)
+        return total > 0 ? total : nil
+    }
+
+    /// Logged core sets for one core exercise, oldest first (creation order).
+    func coreSets(named name: String) -> [CompletedSetDTO] {
+        adhocSets.filter { $0.adhocExerciseName == name }
+    }
+
+    /// True when any logged ad-hoc set belongs to the core list — keeps the
+    /// Core section visible after a reload even though the "Add core" toggle is
+    /// transient view state.
+    var hasCoreSets: Bool {
+        adhocSets.contains { CoreExercise.isCore($0.adhocExerciseName) }
+    }
+
+    /// Ad-hoc sets that are *not* core exercises — the set the "Ad-hoc" section
+    /// renders, so core sets don't double-appear there and in `CoreView`.
+    var adhocSetsExcludingCore: [CompletedSetDTO] {
+        adhocSets.filter { !CoreExercise.isCore($0.adhocExerciseName) }
+    }
+
+    /// Logs a set for a core exercise via the ad-hoc endpoint. The server still
+    /// nulls reps/weight for ad-hoc sets, so we overlay the entered values onto
+    /// the returned DTO before appending — the set displays correctly this
+    /// session (values revert on a full reload until the server persists them).
+    @discardableResult
+    func addCoreSet(
+        exerciseName: String,
+        reps: Int?, weight: Double?, rpe: Double?, notes: String?
+    ) async -> Bool {
+        guard let session else { return false }
+        actionError = nil
+        do {
+            let created = try await repository.addAdHocSet(
+                workoutId: session.id, exerciseName: exerciseName,
+                reps: reps, weight: weight, rpe: rpe, notes: notes
+            )
+            let overlaid = CompletedSetDTO(
+                id: created.id,
+                workoutSessionId: created.workoutSessionId,
+                exerciseSetId: created.exerciseSetId,
+                programExerciseId: created.programExerciseId,
+                adhocExerciseName: created.adhocExerciseName,
+                reps: created.reps ?? reps,
+                weight: created.weight ?? weight,
+                rpe: created.rpe ?? rpe,
+                notes: created.notes ?? notes,
+                completedAt: created.completedAt
+            )
+            adhocSets.append(overlaid)
+            return true
+        } catch let apiError as APIError where apiError == .unauthorized {
+            await sessionManager.signOut()
+            return false
+        } catch {
+            Logger.data.error("addCoreSet failed: \(error)")
+            actionError = error.localizedDescription
+            return false
         }
     }
 

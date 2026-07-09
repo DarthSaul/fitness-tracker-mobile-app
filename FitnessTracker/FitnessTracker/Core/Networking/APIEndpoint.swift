@@ -367,6 +367,28 @@ nonisolated struct SwapExerciseBody: Encodable, Sendable {
 
 nonisolated struct AddAdHocSetBody: Encodable, Sendable {
     let exerciseName: String
+    // Optional set values. The server currently ignores these (it always
+    // stores reps/weight as null for ad-hoc sets), so they only take effect
+    // once the /ad-hoc-sets route is extended to persist them. The defaulted
+    // init keeps the name-only ad-hoc call site unchanged.
+    let reps: Int?
+    let weight: Double?
+    let rpe: Double?
+    let notes: String?
+
+    init(
+        exerciseName: String,
+        reps: Int? = nil,
+        weight: Double? = nil,
+        rpe: Double? = nil,
+        notes: String? = nil
+    ) {
+        self.exerciseName = exerciseName
+        self.reps = reps
+        self.weight = weight
+        self.rpe = rpe
+        self.notes = notes
+    }
 }
 
 nonisolated struct UpdateExerciseNotesBody: Encodable, Sendable {

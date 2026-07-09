@@ -69,8 +69,15 @@ final class WorkoutRepository {
     }
 
     @discardableResult
-    func addAdHocSet(workoutId: String, exerciseName: String) async throws -> CompletedSetDTO {
-        let body = AddAdHocSetBody(exerciseName: exerciseName)
+    func addAdHocSet(
+        workoutId: String,
+        exerciseName: String,
+        reps: Int? = nil,
+        weight: Double? = nil,
+        rpe: Double? = nil,
+        notes: String? = nil
+    ) async throws -> CompletedSetDTO {
+        let body = AddAdHocSetBody(exerciseName: exerciseName, reps: reps, weight: weight, rpe: rpe, notes: notes)
         return try await apiClient.send(.addAdHocSet(workoutId: workoutId, body: body))
     }
 

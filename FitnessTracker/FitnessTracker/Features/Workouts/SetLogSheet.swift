@@ -255,7 +255,10 @@ struct PreviousSetValues: Equatable {
 
 // MARK: - Boxed text field
 
-private extension View {
+// Internal (not private) so the same boxed field / labeled-column styling can
+// back the "Reps"-style inputs elsewhere in the Workouts feature (e.g. the Core
+// setup row in `CoreView`).
+extension View {
     /// Rounded, filled text-field box that's a little taller than the default
     /// `.roundedBorder` style — gives the reps / weight inputs more height.
     func boxedField() -> some View {
@@ -273,8 +276,9 @@ private extension View {
 
 /// One column of the side-by-side input row: a caption label stacked above an
 /// arbitrary field, expanding to share width equally with its siblings. The
-/// label sits at the leading edge above its input.
-private struct LabeledField<Content: View>: View {
+/// label sits at the leading edge above its input. Internal so `CoreView`'s
+/// setup row can reuse the same column style as the Log Set reps/weight fields.
+struct LabeledField<Content: View>: View {
     let label: String
     @ViewBuilder var content: Content
 
