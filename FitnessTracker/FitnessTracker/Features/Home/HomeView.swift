@@ -9,11 +9,18 @@ struct HomeView: View {
     @Environment(LiveWorkoutPresentation.self) private var liveWorkout
     private let homeRepository: HomeRepository
     private let workoutRepository: WorkoutRepository
+    private let standaloneRepository: StandaloneWorkoutRepository
 
-    init(viewModel: HomeViewModel, homeRepository: HomeRepository, workoutRepository: WorkoutRepository) {
+    init(
+        viewModel: HomeViewModel,
+        homeRepository: HomeRepository,
+        workoutRepository: WorkoutRepository,
+        standaloneRepository: StandaloneWorkoutRepository
+    ) {
         _viewModel = State(initialValue: viewModel)
         self.homeRepository = homeRepository
         self.workoutRepository = workoutRepository
+        self.standaloneRepository = standaloneRepository
     }
 
     var body: some View {
@@ -65,9 +72,16 @@ struct HomeView: View {
                     .padding(.horizontal)
                 }
 
+                StrengthOnTheGoCard(
+                    standaloneRepository: standaloneRepository,
+                    workoutRepository: workoutRepository
+                )
+                .padding(.horizontal)
+
                 HomeRecentHistorySection(
                     recentHistory: viewModel.recentHistory,
                     workoutRepository: workoutRepository,
+                    standaloneRepository: standaloneRepository,
                     hasLoadedOnce: viewModel.hasLoadedOnce
                 )
 

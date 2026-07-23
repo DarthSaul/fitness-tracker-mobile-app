@@ -10,9 +10,13 @@ final class HomeViewModel {
     var activeWorkout: ActiveWorkoutResponseDTO?
     var sessions: [ActiveProgramSessionDTO] = []
     var scheduledWorkouts: [ScheduledWorkoutDTO] = []
-    /// 5 most-recent completed sessions across all programs, surfaced in the
-    /// Home page "History" preview list.
-    var recentHistory: [HistorySessionDTO] = []
+    /// In-progress standalone sessions. The app allows one active workout at a
+    /// time across program and standalone, so a non-empty list blocks "Start
+    /// next workout" until the user completes or discards it.
+    var activeStandaloneSessions: [StandaloneSessionListItemDTO] = []
+    /// 5 most-recent completed sessions — program and standalone interleaved
+    /// (unified GET /api/history) — surfaced in the Home "History" preview.
+    var recentHistory: [HistoryEntryDTO] = []
 
     var selectedDate: Date = HomeViewModel.startOfDay(.now)
     var isLoading = false
@@ -22,25 +26,34 @@ final class HomeViewModel {
     private(set) var hasLoadedOnce = false
     var loadError: Error?
     var scheduleError: String?
+    /// Failure surfaced on the Today card when completing/discarding a
+    /// blocking standalone session ahead of a program start.
+    var startConflictError: String?
     var isStartingWorkout = false
     var isUnscheduling = false
 
     // MARK: - Dependencies
     private let repository: HomeRepository
     private let historyRepository: HistoryRepository
+    private let standaloneRepository: StandaloneWorkoutRepository
     private let sessionManager: SessionManager
     private let calendar: Calendar
     private let recentHistoryLimit: Int
+    /// Cleans up the device-local per-exercise "complete" flags when a
+    /// standalone session is finalized from the conflict prompt.
+    private let markedCompleteStore = MarkedCompleteStore()
 
     init(
         repository: HomeRepository,
         historyRepository: HistoryRepository,
+        standaloneRepository: StandaloneWorkoutRepository,
         sessionManager: SessionManager,
         calendar: Calendar = .current,
         recentHistoryLimit: Int = 5
     ) {
         self.repository = repository
         self.historyRepository = historyRepository
+        self.standaloneRepository = standaloneRepository
         self.sessionManager = sessionManager
         self.calendar = calendar
         self.recentHistoryLimit = recentHistoryLimit
@@ -51,6 +64,12 @@ final class HomeViewModel {
     var hasActiveProgram: Bool { activeProgram != nil }
 
     var hasActiveWorkout: Bool { activeWorkout != nil }
+
+    /// The standalone session (if any) blocking a program-workout start —
+    /// newest first, matching the server's /active ordering.
+    var blockingStandaloneSession: StandaloneSessionListItemDTO? {
+        activeStandaloneSessions.first
+    }
 
     var totalDays: Int {
         guard let activeProgram else { return 0 }
@@ -147,10 +166,11 @@ final class HomeViewModel {
             async let activeProgramTask = repository.fetchActiveUserProgram()
             async let activeWorkoutTask = repository.fetchActiveWorkout()
             async let sessionsTask = repository.fetchActiveProgramSessions()
-            // Kicked off in parallel but awaited below — recent history is a
-            // Home preview, not part of the critical dashboard, so its failure
-            // shouldn't blank out the rest of the page.
+            // Kicked off in parallel but awaited below — recent history and
+            // standalone sessions are secondary to the dashboard, so their
+            // failure shouldn't blank out the rest of the page.
             async let recentHistoryTask = historyRepository.fetchHistory(limit: recentHistoryLimit, before: nil)
+            async let standaloneSessionsTask = standaloneRepository.fetchActiveSessions()
             let (program, workout, sessions) = try await (activeProgramTask, activeWorkoutTask, sessionsTask)
             self.activeProgram = program
             self.activeWorkout = workout
@@ -160,6 +180,12 @@ final class HomeViewModel {
                 self.recentHistory = try await recentHistoryTask
             } catch {
                 Logger.data.error("Failed to fetch recent history: \(error)")
+            }
+
+            do {
+                self.activeStandaloneSessions = try await standaloneSessionsTask
+            } catch {
+                Logger.data.error("Failed to fetch active standalone sessions: \(error)")
             }
 
             // Scheduled workouts depend on having an active program — fetch in a
@@ -223,6 +249,37 @@ final class HomeViewModel {
         } catch {
             Logger.data.error("unschedule failed: \(error)")
             scheduleError = error.localizedDescription
+        }
+    }
+
+    /// Completes (or discards) every in-progress standalone session so the
+    /// program workout can start — the "one active workout at a time" prompt's
+    /// action. Normally there's exactly one; iterating keeps the invariant
+    /// even if the web app left extras behind. Returns true when clear.
+    func resolveStandaloneSessions(discard: Bool) async -> Bool {
+        startConflictError = nil
+        do {
+            // Iterate a snapshot and drop each session from the published list
+            // as soon as it's resolved, so a mid-loop failure leaves only the
+            // unresolved sessions behind — a retry won't re-complete (and 409
+            // on) sessions that already went through.
+            for session in activeStandaloneSessions {
+                if discard {
+                    try await standaloneRepository.abandonSession(id: session.id)
+                } else {
+                    _ = try await standaloneRepository.completeSession(id: session.id)
+                }
+                markedCompleteStore.clear(sessionId: session.id)
+                activeStandaloneSessions.removeAll { $0.id == session.id }
+            }
+            return true
+        } catch let apiError as APIError where apiError == .unauthorized {
+            await sessionManager.signOut()
+            return false
+        } catch {
+            Logger.data.error("resolveStandaloneSessions failed: \(error)")
+            startConflictError = error.localizedDescription
+            return false
         }
     }
 

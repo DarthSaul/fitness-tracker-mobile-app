@@ -2,13 +2,13 @@ import Foundation
 import Observation
 import OSLog
 
+/// Completed standalone sessions, newest first, with the same cursor-paging
+/// shape as the program HistoryViewModel (`completedAt` + `id` passed together).
 @Observable
 @MainActor
-final class HistoryViewModel {
+final class StandaloneHistoryViewModel {
     // MARK: - State
-    /// Unified rows — program and standalone completions interleaved
-    /// chronologically (GET /api/history with no type filter).
-    var sessions: [HistoryEntryDTO] = []
+    var sessions: [StandaloneSessionListItemDTO] = []
     var isLoading = false
     var isLoadingMore = false
     var loadError: Error?
@@ -17,11 +17,11 @@ final class HistoryViewModel {
     private(set) var reachedEnd = false
 
     // MARK: - Dependencies
-    private let repository: HistoryRepository
+    private let repository: StandaloneWorkoutRepository
     private let sessionManager: SessionManager
     private let pageSize: Int
 
-    init(repository: HistoryRepository, sessionManager: SessionManager, pageSize: Int = 20) {
+    init(repository: StandaloneWorkoutRepository, sessionManager: SessionManager, pageSize: Int = 20) {
         self.repository = repository
         self.sessionManager = sessionManager
         self.pageSize = pageSize
@@ -35,21 +35,19 @@ final class HistoryViewModel {
         reachedEnd = false
         defer { isLoading = false }
         do {
-            let page = try await repository.fetchHistory(limit: pageSize, before: nil)
+            let page = try await repository.fetchHistory(limit: pageSize)
             sessions = page
             reachedEnd = page.count < pageSize
         } catch let apiError as APIError where apiError == .unauthorized {
             await sessionManager.signOut()
         } catch {
-            Logger.data.error("HistoryViewModel.load failed: \(error)")
+            Logger.data.error("StandaloneHistoryViewModel.load failed: \(error)")
             loadError = error
         }
     }
 
     /// Loads the next older page using the last session's `completedAt` + `id`
-    /// as the cursor (the server requires both together). No-op when already
-    /// loading, when there is nothing to page from, or when the previous page
-    /// indicated we've reached the end.
+    /// as the cursor (the server requires both together).
     func loadMore() async {
         guard !isLoading, !isLoadingMore, !reachedEnd else { return }
         guard let last = sessions.last, let cursor = last.completedAt else { return }
@@ -62,7 +60,7 @@ final class HistoryViewModel {
         } catch let apiError as APIError where apiError == .unauthorized {
             await sessionManager.signOut()
         } catch {
-            Logger.data.error("HistoryViewModel.loadMore failed: \(error)")
+            Logger.data.error("StandaloneHistoryViewModel.loadMore failed: \(error)")
             loadError = error
         }
     }

@@ -112,6 +112,9 @@ private struct StartNextCard: View {
     let viewModel: HomeViewModel
     @Environment(LiveWorkoutPresentation.self) private var liveWorkout
     @State private var showPreview = false
+    /// "One active workout at a time" prompt — shown when Start is tapped
+    /// while a standalone session is still in progress.
+    @State private var showStandaloneConflict = false
 
     var body: some View {
         let program = viewModel.activeProgram!
@@ -151,10 +154,10 @@ private struct StartNextCard: View {
                 Spacer(minLength: 0)
 
                 Button {
-                    Task {
-                        if await viewModel.startNextWorkout() != nil {
-                            liveWorkout.present()
-                        }
+                    if viewModel.blockingStandaloneSession != nil {
+                        showStandaloneConflict = true
+                    } else {
+                        Task { await startAndPresent() }
                     }
                 } label: {
                     actionPill(
@@ -172,10 +175,41 @@ private struct StartNextCard: View {
                     actionPill("Preview workout", systemImage: "eye", tint: .secondary)
                 }
                 .buttonStyle(.plain)
+
+                if let startConflictError = viewModel.startConflictError {
+                    Text(startConflictError)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
             }
         }
         .sheet(isPresented: $showPreview) {
             WorkoutPreviewSheet(day: viewModel.nextWorkoutDay)
+        }
+        .alert("Workout in progress", isPresented: $showStandaloneConflict) {
+            Button("Complete it") {
+                Task {
+                    if await viewModel.resolveStandaloneSessions(discard: false) {
+                        await startAndPresent()
+                    }
+                }
+            }
+            Button("Discard it", role: .destructive) {
+                Task {
+                    if await viewModel.resolveStandaloneSessions(discard: true) {
+                        await startAndPresent()
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("You're in the middle of \(viewModel.blockingStandaloneSession?.standaloneWorkout.displayName ?? "a standalone workout"). Complete it or discard it to start your program workout.")
+        }
+    }
+
+    private func startAndPresent() async {
+        if await viewModel.startNextWorkout() != nil {
+            liveWorkout.present()
         }
     }
 }

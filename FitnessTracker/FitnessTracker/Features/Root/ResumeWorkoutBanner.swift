@@ -2,10 +2,10 @@ import SwiftUI
 
 /// Persistent "you have a workout in progress" pill anchored to the bottom
 /// safe-area inset of the TabView (Apple-Music-style). Tap surfaces the
-/// active workout. PR #7 wires the tap target to navigate into the live
-/// workout view; for now it's a no-op with an explicit log line.
+/// active workout — program or standalone; the subtitle identifies which
+/// ("Week 2 · Day 3" vs. the standalone workout's name).
 struct ResumeWorkoutBanner: View {
-    let session: ActiveWorkoutResponseDTO.ActiveWorkoutSession
+    let subtitle: String
     let onTap: () -> Void
 
     var body: some View {
@@ -20,9 +20,10 @@ struct ResumeWorkoutBanner: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Workout in progress")
                         .font(.subheadline.weight(.semibold))
-                    Text("Week \(session.weekNumber) · Day \(session.dayNumber)")
+                    Text(subtitle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
 
                 Spacer(minLength: 8)
@@ -41,7 +42,7 @@ struct ResumeWorkoutBanner: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Resume workout, week \(session.weekNumber), day \(session.dayNumber)")
+        .accessibilityLabel("Resume workout, \(subtitle)")
         .accessibilityHint("Opens the active workout")
     }
 }
