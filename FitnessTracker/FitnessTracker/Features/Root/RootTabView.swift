@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Top-level shell when the user is authenticated. Hosts the three primary
-/// tabs, the resume-workout banner, and the live-workout sheet.
+/// tabs, the resume-workout banner, and the live-workout cover (program or
+/// standalone, keyed by LiveWorkoutPresentation.target).
 ///
 /// Convention: each tab's NavigationStack lives at the tab level here.
 /// Tab content views (e.g. ProgramListView) should NOT wrap themselves in a
@@ -37,15 +38,12 @@ struct RootTabView: View {
         }
         .environment(tabSelection)
         .environment(liveWorkout)
-        .fullScreenCover(isPresented: $liveWorkout.isPresented) {
-            // Sheet dismissed → refresh the resume banner so it disappears
+        .fullScreenCover(item: $liveWorkout.target) {
+            // Cover dismissed → refresh the resume banner so it disappears
             // when the workout has been completed or abandoned.
             Task { await resumeViewModel?.refresh() }
-        } content: {
-            LiveWorkoutView(viewModel: LiveWorkoutViewModel(
-                repository: WorkoutRepository(apiClient: apiClient),
-                sessionManager: sessionManager
-            ))
+        } content: { target in
+            liveWorkoutCover(for: target)
         }
         .task {
             // Initialize lazily so we capture apiClient from the environment.
@@ -56,14 +54,38 @@ struct RootTabView: View {
         }
     }
 
+    @ViewBuilder
+    private func liveWorkoutCover(for target: LiveWorkoutPresentation.Target) -> some View {
+        switch target {
+        case .program:
+            LiveWorkoutView(viewModel: LiveWorkoutViewModel(
+                repository: WorkoutRepository(apiClient: apiClient),
+                sessionManager: sessionManager
+            ))
+        case .standalone(let sessionId):
+            StandaloneLiveWorkoutView(viewModel: StandaloneLiveWorkoutViewModel(
+                sessionId: sessionId,
+                repository: StandaloneWorkoutRepository(apiClient: apiClient),
+                sessionManager: sessionManager
+            ))
+        }
+    }
+
     /// Attaches the resume banner to a tab's *content* (not the TabView), so
     /// it docks in the content's bottom safe area — i.e. directly above the
     /// tab bar — instead of overlapping it.
     private func withResumeBanner<Content: View>(_ content: Content) -> some View {
         content.safeAreaInset(edge: .bottom, spacing: 0) {
-            if let session = resumeViewModel?.activeSession {
-                ResumeWorkoutBanner(session: session) {
-                    liveWorkout.present()
+            if let active = resumeViewModel?.activeWorkout {
+                switch active {
+                case .program(let session):
+                    ResumeWorkoutBanner(subtitle: "Week \(session.weekNumber) · Day \(session.dayNumber)") {
+                        liveWorkout.present()
+                    }
+                case .standalone(let session):
+                    ResumeWorkoutBanner(subtitle: session.standaloneWorkout.displayName) {
+                        liveWorkout.presentStandalone(sessionId: session.id)
+                    }
                 }
             }
         }

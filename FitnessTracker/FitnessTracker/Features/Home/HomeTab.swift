@@ -8,16 +8,19 @@ struct HomeTab: View {
         let homeRepo = HomeRepository(apiClient: apiClient)
         let historyRepo = HistoryRepository(apiClient: apiClient)
         let workoutRepo = WorkoutRepository(apiClient: apiClient)
+        let standaloneRepo = StandaloneWorkoutRepository(apiClient: apiClient)
         let viewModel = HomeViewModel(
             repository: homeRepo,
             historyRepository: historyRepo,
+            standaloneRepository: standaloneRepo,
             sessionManager: sessionManager
         )
         NavigationStack {
             HomeView(
                 viewModel: viewModel,
                 homeRepository: homeRepo,
-                workoutRepository: workoutRepo
+                workoutRepository: workoutRepo,
+                standaloneRepository: standaloneRepo
             )
         }
     }

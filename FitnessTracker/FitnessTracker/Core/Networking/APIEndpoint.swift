@@ -62,6 +62,21 @@ enum APIEndpoint {
     case completeCoreWorkout(sessionId: String, body: CompleteCoreWorkoutBody?)
     case deleteCoreWorkout(sessionId: String)
 
+    // Standalone workouts (catalog)
+    case getStandaloneWorkouts(category: String?)
+    case getStandaloneWorkout(id: String)
+
+    // Standalone workout sessions
+    case createStandaloneSession(CreateStandaloneSessionBody)
+    case getActiveStandaloneSessions
+    case getStandaloneSessionHistory(limit: Int?, before: Date?, beforeId: String?)
+    case getStandaloneSession(id: String)
+    case recordStandaloneSet(sessionId: String, body: RecordStandaloneSetBody)
+    case updateStandaloneSet(sessionId: String, setId: String, body: UpdateSetBody)
+    case deleteStandaloneSet(sessionId: String, setId: String)
+    case completeStandaloneSession(id: String, body: CompleteWorkoutBody?)
+    case abandonStandaloneSession(id: String)
+
     // Exercises
     case getExercises(search: String?)
     case getCoreExercises
@@ -138,6 +153,21 @@ extension APIEndpoint {
         case .completeCoreWorkout(let sessionId, _): return "/api/workouts/\(sessionId)/core-workout/complete"
         case .deleteCoreWorkout(let sessionId): return "/api/workouts/\(sessionId)/core-workout"
 
+        // Standalone workouts
+        case .getStandaloneWorkouts: return "/api/standalone-workouts"
+        case .getStandaloneWorkout(let id): return "/api/standalone-workouts/\(id)"
+        case .createStandaloneSession: return "/api/standalone-workout-sessions"
+        case .getActiveStandaloneSessions: return "/api/standalone-workout-sessions/active"
+        case .getStandaloneSessionHistory: return "/api/standalone-workout-sessions/history"
+        case .getStandaloneSession(let id): return "/api/standalone-workout-sessions/\(id)"
+        case .recordStandaloneSet(let sessionId, _): return "/api/standalone-workout-sessions/\(sessionId)/sets"
+        case .updateStandaloneSet(let sessionId, let setId, _):
+            return "/api/standalone-workout-sessions/\(sessionId)/sets/\(setId)"
+        case .deleteStandaloneSet(let sessionId, let setId):
+            return "/api/standalone-workout-sessions/\(sessionId)/sets/\(setId)"
+        case .completeStandaloneSession(let id, _): return "/api/standalone-workout-sessions/\(id)/complete"
+        case .abandonStandaloneSession(let id): return "/api/standalone-workout-sessions/\(id)"
+
         // Exercises
         case .getExercises: return "/api/exercises"
         case .getCoreExercises: return "/api/exercises/core"
@@ -167,6 +197,8 @@ extension APIEndpoint {
              .getUserPrograms, .getActiveUserProgram, .getActiveProgramSessions,
              .getScheduledWorkouts,
              .getActiveWorkout, .getWorkoutHistory, .getWorkout,
+             .getStandaloneWorkouts, .getStandaloneWorkout,
+             .getActiveStandaloneSessions, .getStandaloneSessionHistory, .getStandaloneSession,
              .getExercises, .getCoreExercises, .getExerciseNotes,
              .getDashboard, .getAnalyticsExercises, .getAnalyticsExercise,
              .getFeedback:
@@ -176,12 +208,14 @@ extension APIEndpoint {
              .saveProgram,
              .scheduleWorkout,
              .createWorkout, .recordSet, .addExtraSet, .swapExercise, .addAdHocSet,
+             .createStandaloneSession, .recordStandaloneSet,
              .registerDevice,
              .createFeedback:
             return .post
 
         case .activateProgram, .deactivateProgram,
              .updateWorkoutNotes, .updateWorkoutDate, .completeWorkout, .updateSet,
+             .updateStandaloneSet, .completeStandaloneSession,
              .completeCoreWorkout,
              .updateFeedback:
             return .patch
@@ -191,6 +225,7 @@ extension APIEndpoint {
 
         case .unsaveProgram, .unscheduleWorkout,
              .abandonWorkout, .deleteSet, .deleteExtraSet, .deleteCoreWorkout,
+             .deleteStandaloneSet, .abandonStandaloneSession,
              .unregisterDevice:
             return .delete
         }
@@ -214,6 +249,10 @@ extension APIEndpoint {
         case .addAdHocSet(_, let b): return b
         case .saveCoreWorkout(_, let b): return b
         case .completeCoreWorkout(_, let b): return b
+        case .createStandaloneSession(let b): return b
+        case .recordStandaloneSet(_, let b): return b
+        case .updateStandaloneSet(_, _, let b): return b
+        case .completeStandaloneSession(_, let b): return b
         case .updateExerciseNotes(_, let b): return b
         case .registerDevice(let b): return b
         case .updateFeedback(_, let b): return b
@@ -241,7 +280,8 @@ extension APIEndpoint {
             guard let tzOffsetMinutes else { return nil }
             return [URLQueryItem(name: "tzOffset", value: String(tzOffsetMinutes))]
 
-        case .getWorkoutHistory(let limit, let before, let beforeId):
+        case .getWorkoutHistory(let limit, let before, let beforeId),
+             .getStandaloneSessionHistory(let limit, let before, let beforeId):
             var items: [URLQueryItem] = []
             if let limit, limit > 0 {
                 items.append(URLQueryItem(name: "limit", value: String(limit)))
@@ -254,6 +294,10 @@ extension APIEndpoint {
                 items.append(URLQueryItem(name: "beforeId", value: beforeId))
             }
             return items.isEmpty ? nil : items
+
+        case .getStandaloneWorkouts(let category):
+            guard let category, !category.isEmpty else { return nil }
+            return [URLQueryItem(name: "category", value: category)]
 
         default:
             return nil
@@ -395,6 +439,44 @@ nonisolated struct SaveCoreWorkoutBody: Encodable, Sendable {
 /// an explicit timestamp; a nil body lets the server default to "now".
 nonisolated struct CompleteCoreWorkoutBody: Encodable, Sendable {
     let completedAt: Date
+}
+
+/// POST /api/standalone-workout-sessions.
+nonisolated struct CreateStandaloneSessionBody: Encodable, Sendable {
+    let standaloneWorkoutId: String
+}
+
+/// POST /api/standalone-workout-sessions/:id/sets. The server requires
+/// **exactly one** of `standaloneWorkoutSetId` / `adhocExerciseName`; nil
+/// optionals are omitted from the encoded JSON, so use the factory methods to
+/// keep the invariant instead of the memberwise init.
+nonisolated struct RecordStandaloneSetBody: Encodable, Sendable {
+    let standaloneWorkoutSetId: String?
+    let adhocExerciseName: String?
+    let reps: Int?
+    let weight: Double?
+    let rpe: Double?
+    let notes: String?
+
+    static func prescribed(
+        standaloneWorkoutSetId: String,
+        reps: Int?, weight: Double?, rpe: Double?, notes: String?
+    ) -> RecordStandaloneSetBody {
+        RecordStandaloneSetBody(
+            standaloneWorkoutSetId: standaloneWorkoutSetId, adhocExerciseName: nil,
+            reps: reps, weight: weight, rpe: rpe, notes: notes
+        )
+    }
+
+    static func adhoc(
+        exerciseName: String,
+        reps: Int?, weight: Double?, rpe: Double?, notes: String?
+    ) -> RecordStandaloneSetBody {
+        RecordStandaloneSetBody(
+            standaloneWorkoutSetId: nil, adhocExerciseName: exerciseName,
+            reps: reps, weight: weight, rpe: rpe, notes: notes
+        )
+    }
 }
 
 nonisolated struct UpdateExerciseNotesBody: Encodable, Sendable {
