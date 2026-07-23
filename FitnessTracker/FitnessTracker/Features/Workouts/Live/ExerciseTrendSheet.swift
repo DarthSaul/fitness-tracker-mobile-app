@@ -2,7 +2,8 @@ import SwiftUI
 
 /// Quick reference sheet showing recent session history for an exercise.
 /// Backed by GET /api/analytics/exercises/:id (the same endpoint M8's
-/// Analytics tab uses for the e1RM chart). Read-only, ordered most-recent-first.
+/// Analytics tab uses for the e1RM chart). The server returns history in
+/// chronological order for the chart; this sheet sorts most-recent-first.
 struct ExerciseTrendSheet: View {
     let exerciseId: String
     let exerciseName: String
@@ -13,6 +14,10 @@ struct ExerciseTrendSheet: View {
     @State private var history: AnalyticsExerciseHistoryDTO?
     @State private var isLoading = false
     @State private var loadError: String?
+
+    private var sortedHistory: [AnalyticsExerciseHistoryDTO.SessionEntry] {
+        history?.history.sorted { $0.completedAt > $1.completedAt } ?? []
+    }
 
     var body: some View {
         NavigationStack {
@@ -45,7 +50,7 @@ struct ExerciseTrendSheet: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                ForEach(history.history) { entry in
+                ForEach(sortedHistory) { entry in
                     SessionRow(entry: entry)
                 }
             }

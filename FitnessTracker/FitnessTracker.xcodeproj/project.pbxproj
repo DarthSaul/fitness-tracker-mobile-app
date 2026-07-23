@@ -10,6 +10,7 @@
 		6BAEF1F12FA7356800D96133 /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 6BAEF1F02FA7356800D96133 /* Sentry */; };
 		6BC0A0010000000000000004 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 6BC0A0010000000000000002 /* GoogleSignIn */; };
 		6BC0A0010000000000000005 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 6BC0A0010000000000000003 /* GoogleSignInSwift */; };
+		6BC0A0010000000000000008 /* BlurSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = 6BC0A0010000000000000007 /* BlurSwiftUI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -74,6 +75,7 @@
 				6BAEF1F12FA7356800D96133 /* Sentry in Frameworks */,
 				6BC0A0010000000000000004 /* GoogleSignIn in Frameworks */,
 				6BC0A0010000000000000005 /* GoogleSignInSwift in Frameworks */,
+				6BC0A0010000000000000008 /* BlurSwiftUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -138,6 +140,7 @@
 				6BAEF1F02FA7356800D96133 /* Sentry */,
 				6BC0A0010000000000000002 /* GoogleSignIn */,
 				6BC0A0010000000000000003 /* GoogleSignInSwift */,
+				6BC0A0010000000000000007 /* BlurSwiftUI */,
 			);
 			productName = FitnessTracker;
 			productReference = 6B3F86BC2FA727F900E010E4 /* FitnessTracker.app */;
@@ -224,6 +227,7 @@
 			packageReferences = (
 				6BAEF1EF2FA7356800D96133 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 				6BC0A0010000000000000001 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+				6BC0A0010000000000000006 /* XCRemoteSwiftPackageReference "BlurUIKit" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 6B3F86BD2FA727F900E010E4 /* Products */;
@@ -676,6 +680,14 @@
 				minimumVersion = 8.0.0;
 			};
 		};
+		6BC0A0010000000000000006 /* XCRemoteSwiftPackageReference "BlurUIKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/TimOliver/BlurUIKit";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.5.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -693,6 +705,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 6BC0A0010000000000000001 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignInSwift;
+		};
+		6BC0A0010000000000000007 /* BlurSwiftUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6BC0A0010000000000000006 /* XCRemoteSwiftPackageReference "BlurUIKit" */;
+			productName = BlurSwiftUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

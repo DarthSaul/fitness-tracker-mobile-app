@@ -19,6 +19,8 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
+                ScreenTitleHeader(title: "Home", emoji: "💪")
+
                 CalendarStripView(
                     selectedDate: Binding(
                         get: { viewModel.selectedDate },
@@ -78,9 +80,7 @@ struct HomeView: View {
             }
             .padding(.vertical, 12)
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            ScreenTitleHeader(title: "Home", emoji: "💪")
-        }
+        .scrollingTitleChrome(title: "Home")
         .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.load() }
         .refreshable { await viewModel.load() }

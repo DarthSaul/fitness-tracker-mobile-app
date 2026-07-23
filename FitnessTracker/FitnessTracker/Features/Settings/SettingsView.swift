@@ -21,6 +21,14 @@ struct SettingsView: View {
 
     var body: some View {
         List {
+            // In-flow title styled as a plain full-bleed row so it lines up
+            // with the other tabs' headers (its own padding provides the
+            // horizontal inset).
+            ScreenTitleHeader(title: "Settings", emoji: "⚙️")
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+
             Section { ProfileHeader(profile: sessionManager.userProfile) }
 
             Section("Preferences") {
@@ -61,12 +69,10 @@ struct SettingsView: View {
                 .disabled(isSigningOut)
             }
         }
-        // Match the Home tab's title → first-element gap (12pt); the default
-        // grouped-list top inset is otherwise inconsistent with other tabs.
+        // Match the Home tab's 12pt padding above the in-flow title; the
+        // default grouped-list top inset is otherwise inconsistent.
         .contentMargins(.top, 12, for: .scrollContent)
-        .safeAreaInset(edge: .top, spacing: 0) {
-            ScreenTitleHeader(title: "Settings", emoji: "⚙️")
-        }
+        .scrollingTitleChrome(title: "Settings")
         .toolbar(.hidden, for: .navigationBar)
     }
 

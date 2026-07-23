@@ -21,18 +21,23 @@ struct AnalyticsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                header
-                statsGrid
-                e1rmExplainer
-                exerciseSelector
-                exerciseDetail
+                ScreenTitleHeader(title: "Analytics", emoji: "📈")
+
+                // ScreenTitleHeader brings its own horizontal padding, so the
+                // rest of the content takes it per-child instead of on the
+                // whole stack.
+                Group {
+                    header
+                    statsGrid
+                    e1rmExplainer
+                    exerciseSelector
+                    exerciseDetail
+                }
+                .padding(.horizontal)
             }
-            .padding(.horizontal)
             .padding(.vertical, 12)
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            ScreenTitleHeader(title: "Analytics", emoji: "📈")
-        }
+        .scrollingTitleChrome(title: "Analytics")
         .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.load() }
         .refreshable { await viewModel.load() }

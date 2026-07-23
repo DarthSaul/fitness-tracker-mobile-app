@@ -301,7 +301,10 @@ private struct CoreExercisePickerSheet: View {
                             onPick(exercise)
                             dismiss()
                         } label: {
-                            Text(exercise.name).foregroundStyle(.primary)
+                            Text(exercise.name)
+                                .foregroundStyle(.primary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }
