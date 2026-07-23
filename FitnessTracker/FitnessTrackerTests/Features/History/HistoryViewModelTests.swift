@@ -5,17 +5,31 @@ import Testing
 @Suite("HistoryViewModel")
 @MainActor
 struct HistoryViewModelTests {
-    private func makeSession(
+    private func makeProgramEntry(
         id: String,
         completedAt: Date
-    ) -> HistorySessionDTO {
-        HistorySessionDTO(
+    ) -> HistoryEntryDTO {
+        .program(HistorySessionDTO(
             id: id, userId: "u1", userProgramId: "up1",
             programName: "Strength Base",
             weekNumber: 1, dayNumber: 1, status: .completed,
             startedAt: completedAt, completedAt: completedAt, notes: nil,
             count: HistorySessionDTO.Count(completedSets: 5)
-        )
+        ))
+    }
+
+    private func makeStandaloneEntry(
+        id: String,
+        completedAt: Date
+    ) -> HistoryEntryDTO {
+        .standalone(StandaloneSessionListItemDTO(
+            id: id, userId: "u1", standaloneWorkoutId: "sw1",
+            status: .completed, startedAt: completedAt, completedAt: completedAt, notes: nil,
+            count: StandaloneSessionListItemDTO.Count(completedSets: 3),
+            standaloneWorkout: StandaloneSessionListItemDTO.WorkoutRef(
+                id: "sw1", category: "KB Only", order: 1, name: nil
+            )
+        ))
     }
 
     private func makeViewModel(pageSize: Int = 2) -> (HistoryViewModel, MockAPIClient) {
@@ -28,20 +42,21 @@ struct HistoryViewModelTests {
         return (vm, client)
     }
 
-    @Test("load populates sessions and clears reachedEnd when full page returned")
+    @Test("load populates interleaved rows and clears reachedEnd when full page returned")
     func loadFullPage() async throws {
         let (vm, client) = makeViewModel(pageSize: 2)
-        let s1 = makeSession(id: "a", completedAt: Date(timeIntervalSince1970: 100))
-        let s2 = makeSession(id: "b", completedAt: Date(timeIntervalSince1970: 90))
+        let e1 = makeProgramEntry(id: "a", completedAt: Date(timeIntervalSince1970: 100))
+        let e2 = makeStandaloneEntry(id: "b", completedAt: Date(timeIntervalSince1970: 90))
         client.stub(
-            .getWorkoutHistory(limit: 2, before: nil, beforeId: nil),
-            response: WorkoutHistoryResponseDTO(sessions: [s1, s2])
+            .getHistory(type: nil, limit: 2, before: nil, beforeId: nil),
+            response: HistoryResponseDTO(sessions: [e1, e2])
         )
 
         await vm.load()
 
         #expect(vm.sessions.count == 2)
         #expect(vm.sessions[0].id == "a")
+        #expect(vm.sessions[1].id == "b")
         #expect(vm.reachedEnd == false)
         #expect(vm.loadError == nil)
     }
@@ -50,9 +65,9 @@ struct HistoryViewModelTests {
     func loadPartialPage() async throws {
         let (vm, client) = makeViewModel(pageSize: 5)
         client.stub(
-            .getWorkoutHistory(limit: 5, before: nil, beforeId: nil),
-            response: WorkoutHistoryResponseDTO(sessions: [
-                makeSession(id: "a", completedAt: Date(timeIntervalSince1970: 100))
+            .getHistory(type: nil, limit: 5, before: nil, beforeId: nil),
+            response: HistoryResponseDTO(sessions: [
+                makeProgramEntry(id: "a", completedAt: Date(timeIntervalSince1970: 100))
             ])
         )
 
@@ -62,31 +77,32 @@ struct HistoryViewModelTests {
         #expect(vm.reachedEnd == true)
     }
 
-    @Test("loadMore uses the last session's completedAt as cursor")
+    @Test("loadMore uses the last row's completedAt as cursor, across row types")
     func loadMoreCursor() async throws {
         let (vm, client) = makeViewModel(pageSize: 2)
         let firstPage = [
-            makeSession(id: "a", completedAt: Date(timeIntervalSince1970: 200)),
-            makeSession(id: "b", completedAt: Date(timeIntervalSince1970: 100)),
+            makeProgramEntry(id: "a", completedAt: Date(timeIntervalSince1970: 200)),
+            makeStandaloneEntry(id: "b", completedAt: Date(timeIntervalSince1970: 100)),
         ]
         let secondPage = [
-            makeSession(id: "c", completedAt: Date(timeIntervalSince1970: 50)),
+            makeProgramEntry(id: "c", completedAt: Date(timeIntervalSince1970: 50)),
         ]
         client.stub(
-            .getWorkoutHistory(limit: 2, before: nil, beforeId: nil),
-            response: WorkoutHistoryResponseDTO(sessions: firstPage)
+            .getHistory(type: nil, limit: 2, before: nil, beforeId: nil),
+            response: HistoryResponseDTO(sessions: firstPage)
         )
         await vm.load()
 
-        // Capture the cursor passed on the next fetch.
+        // Capture the cursor passed on the next fetch — the last row is a
+        // standalone entry, so the cursor must come through the shared accessors.
         var capturedBefore: Date?
         var capturedBeforeId: String?
-        client.handlers["GET /api/workouts/history"] = { endpoint in
-            if case .getWorkoutHistory(_, let before, let beforeId) = endpoint {
+        client.handlers["GET /api/history"] = { endpoint in
+            if case .getHistory(_, _, let before, let beforeId) = endpoint {
                 capturedBefore = before
                 capturedBeforeId = beforeId
             }
-            return try JSONCoding.encoder.encode(WorkoutHistoryResponseDTO(sessions: secondPage))
+            return try JSONCoding.encoder.encode(HistoryResponseDTO(sessions: secondPage))
         }
 
         await vm.loadMore()
@@ -101,9 +117,9 @@ struct HistoryViewModelTests {
     func loadMoreNoOpAtEnd() async throws {
         let (vm, client) = makeViewModel(pageSize: 5)
         client.stub(
-            .getWorkoutHistory(limit: 5, before: nil, beforeId: nil),
-            response: WorkoutHistoryResponseDTO(sessions: [
-                makeSession(id: "a", completedAt: Date(timeIntervalSince1970: 100))
+            .getHistory(type: nil, limit: 5, before: nil, beforeId: nil),
+            response: HistoryResponseDTO(sessions: [
+                makeProgramEntry(id: "a", completedAt: Date(timeIntervalSince1970: 100))
             ])
         )
         await vm.load()
@@ -111,9 +127,9 @@ struct HistoryViewModelTests {
 
         // Replace the handler with one that explodes if called — guard ensures
         // loadMore actually short-circuits.
-        client.handlers["GET /api/workouts/history"] = { _ in
+        client.handlers["GET /api/history"] = { _ in
             Issue.record("loadMore should not call the API after reachedEnd")
-            throw APIError.missingHandler(path: "/api/workouts/history")
+            throw APIError.missingHandler(path: "/api/history")
         }
 
         await vm.loadMore()

@@ -1,11 +1,13 @@
 import SwiftUI
 
 /// Recent-history section on the home page. Renders up to 5 rows from
-/// `HomeViewModel.recentHistory`, each a NavigationLink into the read-only
-/// WorkoutDetailView, plus a "View all history" button that flips the tab.
+/// `HomeViewModel.recentHistory` — program and standalone completions
+/// interleaved — each a NavigationLink into the read-only detail view for its
+/// type, plus a "View all history" button that flips the tab.
 struct HomeRecentHistorySection: View {
-    let recentHistory: [HistorySessionDTO]
+    let recentHistory: [HistoryEntryDTO]
     let workoutRepository: WorkoutRepository
+    let standaloneRepository: StandaloneWorkoutRepository
     /// Suppresses the "completed workouts will show up here" hint until the
     /// initial fetch has completed — avoids flashing empty-state copy while
     /// recent history is still loading on a fresh sign-in.
@@ -29,15 +31,12 @@ struct HomeRecentHistorySection: View {
                 }
             } else {
                 VStack(spacing: 0) {
-                    ForEach(Array(recentHistory.enumerated()), id: \.element.id) { index, session in
+                    ForEach(Array(recentHistory.enumerated()), id: \.element.id) { index, entry in
                         NavigationLink {
-                            WorkoutDetailView(viewModel: WorkoutDetailViewModel(
-                                workoutId: session.id,
-                                repository: workoutRepository
-                            ))
+                            detailDestination(for: entry)
                         } label: {
                             HStack {
-                                HistoryRow(session: session)
+                                HistoryRow(entry: entry)
                                 Image(systemName: "chevron.right")
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.tertiary)
@@ -68,6 +67,22 @@ struct HomeRecentHistorySection: View {
                 .padding(.horizontal)
                 .padding(.top, 4)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func detailDestination(for entry: HistoryEntryDTO) -> some View {
+        switch entry {
+        case .program(let session):
+            WorkoutDetailView(viewModel: WorkoutDetailViewModel(
+                workoutId: session.id,
+                repository: workoutRepository
+            ))
+        case .standalone(let session):
+            StandaloneSessionDetailView(viewModel: StandaloneSessionDetailViewModel(
+                sessionId: session.id,
+                repository: standaloneRepository
+            ))
         }
     }
 }

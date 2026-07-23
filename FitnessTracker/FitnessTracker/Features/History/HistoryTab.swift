@@ -7,9 +7,14 @@ struct HistoryTab: View {
     var body: some View {
         let historyRepo = HistoryRepository(apiClient: apiClient)
         let workoutRepo = WorkoutRepository(apiClient: apiClient)
+        let standaloneRepo = StandaloneWorkoutRepository(apiClient: apiClient)
         let viewModel = HistoryViewModel(repository: historyRepo, sessionManager: sessionManager)
         NavigationStack {
-            HistoryView(viewModel: viewModel, workoutRepository: workoutRepo)
+            HistoryView(
+                viewModel: viewModel,
+                workoutRepository: workoutRepo,
+                standaloneRepository: standaloneRepo
+            )
         }
     }
 }

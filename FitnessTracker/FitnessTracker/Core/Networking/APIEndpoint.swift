@@ -39,7 +39,9 @@ enum APIEndpoint {
 
     // Workouts
     case getActiveWorkout
-    case getWorkoutHistory(limit: Int?, before: Date?, beforeId: String?)
+    /// Unified history across program and standalone completions. `type`
+    /// narrows to one kind; nil interleaves both, newest first.
+    case getHistory(type: HistoryTypeFilter?, limit: Int?, before: Date?, beforeId: String?)
     case createWorkout(CreateWorkoutBody?)
     case getWorkout(id: String)
     case abandonWorkout(id: String)
@@ -69,7 +71,6 @@ enum APIEndpoint {
     // Standalone workout sessions
     case createStandaloneSession(CreateStandaloneSessionBody)
     case getActiveStandaloneSessions
-    case getStandaloneSessionHistory(limit: Int?, before: Date?, beforeId: String?)
     case getStandaloneSession(id: String)
     case recordStandaloneSet(sessionId: String, body: RecordStandaloneSetBody)
     case updateStandaloneSet(sessionId: String, setId: String, body: UpdateSetBody)
@@ -132,7 +133,7 @@ extension APIEndpoint {
 
         // Workouts
         case .getActiveWorkout: return "/api/workouts/active"
-        case .getWorkoutHistory: return "/api/workouts/history"
+        case .getHistory: return "/api/history"
         case .createWorkout: return "/api/workouts"
         case .getWorkout(let id): return "/api/workouts/\(id)"
         case .abandonWorkout(let id): return "/api/workouts/\(id)"
@@ -158,7 +159,6 @@ extension APIEndpoint {
         case .getStandaloneWorkout(let id): return "/api/standalone-workouts/\(id)"
         case .createStandaloneSession: return "/api/standalone-workout-sessions"
         case .getActiveStandaloneSessions: return "/api/standalone-workout-sessions/active"
-        case .getStandaloneSessionHistory: return "/api/standalone-workout-sessions/history"
         case .getStandaloneSession(let id): return "/api/standalone-workout-sessions/\(id)"
         case .recordStandaloneSet(let sessionId, _): return "/api/standalone-workout-sessions/\(sessionId)/sets"
         case .updateStandaloneSet(let sessionId, let setId, _):
@@ -196,9 +196,9 @@ extension APIEndpoint {
              .getPrograms, .getProgram, .getProgramDay,
              .getUserPrograms, .getActiveUserProgram, .getActiveProgramSessions,
              .getScheduledWorkouts,
-             .getActiveWorkout, .getWorkoutHistory, .getWorkout,
+             .getActiveWorkout, .getHistory, .getWorkout,
              .getStandaloneWorkouts, .getStandaloneWorkout,
-             .getActiveStandaloneSessions, .getStandaloneSessionHistory, .getStandaloneSession,
+             .getActiveStandaloneSessions, .getStandaloneSession,
              .getExercises, .getCoreExercises, .getExerciseNotes,
              .getDashboard, .getAnalyticsExercises, .getAnalyticsExercise,
              .getFeedback:
@@ -280,9 +280,11 @@ extension APIEndpoint {
             guard let tzOffsetMinutes else { return nil }
             return [URLQueryItem(name: "tzOffset", value: String(tzOffsetMinutes))]
 
-        case .getWorkoutHistory(let limit, let before, let beforeId),
-             .getStandaloneSessionHistory(let limit, let before, let beforeId):
+        case .getHistory(let type, let limit, let before, let beforeId):
             var items: [URLQueryItem] = []
+            if let type {
+                items.append(URLQueryItem(name: "type", value: type.rawValue))
+            }
             if let limit, limit > 0 {
                 items.append(URLQueryItem(name: "limit", value: String(limit)))
             }
@@ -339,6 +341,15 @@ extension APIEndpoint {
     private static func iso8601String(_ date: Date) -> String {
         iso8601Formatter.string(from: date)
     }
+}
+
+// MARK: - Query Types
+
+/// `?type=` filter for GET /api/history. Lowercase on the wire, per the
+/// endpoint contract (unlike the uppercase response-side enums).
+nonisolated enum HistoryTypeFilter: String, Sendable {
+    case program
+    case standalone
 }
 
 // MARK: - Request Body Types

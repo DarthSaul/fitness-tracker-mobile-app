@@ -137,22 +137,32 @@ struct StandaloneWorkoutRepositoryTests {
 
     // MARK: - History
 
-    @Test("fetchHistory passes the cursor pair together")
+    @Test("fetchHistory hits the unified endpoint with the standalone filter and cursor pair")
     func historyCursor() async throws {
         let client = MockAPIClient()
         let cursor = Date(timeIntervalSince1970: 1_700_000_000)
-        client.handlers["GET /api/standalone-workout-sessions/history"] = { endpoint in
-            guard case .getStandaloneSessionHistory(let limit, let before, let beforeId) = endpoint else {
+        let completed = StandaloneSessionListItemDTO(
+            id: "ss1", userId: "u1", standaloneWorkoutId: "sw1",
+            status: .completed, startedAt: cursor, completedAt: cursor, notes: nil,
+            count: StandaloneSessionListItemDTO.Count(completedSets: 5),
+            standaloneWorkout: StandaloneSessionListItemDTO.WorkoutRef(
+                id: "sw1", category: "Arms Only", order: 1, name: nil
+            )
+        )
+        client.handlers["GET /api/history"] = { endpoint in
+            guard case .getHistory(let type, let limit, let before, let beforeId) = endpoint else {
                 throw APIError.missingHandler(path: "unexpected endpoint")
             }
+            #expect(type == .standalone)
             #expect(limit == 20)
             #expect(before == cursor)
             #expect(beforeId == "ss9")
-            return try JSONCoding.encoder.encode(StandaloneSessionListResponseDTO(sessions: []))
+            return try JSONCoding.encoder.encode(HistoryResponseDTO(sessions: [.standalone(completed)]))
         }
         let repo = StandaloneWorkoutRepository(apiClient: client)
 
         let page = try await repo.fetchHistory(limit: 20, before: cursor, beforeId: "ss9")
-        #expect(page.isEmpty)
+        // Unified rows unwrap back to the typed standalone list items.
+        #expect(page.map(\.id) == ["ss1"])
     }
 }

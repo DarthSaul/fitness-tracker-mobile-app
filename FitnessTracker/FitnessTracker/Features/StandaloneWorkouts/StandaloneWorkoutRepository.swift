@@ -48,13 +48,18 @@ final class StandaloneWorkoutRepository {
         try await apiClient.send(.getStandaloneSession(id: id))
     }
 
-    /// GET /api/standalone-workout-sessions/history — completed sessions,
+    /// GET /api/history?type=standalone — completed standalone sessions,
     /// `completedAt DESC, id DESC`, cursor pair passed together or not at all.
+    /// Uses the unified history endpoint; with the type filter every row is
+    /// standalone, so non-standalone rows (impossible today) are dropped.
     func fetchHistory(limit: Int? = nil, before: Date? = nil, beforeId: String? = nil) async throws -> [StandaloneSessionListItemDTO] {
-        let response: StandaloneSessionListResponseDTO = try await apiClient.send(
-            .getStandaloneSessionHistory(limit: limit, before: before, beforeId: beforeId)
+        let response: HistoryResponseDTO = try await apiClient.send(
+            .getHistory(type: .standalone, limit: limit, before: before, beforeId: beforeId)
         )
-        return response.sessions
+        return response.sessions.compactMap { entry in
+            if case .standalone(let session) = entry { return session }
+            return nil
+        }
     }
 
     // MARK: - Set logging

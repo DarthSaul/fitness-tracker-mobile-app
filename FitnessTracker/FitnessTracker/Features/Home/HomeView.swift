@@ -81,6 +81,7 @@ struct HomeView: View {
                 HomeRecentHistorySection(
                     recentHistory: viewModel.recentHistory,
                     workoutRepository: workoutRepository,
+                    standaloneRepository: standaloneRepository,
                     hasLoadedOnce: viewModel.hasLoadedOnce
                 )
 

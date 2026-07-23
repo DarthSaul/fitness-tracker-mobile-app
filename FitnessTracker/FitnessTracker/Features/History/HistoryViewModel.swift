@@ -6,7 +6,9 @@ import OSLog
 @MainActor
 final class HistoryViewModel {
     // MARK: - State
-    var sessions: [HistorySessionDTO] = []
+    /// Unified rows — program and standalone completions interleaved
+    /// chronologically (GET /api/history with no type filter).
+    var sessions: [HistoryEntryDTO] = []
     var isLoading = false
     var isLoadingMore = false
     var loadError: Error?

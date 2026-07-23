@@ -38,15 +38,16 @@ struct StandaloneHistoryViewModelTests {
         let page1 = [makeCompleted(id: "ss1", completedAt: t1), makeCompleted(id: "ss2", completedAt: t2)]
         let page2 = [makeCompleted(id: "ss3", completedAt: t3)]
 
-        client.handlers["GET /api/standalone-workout-sessions/history"] = { endpoint in
-            guard case .getStandaloneSessionHistory(_, let before, let beforeId) = endpoint else {
+        client.handlers["GET /api/history"] = { endpoint in
+            guard case .getHistory(let type, _, let before, let beforeId) = endpoint else {
                 throw APIError.missingHandler(path: "unexpected endpoint")
             }
+            #expect(type == .standalone)
             if before == nil {
-                return try JSONCoding.encoder.encode(StandaloneSessionListResponseDTO(sessions: page1))
+                return try JSONCoding.encoder.encode(HistoryResponseDTO(sessions: page1.map { .standalone($0) }))
             }
             #expect(beforeId == "ss2")
-            return try JSONCoding.encoder.encode(StandaloneSessionListResponseDTO(sessions: page2))
+            return try JSONCoding.encoder.encode(HistoryResponseDTO(sessions: page2.map { .standalone($0) }))
         }
         let vm = makeViewModel(client: client, pageSize: 2)
 

@@ -1,13 +1,21 @@
 import SwiftUI
 
 /// Full-list workout history. Hosted by HistoryTab inside a NavigationStack.
+/// Program and standalone completions interleave chronologically (unified
+/// GET /api/history); rows push the matching detail view for their type.
 struct HistoryView: View {
     @State private var viewModel: HistoryViewModel
     private let workoutRepository: WorkoutRepository
+    private let standaloneRepository: StandaloneWorkoutRepository
 
-    init(viewModel: HistoryViewModel, workoutRepository: WorkoutRepository) {
+    init(
+        viewModel: HistoryViewModel,
+        workoutRepository: WorkoutRepository,
+        standaloneRepository: StandaloneWorkoutRepository
+    ) {
         _viewModel = State(initialValue: viewModel)
         self.workoutRepository = workoutRepository
+        self.standaloneRepository = standaloneRepository
     }
 
     var body: some View {
@@ -18,12 +26,6 @@ struct HistoryView: View {
             .toolbar(.hidden, for: .navigationBar)
             .task { if viewModel.sessions.isEmpty { await viewModel.load() } }
             .refreshable { await viewModel.load() }
-            .navigationDestination(for: String.self) { workoutId in
-                WorkoutDetailView(viewModel: WorkoutDetailViewModel(
-                    workoutId: workoutId,
-                    repository: workoutRepository
-                ))
-            }
     }
 
     @ViewBuilder
@@ -59,12 +61,14 @@ struct HistoryView: View {
                     .padding(.top, 12)
 
                 List {
-                ForEach(viewModel.sessions) { session in
-                    NavigationLink(value: session.id) {
-                        HistoryRow(session: session)
+                ForEach(viewModel.sessions) { entry in
+                    NavigationLink {
+                        detailDestination(for: entry)
+                    } label: {
+                        HistoryRow(entry: entry)
                     }
                     .onAppear {
-                        if session.id == viewModel.sessions.last?.id, !viewModel.isLoadingMore {
+                        if entry.id == viewModel.sessions.last?.id, !viewModel.isLoadingMore {
                             Task { await viewModel.loadMore() }
                         }
                     }
@@ -88,6 +92,22 @@ struct HistoryView: View {
                 // subtitle → content spacing used on the Analytics tab (16pt).
                 .contentMargins(.top, 16, for: .scrollContent)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func detailDestination(for entry: HistoryEntryDTO) -> some View {
+        switch entry {
+        case .program(let session):
+            WorkoutDetailView(viewModel: WorkoutDetailViewModel(
+                workoutId: session.id,
+                repository: workoutRepository
+            ))
+        case .standalone(let session):
+            StandaloneSessionDetailView(viewModel: StandaloneSessionDetailViewModel(
+                sessionId: session.id,
+                repository: standaloneRepository
+            ))
         }
     }
 }

@@ -1,12 +1,8 @@
 import Foundation
 
-/// GET /api/workouts/history returns sessions wrapped under "sessions".
-/// Each entry is a completed WorkoutSession enriched with `_count.completedSets`
-/// and the originating program's name.
-nonisolated struct WorkoutHistoryResponseDTO: Codable, Sendable, Equatable {
-    let sessions: [HistorySessionDTO]
-}
-
+/// One completed program-workout session enriched with `_count.completedSets`
+/// and the originating program's name. Appears as the `"type": "PROGRAM"`
+/// payload of GET /api/history rows (see HistoryEntryDTO).
 nonisolated struct HistorySessionDTO: Codable, Sendable, Equatable, Identifiable {
     let id: String
     let userId: String

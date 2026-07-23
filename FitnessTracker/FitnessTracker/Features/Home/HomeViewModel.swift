@@ -14,9 +14,9 @@ final class HomeViewModel {
     /// time across program and standalone, so a non-empty list blocks "Start
     /// next workout" until the user completes or discards it.
     var activeStandaloneSessions: [StandaloneSessionListItemDTO] = []
-    /// 5 most-recent completed sessions across all programs, surfaced in the
-    /// Home page "History" preview list.
-    var recentHistory: [HistorySessionDTO] = []
+    /// 5 most-recent completed sessions — program and standalone interleaved
+    /// (unified GET /api/history) — surfaced in the Home "History" preview.
+    var recentHistory: [HistoryEntryDTO] = []
 
     var selectedDate: Date = HomeViewModel.startOfDay(.now)
     var isLoading = false

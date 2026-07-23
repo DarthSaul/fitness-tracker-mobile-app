@@ -85,8 +85,8 @@ struct HomeViewModelTests {
             response: ActiveProgramSessionsResponseDTO(sessions: sessions)
         )
         client.stub(
-            .getWorkoutHistory(limit: 5, before: nil, beforeId: nil),
-            response: WorkoutHistoryResponseDTO(sessions: [])
+            .getHistory(type: nil, limit: 5, before: nil, beforeId: nil),
+            response: HistoryResponseDTO(sessions: [])
         )
         client.stub(
             .getActiveStandaloneSessions,
