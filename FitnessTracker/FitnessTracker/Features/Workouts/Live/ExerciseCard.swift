@@ -229,6 +229,11 @@ struct ExerciseCard: View {
 
             Button {
                 viewModel.toggleMarkedComplete(programExerciseId: exercise.id)
+                // Marking complete collapses the panel; un-completing leaves
+                // it as-is so the user can keep editing sets.
+                if viewModel.isMarkedComplete(programExerciseId: exercise.id) {
+                    isExpanded = false
+                }
             } label: {
                 Text(isMarkedComplete ? "Completed" : "Complete")
                     .font(.subheadline.weight(.medium))
