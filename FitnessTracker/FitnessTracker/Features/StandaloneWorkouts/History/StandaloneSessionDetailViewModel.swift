@@ -12,10 +12,12 @@ final class StandaloneSessionDetailViewModel {
     var loadError: Error?
 
     private let repository: StandaloneWorkoutRepository
+    private let sessionManager: SessionManager
 
-    init(sessionId: String, repository: StandaloneWorkoutRepository) {
+    init(sessionId: String, repository: StandaloneWorkoutRepository, sessionManager: SessionManager) {
         self.sessionId = sessionId
         self.repository = repository
+        self.sessionManager = sessionManager
     }
 
     func load() async {
@@ -24,6 +26,8 @@ final class StandaloneSessionDetailViewModel {
         defer { isLoading = false }
         do {
             detail = try await repository.fetchSession(id: sessionId)
+        } catch let apiError as APIError where apiError == .unauthorized {
+            await sessionManager.signOut()
         } catch {
             Logger.data.error("StandaloneSessionDetailViewModel.load failed: \(error)")
             loadError = error

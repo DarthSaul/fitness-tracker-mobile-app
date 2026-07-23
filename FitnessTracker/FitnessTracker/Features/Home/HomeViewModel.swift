@@ -259,6 +259,10 @@ final class HomeViewModel {
     func resolveStandaloneSessions(discard: Bool) async -> Bool {
         startConflictError = nil
         do {
+            // Iterate a snapshot and drop each session from the published list
+            // as soon as it's resolved, so a mid-loop failure leaves only the
+            // unresolved sessions behind — a retry won't re-complete (and 409
+            // on) sessions that already went through.
             for session in activeStandaloneSessions {
                 if discard {
                     try await standaloneRepository.abandonSession(id: session.id)
@@ -266,8 +270,8 @@ final class HomeViewModel {
                     _ = try await standaloneRepository.completeSession(id: session.id)
                 }
                 markedCompleteStore.clear(sessionId: session.id)
+                activeStandaloneSessions.removeAll { $0.id == session.id }
             }
-            activeStandaloneSessions = []
             return true
         } catch let apiError as APIError where apiError == .unauthorized {
             await sessionManager.signOut()

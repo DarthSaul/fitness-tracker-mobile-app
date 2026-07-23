@@ -55,11 +55,23 @@ struct HomeViewModelTests {
         )
     }
 
+    private func makeStandaloneSession(id: String, workoutId: String = "sw1") -> StandaloneSessionListItemDTO {
+        StandaloneSessionListItemDTO(
+            id: id, userId: "u1", standaloneWorkoutId: workoutId,
+            status: .inProgress, startedAt: .now, completedAt: nil, notes: nil,
+            count: StandaloneSessionListItemDTO.Count(completedSets: 2),
+            standaloneWorkout: StandaloneSessionListItemDTO.WorkoutRef(
+                id: workoutId, category: "Arms Only", order: 1, name: nil
+            )
+        )
+    }
+
     private func makeViewModel(
         active: ActiveUserProgramDTO? = nil,
         sessions: [ActiveProgramSessionDTO] = [],
         scheduled: [ScheduledWorkoutDTO] = [],
-        activeWorkout: ActiveWorkoutResponseDTO? = nil
+        activeWorkout: ActiveWorkoutResponseDTO? = nil,
+        activeStandalone: [StandaloneSessionListItemDTO] = []
     ) -> (HomeViewModel, MockAPIClient) {
         let client = MockAPIClient()
         if let active {
@@ -90,7 +102,7 @@ struct HomeViewModelTests {
         )
         client.stub(
             .getActiveStandaloneSessions,
-            response: StandaloneSessionListResponseDTO(sessions: [])
+            response: StandaloneSessionListResponseDTO(sessions: activeStandalone)
         )
 
         let repo = HomeRepository(apiClient: client)
@@ -288,5 +300,73 @@ struct HomeViewModelTests {
         let key = HomeViewModel.dayKey(date)
         #expect(key.hasPrefix("2026-05-"))
         #expect(key.count == 10)
+    }
+
+    // MARK: - Standalone conflict (one active workout at a time)
+
+    @Test("blockingStandaloneSession surfaces the newest active standalone session")
+    func blockingStandaloneSurfaces() async throws {
+        let (vm, _) = makeViewModel(activeStandalone: [
+            makeStandaloneSession(id: "ss1"),
+            makeStandaloneSession(id: "ss2", workoutId: "sw2")
+        ])
+        await vm.load()
+
+        #expect(vm.blockingStandaloneSession?.id == "ss1")
+    }
+
+    @Test("resolveStandaloneSessions(discard:) abandons every session and clears the list")
+    func resolveByDiscard() async throws {
+        let (vm, client) = makeViewModel(activeStandalone: [makeStandaloneSession(id: "ss1")])
+        await vm.load()
+        client.stub(.abandonStandaloneSession(id: "ss1"), response: ["success": true])
+
+        #expect(await vm.resolveStandaloneSessions(discard: true))
+        #expect(vm.activeStandaloneSessions.isEmpty)
+        #expect(vm.blockingStandaloneSession == nil)
+        #expect(vm.startConflictError == nil)
+    }
+
+    @Test("resolveStandaloneSessions completes sessions when not discarding")
+    func resolveByComplete() async throws {
+        let (vm, client) = makeViewModel(activeStandalone: [makeStandaloneSession(id: "ss1")])
+        await vm.load()
+        client.stub(
+            .completeStandaloneSession(id: "ss1", body: nil),
+            response: StandaloneSessionResponseDTO(session: StandaloneWorkoutSessionDTO(
+                id: "ss1", userId: "u1", standaloneWorkoutId: "sw1",
+                status: .completed, startedAt: .now, completedAt: .now, notes: nil
+            ))
+        )
+
+        #expect(await vm.resolveStandaloneSessions(discard: false))
+        #expect(vm.activeStandaloneSessions.isEmpty)
+    }
+
+    @Test("a mid-loop failure keeps only the unresolved sessions for retry")
+    func resolvePartialFailure() async throws {
+        let (vm, client) = makeViewModel(activeStandalone: [
+            makeStandaloneSession(id: "ss1"),
+            makeStandaloneSession(id: "ss2", workoutId: "sw2")
+        ])
+        await vm.load()
+        client.stub(.abandonStandaloneSession(id: "ss1"), response: ["success": true])
+        client.handlers["DELETE /api/standalone-workout-sessions/ss2"] = { _ in
+            throw APIError.httpError(statusCode: 500, message: "boom", data: Data())
+        }
+
+        #expect(await vm.resolveStandaloneSessions(discard: true) == false)
+        // ss1 resolved and removed; ss2 failed and stays for a retry.
+        #expect(vm.activeStandaloneSessions.map(\.id) == ["ss2"])
+        #expect(vm.startConflictError != nil)
+    }
+
+    @Test("unauthorized during resolve returns false")
+    func resolveUnauthorized() async throws {
+        let (vm, client) = makeViewModel(activeStandalone: [makeStandaloneSession(id: "ss1")])
+        await vm.load()
+        client.stubUnauthorized(for: .abandonStandaloneSession(id: "ss1"))
+
+        #expect(await vm.resolveStandaloneSessions(discard: true) == false)
     }
 }

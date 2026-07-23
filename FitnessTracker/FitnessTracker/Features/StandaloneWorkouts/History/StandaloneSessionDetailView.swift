@@ -128,7 +128,10 @@ private struct CompletedStandaloneExerciseRow: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        // Built once per render — looked up inside the ForEach, the computed
+        // property would rebuild the whole dictionary for every set row.
+        let completedByTemplateId = self.completedByTemplateId
+        return VStack(alignment: .leading, spacing: 6) {
             Text(exercise.exercise.name)
                 .font(.headline)
             ForEach(exercise.sets, id: \.id) { templateSet in

@@ -5,6 +5,7 @@ import SwiftUI
 /// GET /api/history); rows push the matching detail view for their type.
 struct HistoryView: View {
     @State private var viewModel: HistoryViewModel
+    @Environment(SessionManager.self) private var sessionManager
     private let workoutRepository: WorkoutRepository
     private let standaloneRepository: StandaloneWorkoutRepository
 
@@ -106,7 +107,8 @@ struct HistoryView: View {
         case .standalone(let session):
             StandaloneSessionDetailView(viewModel: StandaloneSessionDetailViewModel(
                 sessionId: session.id,
-                repository: standaloneRepository
+                repository: standaloneRepository,
+                sessionManager: sessionManager
             ))
         }
     }

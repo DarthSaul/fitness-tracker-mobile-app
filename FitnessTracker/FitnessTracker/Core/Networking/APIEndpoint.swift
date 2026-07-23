@@ -469,6 +469,20 @@ nonisolated struct RecordStandaloneSetBody: Encodable, Sendable {
     let rpe: Double?
     let notes: String?
 
+    // Private so callers can't hand-build a body with both or neither
+    // discriminator — the factories below are the only way in.
+    private init(
+        standaloneWorkoutSetId: String?, adhocExerciseName: String?,
+        reps: Int?, weight: Double?, rpe: Double?, notes: String?
+    ) {
+        self.standaloneWorkoutSetId = standaloneWorkoutSetId
+        self.adhocExerciseName = adhocExerciseName
+        self.reps = reps
+        self.weight = weight
+        self.rpe = rpe
+        self.notes = notes
+    }
+
     static func prescribed(
         standaloneWorkoutSetId: String,
         reps: Int?, weight: Double?, rpe: Double?, notes: String?

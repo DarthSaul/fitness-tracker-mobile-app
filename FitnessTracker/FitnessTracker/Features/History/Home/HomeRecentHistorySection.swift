@@ -13,6 +13,7 @@ struct HomeRecentHistorySection: View {
     /// recent history is still loading on a fresh sign-in.
     let hasLoadedOnce: Bool
     @Environment(TabSelection.self) private var tabSelection
+    @Environment(SessionManager.self) private var sessionManager
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -81,7 +82,8 @@ struct HomeRecentHistorySection: View {
         case .standalone(let session):
             StandaloneSessionDetailView(viewModel: StandaloneSessionDetailViewModel(
                 sessionId: session.id,
-                repository: standaloneRepository
+                repository: standaloneRepository,
+                sessionManager: sessionManager
             ))
         }
     }

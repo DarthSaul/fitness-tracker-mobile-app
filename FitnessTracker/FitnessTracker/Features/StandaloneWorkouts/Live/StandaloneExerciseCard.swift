@@ -72,8 +72,8 @@ struct StandaloneExerciseCard: View {
             if let restSeconds, restSeconds > 0 {
                 restChip(seconds: restSeconds)
             }
-            chip(label: "Trend", systemImage: "chart.line.uptrend.xyaxis", action: deferredTrend)
-            chip(label: "Notes", systemImage: "note.text", action: deferredNotes)
+            chip(label: "Trend", systemImage: "chart.line.uptrend.xyaxis") { deferred(onShowTrend) }
+            chip(label: "Notes", systemImage: "note.text") { deferred(onShowNotes) }
         }
     }
 
@@ -198,17 +198,10 @@ struct StandaloneExerciseCard: View {
     /// Defer state changes that fire from inside Button taps so the
     /// presentation animation has time to settle before any sheet pops up
     /// (avoids the `_UIReparentingView` warning — same trick as ExerciseCard).
-    private func deferredTrend() {
+    private func deferred(_ action: @escaping () -> Void) {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(80))
-            onShowTrend()
-        }
-    }
-
-    private func deferredNotes() {
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(80))
-            onShowNotes()
+            action()
         }
     }
 }

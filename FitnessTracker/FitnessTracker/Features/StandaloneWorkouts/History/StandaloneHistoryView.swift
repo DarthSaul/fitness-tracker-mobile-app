@@ -4,6 +4,7 @@ import SwiftUI
 /// from the browse screen's toolbar clock, inside the Home NavigationStack.
 struct StandaloneHistoryView: View {
     @State private var viewModel: StandaloneHistoryViewModel
+    @Environment(SessionManager.self) private var sessionManager
     private let repository: StandaloneWorkoutRepository
 
     init(viewModel: StandaloneHistoryViewModel, repository: StandaloneWorkoutRepository) {
@@ -46,7 +47,8 @@ struct StandaloneHistoryView: View {
                         StandaloneSessionDetailView(
                             viewModel: StandaloneSessionDetailViewModel(
                                 sessionId: session.id,
-                                repository: repository
+                                repository: repository,
+                                sessionManager: sessionManager
                             )
                         )
                     } label: {

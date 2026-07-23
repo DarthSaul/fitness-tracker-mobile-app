@@ -28,9 +28,15 @@ final class StandaloneLiveWorkoutViewModel {
     /// `MarkedCompleteStore` (keyed by session id) — same as the program flow.
     private(set) var markedCompleteExerciseIds: Set<String> = []
 
-    var isLoading = false
+    /// Starts true so the cover's first frame renders the spinner instead of
+    /// flashing the "no active workout" empty state before `.task` runs load().
+    var isLoading = true
     var isCompleting = false
     var isAbandoning = false
+    /// In-flight guard for `addAdhocExercise` — rapid taps on a search-sheet
+    /// row would otherwise fire concurrent POSTs and create duplicate ad-hoc
+    /// sets (the server allows any number of same-named logs).
+    private(set) var isAddingAdhocExercise = false
     var loadError: String?
     var actionError: String?
 
@@ -251,6 +257,9 @@ final class StandaloneLiveWorkoutViewModel {
 
     /// "Add exercise" — a bare ad-hoc set for an off-plan exercise name.
     func addAdhocExercise(name: String) async {
+        guard !isAddingAdhocExercise else { return }
+        isAddingAdhocExercise = true
+        defer { isAddingAdhocExercise = false }
         actionError = nil
         do {
             let created = try await repository.recordAdhocSet(sessionId: sessionId, exerciseName: name)
