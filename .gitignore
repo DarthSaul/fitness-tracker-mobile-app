@@ -79,3 +79,6 @@ vendor/bundle/
 
 # Sentry CLI auth — contains an org auth token, never check in
 .sentryclirc
+
+# Claude Code worktrees — scratch checkouts, never check in
+.claude/worktrees/
