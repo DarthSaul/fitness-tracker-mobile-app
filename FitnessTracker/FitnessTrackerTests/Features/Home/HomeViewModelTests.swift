@@ -66,12 +66,40 @@ struct HomeViewModelTests {
         )
     }
 
+    private func makeProgramHistoryEntry(
+        id: String, completedAt: Date?, userProgramId: String = "up1"
+    ) -> HistoryEntryDTO {
+        .program(HistorySessionDTO(
+            id: id, userId: "u1", userProgramId: userProgramId,
+            programName: "Test Program",
+            weekNumber: 1, dayNumber: 1, status: .completed,
+            startedAt: completedAt ?? .now, completedAt: completedAt, notes: nil,
+            count: HistorySessionDTO.Count(completedSets: 5)
+        ))
+    }
+
+    private func makeStandaloneHistoryEntry(
+        id: String, completedAt: Date?
+    ) -> HistoryEntryDTO {
+        .standalone(StandaloneSessionListItemDTO(
+            id: id, userId: "u1", standaloneWorkoutId: "sw1",
+            status: .completed, startedAt: completedAt ?? .now, completedAt: completedAt, notes: nil,
+            count: StandaloneSessionListItemDTO.Count(completedSets: 3),
+            standaloneWorkout: StandaloneSessionListItemDTO.WorkoutRef(
+                id: "sw1", category: "KB Only", order: 1, name: nil
+            )
+        ))
+    }
+
     private func makeViewModel(
         active: ActiveUserProgramDTO? = nil,
         sessions: [ActiveProgramSessionDTO] = [],
         scheduled: [ScheduledWorkoutDTO] = [],
         activeWorkout: ActiveWorkoutResponseDTO? = nil,
-        activeStandalone: [StandaloneSessionListItemDTO] = []
+        activeStandalone: [StandaloneSessionListItemDTO] = [],
+        historyPageSize: Int = 50,
+        historyMaxPageCount: Int = 10,
+        calendarWeeksBack: Int = 52
     ) -> (HomeViewModel, MockAPIClient) {
         let client = MockAPIClient()
         if let active {
@@ -96,8 +124,11 @@ struct HomeViewModelTests {
             .getActiveProgramSessions,
             response: ActiveProgramSessionsResponseDTO(sessions: sessions)
         )
+        // MockAPIClient keys handlers by "GET /api/history" only, so this one
+        // stub answers every page request; the empty page ends the paging loop
+        // after a single call. Paging tests install their own closure handler.
         client.stub(
-            .getHistory(type: nil, limit: 5, before: nil, beforeId: nil),
+            .getHistory(type: nil, limit: historyPageSize, before: nil, beforeId: nil),
             response: HistoryResponseDTO(sessions: [])
         )
         client.stub(
@@ -113,7 +144,10 @@ struct HomeViewModelTests {
             repository: repo,
             historyRepository: historyRepo,
             standaloneRepository: standaloneRepo,
-            sessionManager: session
+            sessionManager: session,
+            historyPageSize: historyPageSize,
+            historyMaxPageCount: historyMaxPageCount,
+            calendarWeeksBack: calendarWeeksBack
         )
         return (vm, client)
     }
@@ -187,40 +221,46 @@ struct HomeViewModelTests {
         #expect(vm.schedule(forWeek: 1, day: 1) == nil)
     }
 
-    @Test("completedSessionForSelectedDate matches a completed session by calendar day")
+    @Test("completedEntriesForSelectedDate returns every completion on the day, across types")
     func completedForSelectedDate() async throws {
+        // Anchor at local noon so the one-hour offset below can't cross a
+        // day boundary in any timezone.
         let past = Date(timeIntervalSince1970: 1_700_000_000)
-        let pastSession = ActiveProgramSessionDTO(
-            id: "sp", userId: "u1", userProgramId: "up1",
-            weekNumber: 1, dayNumber: 1, status: .completed,
-            startedAt: past, completedAt: past, notes: nil,
-            count: ActiveProgramSessionDTO.Count(completedSets: 7)
-        )
-        let (vm, _) = makeViewModel(active: makeActiveProgram(), sessions: [pastSession])
-        vm.sessions = [pastSession]
+        let noon = Calendar.current.date(bySettingHour: 12, minute: 0, second: 0, of: past)!
+        let (vm, _) = makeViewModel(active: makeActiveProgram())
+        vm.history = [
+            makeProgramHistoryEntry(id: "hp", completedAt: noon),
+            makeStandaloneHistoryEntry(id: "hs", completedAt: noon.addingTimeInterval(-3600)),
+        ]
 
-        vm.selectedDate = Calendar.current.startOfDay(for: past)
-        #expect(vm.completedSessionForSelectedDate?.id == "sp")
-        #expect(vm.completedSessionForSelectedDate?.count.completedSets == 7)
+        vm.selectedDate = Calendar.current.startOfDay(for: noon)
+        #expect(vm.completedEntriesForSelectedDate.map(\.id) == ["hp", "hs"])
 
-        // A different day has no completed session.
+        // A different day has no completed sessions.
         vm.selectedDate = Calendar.current.startOfDay(for: .now)
-        #expect(vm.completedSessionForSelectedDate == nil)
+        #expect(vm.completedEntriesForSelectedDate.isEmpty)
     }
 
-    @Test("an in-progress session on the selected date is not treated as completed")
-    func inProgressNotCompleted() async throws {
-        let past = Date(timeIntervalSince1970: 1_700_000_000)
-        let inProgress = ActiveProgramSessionDTO(
-            id: "sip", userId: "u1", userProgramId: "up1",
-            weekNumber: 1, dayNumber: 1, status: .inProgress,
-            startedAt: past, completedAt: nil, notes: nil,
-            count: ActiveProgramSessionDTO.Count(completedSets: 2)
-        )
+    @Test("history entries without a completedAt are excluded from keys and day entries")
+    func nilCompletedAtExcluded() async throws {
         let (vm, _) = makeViewModel(active: makeActiveProgram())
-        vm.sessions = [inProgress]
-        vm.selectedDate = Calendar.current.startOfDay(for: past)
-        #expect(vm.completedSessionForSelectedDate == nil)
+        vm.history = [makeStandaloneHistoryEntry(id: "hs", completedAt: nil)]
+        vm.selectedDate = Calendar.current.startOfDay(for: Date(timeIntervalSince1970: 1_700_000_000))
+        #expect(vm.completedEntriesForSelectedDate.isEmpty)
+        #expect(vm.completedDateKeys.isEmpty)
+    }
+
+    @Test("completedDateKeys come from unified history, mixing program and standalone")
+    func completedKeysFromHistory() async throws {
+        let dayA = Date(timeIntervalSince1970: 1_700_000_000)
+        let dayB = dayA.addingTimeInterval(-86_400 * 3)
+        // No active program at all — highlights must not depend on one.
+        let (vm, _) = makeViewModel()
+        vm.history = [
+            makeProgramHistoryEntry(id: "h1", completedAt: dayA, userProgramId: "up-old"),
+            makeStandaloneHistoryEntry(id: "h2", completedAt: dayB),
+        ]
+        #expect(vm.completedDateKeys == [HomeViewModel.dayKey(dayA), HomeViewModel.dayKey(dayB)])
     }
 
     @Test("isSelectedDateInFuture is true only for dates after today")
@@ -232,6 +272,114 @@ struct HomeViewModelTests {
         #expect(vm.isSelectedDateInFuture == false)
         vm.selectedDate = Calendar.current.startOfDay(for: .now)
         #expect(vm.isSelectedDateInFuture == false)
+    }
+
+    // MARK: - History paging
+
+    @Test("recentHistory is the first five rows of the accumulated history")
+    func recentHistoryPrefix() async throws {
+        let (vm, client) = makeViewModel()
+        let entries = (0..<7).map { i in
+            makeProgramHistoryEntry(id: "h\(i)", completedAt: Date(timeIntervalSinceNow: -Double(i) * 86_400))
+        }
+        client.stub(
+            .getHistory(type: nil, limit: 50, before: nil, beforeId: nil),
+            response: HistoryResponseDTO(sessions: entries)
+        )
+
+        await vm.load()
+
+        #expect(vm.history.count == 7)
+        #expect(vm.recentHistory.map(\.id) == ["h0", "h1", "h2", "h3", "h4"])
+    }
+
+    @Test("paging carries the composite cursor forward and stops on a short page")
+    func historyPaging() async throws {
+        let (vm, client) = makeViewModel(historyPageSize: 2)
+        // Whole-second dates survive the encode/decode round trip exactly, so
+        // the captured cursor can be compared against the fixture directly.
+        let now = Date(timeIntervalSince1970: Date().timeIntervalSince1970.rounded())
+        let page1 = [
+            makeProgramHistoryEntry(id: "a", completedAt: now.addingTimeInterval(-86_400)),
+            makeStandaloneHistoryEntry(id: "b", completedAt: now.addingTimeInterval(-2 * 86_400)),
+        ]
+        let page2 = [makeProgramHistoryEntry(id: "c", completedAt: now.addingTimeInterval(-3 * 86_400))]
+        var calls: [(before: Date?, beforeId: String?)] = []
+        client.handlers["GET /api/history"] = { endpoint in
+            guard case .getHistory(_, _, let before, let beforeId) = endpoint else {
+                throw APIError.missingHandler(path: "GET /api/history")
+            }
+            calls.append((before, beforeId))
+            let page = before == nil ? page1 : page2
+            return try JSONCoding.encoder.encode(HistoryResponseDTO(sessions: page))
+        }
+
+        await vm.load()
+
+        #expect(calls.count == 2)
+        #expect(calls.last?.before == now.addingTimeInterval(-2 * 86_400))
+        #expect(calls.last?.beforeId == "b")
+        #expect(vm.history.map(\.id) == ["a", "b", "c"])
+    }
+
+    @Test("paging stops once a full page reaches past the calendar window")
+    func historyPagingCutoff() async throws {
+        let (vm, client) = makeViewModel(historyPageSize: 2, calendarWeeksBack: 1)
+        var callCount = 0
+        let page = [
+            makeProgramHistoryEntry(id: "a", completedAt: Date(timeIntervalSinceNow: -86_400)),
+            // Past the 1(+1 slack)-week window — a full page ending here must
+            // still be kept whole, but no further page requested.
+            makeStandaloneHistoryEntry(id: "b", completedAt: Date(timeIntervalSinceNow: -30 * 86_400)),
+        ]
+        client.handlers["GET /api/history"] = { _ in
+            callCount += 1
+            return try JSONCoding.encoder.encode(HistoryResponseDTO(sessions: page))
+        }
+
+        await vm.load()
+
+        #expect(callCount == 1)
+        #expect(vm.history.map(\.id) == ["a", "b"])
+    }
+
+    @Test("paging stops at the page cap")
+    func historyPagingCap() async throws {
+        let (vm, client) = makeViewModel(historyPageSize: 2, historyMaxPageCount: 3)
+        var callCount = 0
+        client.handlers["GET /api/history"] = { _ in
+            callCount += 1
+            let base = -Double(callCount) * 86_400
+            return try JSONCoding.encoder.encode(HistoryResponseDTO(sessions: [
+                self.makeProgramHistoryEntry(id: "p\(callCount)-1", completedAt: Date(timeIntervalSinceNow: base)),
+                self.makeProgramHistoryEntry(id: "p\(callCount)-2", completedAt: Date(timeIntervalSinceNow: base - 3600)),
+            ]))
+        }
+
+        await vm.load()
+
+        #expect(callCount == 3)
+        #expect(vm.history.count == 6)
+    }
+
+    @Test("a history fetch failure is non-fatal and keeps prior data")
+    func historyFailureNonFatal() async throws {
+        let (vm, client) = makeViewModel(active: makeActiveProgram())
+        client.handlers["GET /api/history"] = { _ in
+            throw APIError.httpError(statusCode: 500, message: nil, data: Data())
+        }
+
+        await vm.load()
+
+        #expect(vm.loadError == nil)
+        #expect(vm.hasActiveProgram == true)
+        #expect(vm.history.isEmpty)
+
+        // A failed refresh keeps the previously loaded history rather than
+        // blanking the calendar.
+        vm.history = [makeProgramHistoryEntry(id: "keep", completedAt: .now)]
+        await vm.load()
+        #expect(vm.history.map(\.id) == ["keep"])
     }
 
     // MARK: - Schedule mutations
