@@ -18,10 +18,21 @@ nonisolated struct AnalyticsExerciseHistoryDTO: Codable, Sendable, Equatable {
     }
 
     nonisolated struct SessionEntry: Codable, Sendable, Equatable, Identifiable {
+        /// `type` discriminator values. Kept as a plain string (not an enum) so
+        /// servers that predate the field — or add future values — never fail
+        /// the whole trend payload.
+        static let programType = "PROGRAM"
+        static let standaloneType = "STANDALONE"
+
         let sessionId: String
         let completedAt: Date
-        let weekNumber: Int
-        let dayNumber: Int
+        /// "PROGRAM" | "STANDALONE"; nil from servers that predate the field.
+        let type: String?
+        /// nil for standalone-session entries — they have no program position.
+        let weekNumber: Int?
+        let dayNumber: Int?
+        /// Standalone workout name/category; nil for program entries.
+        let workoutLabel: String?
         let sets: [SessionSet]
         let bestE1rm: Double?
         let totalVolume: Double?

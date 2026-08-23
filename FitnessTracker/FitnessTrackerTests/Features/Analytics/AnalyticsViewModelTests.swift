@@ -29,7 +29,9 @@ struct AnalyticsViewModelTests {
         AnalyticsExerciseHistoryDTO(
             exercise: .init(id: id, name: name),
             history: [
-                .init(sessionId: "s1", completedAt: .now, weekNumber: 1, dayNumber: 1,
+                .init(sessionId: "s1", completedAt: .now,
+                      type: AnalyticsExerciseHistoryDTO.SessionEntry.programType,
+                      weekNumber: 1, dayNumber: 1, workoutLabel: nil,
                       sets: [], bestE1rm: 200, totalVolume: 1000)
             ]
         )
