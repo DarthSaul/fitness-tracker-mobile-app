@@ -32,7 +32,9 @@ struct AnalyticsRepositoryTests {
                 .init(
                     sessionId: "s1",
                     completedAt: Date(timeIntervalSince1970: 1_700_000_000),
+                    type: AnalyticsExerciseHistoryDTO.SessionEntry.programType,
                     weekNumber: 1, dayNumber: 1,
+                    workoutLabel: nil,
                     sets: [.init(reps: 5, weight: 225, e1rm: 262.5)],
                     bestE1rm: 262.5,
                     totalVolume: 1125
