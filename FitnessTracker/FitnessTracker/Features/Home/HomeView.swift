@@ -44,13 +44,19 @@ struct HomeView: View {
                 Group {
                     if viewModel.isViewingToday {
                         HomeTodayCard(viewModel: viewModel)
-                    } else if let completed = viewModel.completedSessionForSelectedDate {
-                        // Past date with a completed workout → show a preview.
-                        HomeCompletedCard(
-                            viewModel: viewModel,
-                            session: completed,
-                            workoutRepository: workoutRepository
-                        )
+                    } else if !viewModel.completedEntriesForSelectedDate.isEmpty {
+                        // Past date with completed workout(s) → one card per
+                        // session (a program and a standalone can share a day).
+                        VStack(spacing: 12) {
+                            ForEach(viewModel.completedEntriesForSelectedDate) { entry in
+                                HomeCompletedCard(
+                                    viewModel: viewModel,
+                                    entry: entry,
+                                    workoutRepository: workoutRepository,
+                                    standaloneRepository: standaloneRepository
+                                )
+                            }
+                        }
                     } else if viewModel.isSelectedDateInFuture {
                         // Future date → scheduling lives here.
                         HomeScheduledCard(viewModel: viewModel) {

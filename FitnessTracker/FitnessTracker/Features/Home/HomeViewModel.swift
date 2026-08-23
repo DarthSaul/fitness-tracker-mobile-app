@@ -14,9 +14,11 @@ final class HomeViewModel {
     /// time across program and standalone, so a non-empty list blocks "Start
     /// next workout" until the user completes or discards it.
     var activeStandaloneSessions: [StandaloneSessionListItemDTO] = []
-    /// 5 most-recent completed sessions — program and standalone interleaved
-    /// (unified GET /api/history) — surfaced in the Home "History" preview.
-    var recentHistory: [HistoryEntryDTO] = []
+    /// Completed sessions — program and standalone interleaved, newest first —
+    /// accumulated by paging the unified GET /api/history back to the calendar
+    /// strip's window. Drives the calendar's completed-day highlights, the
+    /// selected-day completed cards, and the Home "History" preview.
+    var history: [HistoryEntryDTO] = []
 
     var selectedDate: Date = HomeViewModel.startOfDay(.now)
     var isLoading = false
@@ -39,6 +41,9 @@ final class HomeViewModel {
     private let sessionManager: SessionManager
     private let calendar: Calendar
     private let recentHistoryLimit: Int
+    private let historyPageSize: Int
+    private let historyMaxPageCount: Int
+    private let calendarWeeksBack: Int
     /// Cleans up the device-local per-exercise "complete" flags when a
     /// standalone session is finalized from the conflict prompt.
     private let markedCompleteStore = MarkedCompleteStore()
@@ -49,7 +54,10 @@ final class HomeViewModel {
         standaloneRepository: StandaloneWorkoutRepository,
         sessionManager: SessionManager,
         calendar: Calendar = .current,
-        recentHistoryLimit: Int = 5
+        recentHistoryLimit: Int = 5,
+        historyPageSize: Int = 50,
+        historyMaxPageCount: Int = 10,
+        calendarWeeksBack: Int = 52
     ) {
         self.repository = repository
         self.historyRepository = historyRepository
@@ -57,6 +65,9 @@ final class HomeViewModel {
         self.sessionManager = sessionManager
         self.calendar = calendar
         self.recentHistoryLimit = recentHistoryLimit
+        self.historyPageSize = historyPageSize
+        self.historyMaxPageCount = historyMaxPageCount
+        self.calendarWeeksBack = calendarWeeksBack
     }
 
     // MARK: - Derived state
@@ -111,13 +122,19 @@ final class HomeViewModel {
         calendar.startOfDay(for: selectedDate) > calendar.startOfDay(for: .now)
     }
 
-    /// Completed session (if any) for the selected date, used to show a workout
-    /// preview when the user taps a past date. Drawn from the active program's
-    /// sessions (unbounded), not the 5-item recent-history preview.
-    var completedSessionForSelectedDate: ActiveProgramSessionDTO? {
-        sessions.first {
-            $0.status == .completed
-                && ($0.completedAt.map { calendar.isDate($0, inSameDayAs: selectedDate) } ?? false)
+    /// First `recentHistoryLimit` rows of the accumulated history — the Home
+    /// "History" preview. Pages accumulate newest-first, so the prefix equals
+    /// what a dedicated limit-N fetch would return.
+    var recentHistory: [HistoryEntryDTO] {
+        Array(history.prefix(recentHistoryLimit))
+    }
+
+    /// All completed sessions (program + standalone) on the selected calendar
+    /// day, newest first. The past-date view renders one card per entry — a
+    /// program session and a standalone session can share a day.
+    var completedEntriesForSelectedDate: [HistoryEntryDTO] {
+        history.filter {
+            $0.completedAt.map { calendar.isDate($0, inSameDayAs: selectedDate) } ?? false
         }
     }
 
@@ -137,11 +154,12 @@ final class HomeViewModel {
     }
 
     /// Day-string keys ("yyyy-MM-dd") for dates with a completed session, used by
-    /// the calendar to mark days the user finished a workout.
+    /// the calendar to mark days the user finished a workout. Built from the
+    /// unified history so standalone and prior-program completions count too —
+    /// history rows are completed by definition, so no status filter is needed.
     var completedDateKeys: Set<String> {
-        Set(sessions.compactMap { session in
-            guard session.status == .completed, let completedAt = session.completedAt else { return nil }
-            return Self.dayKey(completedAt, calendar: calendar)
+        Set(history.compactMap { entry in
+            entry.completedAt.map { Self.dayKey($0, calendar: calendar) }
         })
     }
 
@@ -166,10 +184,10 @@ final class HomeViewModel {
             async let activeProgramTask = repository.fetchActiveUserProgram()
             async let activeWorkoutTask = repository.fetchActiveWorkout()
             async let sessionsTask = repository.fetchActiveProgramSessions()
-            // Kicked off in parallel but awaited below — recent history and
-            // standalone sessions are secondary to the dashboard, so their
-            // failure shouldn't blank out the rest of the page.
-            async let recentHistoryTask = historyRepository.fetchHistory(limit: recentHistoryLimit, before: nil)
+            // Kicked off in parallel but awaited below — history and standalone
+            // sessions are secondary to the dashboard, so their failure
+            // shouldn't blank out the rest of the page.
+            async let historyTask = fetchCalendarHistory()
             async let standaloneSessionsTask = standaloneRepository.fetchActiveSessions()
             let (program, workout, sessions) = try await (activeProgramTask, activeWorkoutTask, sessionsTask)
             self.activeProgram = program
@@ -177,9 +195,11 @@ final class HomeViewModel {
             self.sessions = sessions
 
             do {
-                self.recentHistory = try await recentHistoryTask
+                // Assigned only when the whole paging loop succeeds — on a
+                // refresh failure, stale highlights beat blanked ones.
+                self.history = try await historyTask
             } catch {
-                Logger.data.error("Failed to fetch recent history: \(error)")
+                Logger.data.error("Failed to fetch history: \(error)")
             }
 
             do {
@@ -306,6 +326,45 @@ final class HomeViewModel {
     }
 
     // MARK: - Helpers
+
+    /// Oldest date the calendar strip can display. The strip pages -52 weeks
+    /// from the start of the CURRENT WEEK — up to 6 days before today minus 52
+    /// weeks — so one extra week of slack covers the earliest visible week.
+    /// The month sheet can browse further back; days beyond this window are
+    /// accepted as unhighlighted.
+    private var calendarCutoff: Date {
+        let today = calendar.startOfDay(for: .now)
+        return calendar.date(byAdding: .weekOfYear, value: -(calendarWeeksBack + 1), to: today) ?? .distantPast
+    }
+
+    /// Pages GET /api/history newest-first until the server is exhausted
+    /// (short page — the wire has no hasMore field), rows predate the calendar
+    /// window, or the safety cap is hit.
+    private func fetchCalendarHistory() async throws -> [HistoryEntryDTO] {
+        let cutoff = calendarCutoff
+        var accumulated: [HistoryEntryDTO] = []
+        var cursor: (before: Date, id: String)?
+        for _ in 0..<historyMaxPageCount {
+            let page = try await historyRepository.fetchHistory(
+                limit: historyPageSize,
+                before: cursor?.before,
+                beforeId: cursor?.id
+            )
+            accumulated.append(contentsOf: page)
+            // A nil completedAt shouldn't occur on /api/history, but without it
+            // the server's (before, beforeId) cursor pair can't be formed —
+            // stop rather than loop.
+            guard page.count >= historyPageSize,
+                  let last = page.last, let lastCompletedAt = last.completedAt
+            else { break }
+            // Newest-first: once this page's oldest row predates the window,
+            // everything older is off-screen. The boundary page is kept whole —
+            // extra too-old rows are harmless, their day keys never render.
+            if lastCompletedAt < cutoff { break }
+            cursor = (lastCompletedAt, last.id)
+        }
+        return accumulated
+    }
 
     private func refreshScheduled() async {
         guard let userProgramId = activeProgram?.id else { return }
