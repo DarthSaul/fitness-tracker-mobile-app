@@ -38,6 +38,21 @@ nonisolated struct AnalyticsExerciseHistoryDTO: Codable, Sendable, Equatable {
         let totalVolume: Double?
 
         var id: String { sessionId }
+
+        /// Program entries show their program position ("W1 · D2"); standalone
+        /// entries show the workout's name/category instead. Nil hides the label.
+        var contextLabel: String? {
+            if let week = weekNumber, let day = dayNumber {
+                return "W\(week) · D\(day)"
+            }
+            if type == Self.standaloneType {
+                if let workoutLabel, !workoutLabel.isEmpty {
+                    return workoutLabel
+                }
+                return "Standalone"
+            }
+            return workoutLabel
+        }
     }
 
     nonisolated struct SessionSet: Codable, Sendable, Equatable {

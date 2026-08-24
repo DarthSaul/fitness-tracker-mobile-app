@@ -47,12 +47,14 @@ struct AnalyticsExerciseDTOTests {
         #expect(program.weekNumber == 2)
         #expect(program.dayNumber == 3)
         #expect(program.workoutLabel == nil)
+        #expect(program.contextLabel == "W2 · D3")
 
         let standalone = dto.history[1]
         #expect(standalone.type == AnalyticsExerciseHistoryDTO.SessionEntry.standaloneType)
         #expect(standalone.weekNumber == nil)
         #expect(standalone.dayNumber == nil)
         #expect(standalone.workoutLabel == "KB Only #1")
+        #expect(standalone.contextLabel == "KB Only #1")
         #expect(standalone.bestE1rm == 67.1)
     }
 
@@ -84,6 +86,7 @@ struct AnalyticsExerciseDTOTests {
         #expect(dto.history[0].workoutLabel == nil)
         #expect(dto.history[0].weekNumber == 1)
         #expect(dto.history[0].dayNumber == 1)
+        #expect(dto.history[0].contextLabel == "W1 · D1")
     }
 
     @Test("an unrecognized future type value decodes rather than failing the payload")
@@ -111,5 +114,58 @@ struct AnalyticsExerciseDTOTests {
 
         #expect(dto.history[0].type == "CORE")
         #expect(dto.history[0].workoutLabel == "Core circuit")
+        #expect(dto.history[0].contextLabel == "Core circuit")
+    }
+
+    @Test("standalone entry without a workout label falls back to Standalone")
+    func standaloneEntryWithoutLabelFallsBack() throws {
+        let json = #"""
+        {
+          "exercise": { "id": "e1", "name": "Goblet Squat" },
+          "history": [
+            {
+              "sessionId": "s1",
+              "completedAt": "2026-08-12T18:00:00Z",
+              "type": "STANDALONE",
+              "weekNumber": null,
+              "dayNumber": null,
+              "workoutLabel": null,
+              "sets": [],
+              "bestE1rm": null,
+              "totalVolume": null
+            }
+          ]
+        }
+        """#.data(using: .utf8)!
+
+        let dto = try decoder.decode(AnalyticsExerciseHistoryDTO.self, from: json)
+
+        #expect(dto.history[0].contextLabel == "Standalone")
+    }
+
+    @Test("standalone entry with an empty workout label falls back to Standalone")
+    func standaloneEntryWithEmptyLabelFallsBack() throws {
+        let json = #"""
+        {
+          "exercise": { "id": "e1", "name": "Goblet Squat" },
+          "history": [
+            {
+              "sessionId": "s1",
+              "completedAt": "2026-08-12T18:00:00Z",
+              "type": "STANDALONE",
+              "weekNumber": null,
+              "dayNumber": null,
+              "workoutLabel": "",
+              "sets": [],
+              "bestE1rm": null,
+              "totalVolume": null
+            }
+          ]
+        }
+        """#.data(using: .utf8)!
+
+        let dto = try decoder.decode(AnalyticsExerciseHistoryDTO.self, from: json)
+
+        #expect(dto.history[0].contextLabel == "Standalone")
     }
 }

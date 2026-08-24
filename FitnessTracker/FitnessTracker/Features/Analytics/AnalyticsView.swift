@@ -346,7 +346,7 @@ private struct SessionRow: View {
                 Text(AnalyticsView.formatSessionDate(session.completedAt))
                     .font(.subheadline.weight(.medium))
                 Spacer()
-                if let contextLabel {
+                if let contextLabel = session.contextLabel {
                     Text(contextLabel)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -375,18 +375,6 @@ private struct SessionRow: View {
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
-    }
-
-    /// Program entries show their program position ("W1 · D2"); standalone
-    /// entries show the workout's name/category instead. Nil hides the label.
-    private var contextLabel: String? {
-        if let week = session.weekNumber, let day = session.dayNumber {
-            return "W\(week) · D\(day)"
-        }
-        if session.type == AnalyticsExerciseHistoryDTO.SessionEntry.standaloneType {
-            return session.workoutLabel ?? "Standalone"
-        }
-        return session.workoutLabel
     }
 
     private func setLine(_ s: AnalyticsExerciseHistoryDTO.SessionSet) -> String {
