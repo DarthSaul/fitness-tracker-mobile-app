@@ -85,9 +85,11 @@ private struct SessionRow: View {
                 Text(formattedDate)
                     .font(.subheadline.weight(.medium))
                 Spacer()
-                Text("W\(entry.weekNumber) · D\(entry.dayNumber)")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if let contextLabel = entry.contextLabel {
+                    Text(contextLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             ForEach(Array(entry.sets.enumerated()), id: \.offset) { _, sessionSet in
                 HStack {
