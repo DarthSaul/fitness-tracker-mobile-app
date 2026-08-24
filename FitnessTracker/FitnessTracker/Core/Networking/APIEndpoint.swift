@@ -17,6 +17,11 @@ enum APIEndpoint {
     case refreshToken(RefreshTokenBody)
     case logout
     case getMe
+    /// Permanently deletes the account and all server data. The server
+    /// cascades identities, workout history, programs, refresh tokens, and
+    /// device tokens in one operation — do NOT follow up with `.logout` or
+    /// `.unregisterDevice` (both would 401 against the deleted account).
+    case deleteAccount
 
     // Programs
     case getPrograms
@@ -111,6 +116,7 @@ extension APIEndpoint {
         case .refreshToken: return "/api/auth/refresh"
         case .logout: return "/api/auth/logout"
         case .getMe: return "/api/auth/me"
+        case .deleteAccount: return "/api/auth/me"
 
         // Programs
         case .getPrograms: return "/api/programs"
@@ -226,7 +232,7 @@ extension APIEndpoint {
         case .unsaveProgram, .unscheduleWorkout,
              .abandonWorkout, .deleteSet, .deleteExtraSet, .deleteCoreWorkout,
              .deleteStandaloneSet, .abandonStandaloneSession,
-             .unregisterDevice:
+             .unregisterDevice, .deleteAccount:
             return .delete
         }
     }

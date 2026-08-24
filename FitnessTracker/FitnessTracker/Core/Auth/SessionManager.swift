@@ -104,6 +104,33 @@ final class SessionManager {
         SentrySDK.setUser(nil)
     }
 
+    // MARK: - Delete Account
+    /// DELETE /api/auth/me, then run the full local sign-out teardown
+    /// (Keychain, token store, profile, authState, Sentry). A 404 means the
+    /// account is already gone (a retried delete, or deletion from another
+    /// device) and is treated as success. On any other error this rethrows
+    /// WITHOUT touching local state — the Keychain is only cleared once the
+    /// server has confirmed the account no longer exists.
+    func deleteAccount() async throws(APIError) {
+        guard let apiClient else {
+            // Unlike loadProfile(), a silent return here would read as a
+            // successful deletion — throw instead. Unreachable in practice:
+            // the app shell wires apiClient before any UI exists.
+            Logger.auth.error("deleteAccount called before apiClient was wired")
+            throw APIError.unknown(URLError(.unknown))
+        }
+        Logger.auth.info("Deleting account…")
+        do throws(APIError) {
+            try await apiClient.send(.deleteAccount)
+        } catch APIError.httpError(let statusCode, _, _) where statusCode == 404 {
+            Logger.auth.info("Delete account: 404 — already deleted; proceeding with teardown.")
+        }
+        // Server confirmed the account is gone (200 or 404) — now, and only
+        // now, clear local state. The server already revoked refresh tokens
+        // and device registrations, so no logout/unregister calls follow.
+        await signOut()
+    }
+
     // MARK: - Authenticated Transition
     func didSignIn(accessToken: String, refreshToken: String) async throws {
         // Persist first. If the Keychain save fails, throw before we mutate
