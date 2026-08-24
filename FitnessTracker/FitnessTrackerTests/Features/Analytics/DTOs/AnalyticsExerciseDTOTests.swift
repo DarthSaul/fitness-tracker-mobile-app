@@ -142,4 +142,30 @@ struct AnalyticsExerciseDTOTests {
 
         #expect(dto.history[0].contextLabel == "Standalone")
     }
+
+    @Test("standalone entry with an empty workout label falls back to Standalone")
+    func standaloneEntryWithEmptyLabelFallsBack() throws {
+        let json = #"""
+        {
+          "exercise": { "id": "e1", "name": "Goblet Squat" },
+          "history": [
+            {
+              "sessionId": "s1",
+              "completedAt": "2026-08-12T18:00:00Z",
+              "type": "STANDALONE",
+              "weekNumber": null,
+              "dayNumber": null,
+              "workoutLabel": "",
+              "sets": [],
+              "bestE1rm": null,
+              "totalVolume": null
+            }
+          ]
+        }
+        """#.data(using: .utf8)!
+
+        let dto = try decoder.decode(AnalyticsExerciseHistoryDTO.self, from: json)
+
+        #expect(dto.history[0].contextLabel == "Standalone")
+    }
 }

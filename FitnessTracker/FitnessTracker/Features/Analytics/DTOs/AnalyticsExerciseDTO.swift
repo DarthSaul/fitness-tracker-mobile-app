@@ -46,7 +46,10 @@ nonisolated struct AnalyticsExerciseHistoryDTO: Codable, Sendable, Equatable {
                 return "W\(week) · D\(day)"
             }
             if type == Self.standaloneType {
-                return workoutLabel ?? "Standalone"
+                if let workoutLabel, !workoutLabel.isEmpty {
+                    return workoutLabel
+                }
+                return "Standalone"
             }
             return workoutLabel
         }
