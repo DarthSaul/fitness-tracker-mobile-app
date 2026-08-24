@@ -1,9 +1,10 @@
 import SwiftUI
 
 /// Account / preferences tab. Layout: profile header → Preferences
-/// (appearance + feedback) → About → Sign Out. The profile header pulls from
-/// `SessionManager.userProfile`, which is populated by GET /api/auth/me on
-/// bootstrap and after sign-in. The hosting tab provides the NavigationStack.
+/// (appearance + feedback) → About → Sign Out → Delete Account. The profile
+/// header pulls from `SessionManager.userProfile`, which is populated by
+/// GET /api/auth/me on bootstrap and after sign-in. The hosting tab provides
+/// the NavigationStack.
 struct SettingsView: View {
     @Environment(APIClient.self) private var apiClient
     @Environment(SessionManager.self) private var sessionManager
@@ -11,6 +12,9 @@ struct SettingsView: View {
     @AppStorage(appAppearanceStorageKey) private var appearanceRaw: String = AppAppearance.system.rawValue
 
     @State private var isSigningOut = false
+    @State private var isDeletingAccount = false
+    @State private var showDeleteConfirmation = false
+    @State private var deleteAccountError: APIError?
 
     private var appearance: Binding<AppAppearance> {
         Binding(
@@ -66,7 +70,39 @@ struct SettingsView: View {
                         Text("Sign Out")
                     }
                 }
-                .disabled(isSigningOut)
+                .disabled(isSigningOut || isDeletingAccount)
+            }
+
+            // Own section (not sharing Sign Out's) so the most dangerous
+            // action in the app isn't one row away from a routine one.
+            Section {
+                Button(role: .destructive) {
+                    showDeleteConfirmation = true
+                } label: {
+                    if isDeletingAccount {
+                        HStack {
+                            ProgressView()
+                            Text("Deleting Account…")
+                        }
+                    } else {
+                        Text("Delete Account")
+                    }
+                }
+                .disabled(isDeletingAccount || isSigningOut)
+                .confirmationDialog(
+                    "Delete your account?",
+                    isPresented: $showDeleteConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Delete Account", role: .destructive) {
+                        Task { await performDeleteAccount() }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This permanently deletes your account and all of your data, including your entire workout history. This cannot be undone.")
+                }
+            } footer: {
+                Text("Deleting your account removes all of your data from our servers.")
             }
         }
         // Match the Home tab's 12pt padding above the in-flow title; the
@@ -74,6 +110,19 @@ struct SettingsView: View {
         .contentMargins(.top, 12, for: .scrollContent)
         .scrollingTitleChrome(title: "Settings")
         .toolbar(.hidden, for: .navigationBar)
+        .alert("Couldn't Delete Account", isPresented: deleteErrorBinding) {
+            Button("Retry") { Task { await performDeleteAccount() } }
+            Button("Cancel", role: .cancel) { deleteAccountError = nil }
+        } message: {
+            Text(deleteAccountError?.localizedDescription ?? "")
+        }
+    }
+
+    private var deleteErrorBinding: Binding<Bool> {
+        Binding(
+            get: { deleteAccountError != nil },
+            set: { if !$0 { deleteAccountError = nil } }
+        )
     }
 
     private func performSignOut() async {
@@ -85,6 +134,27 @@ struct SettingsView: View {
         await sessionManager.signOut()
         // SessionManager.authState flipping to .unauthenticated swaps
         // ContentView back to AuthView, so no explicit dismissal is needed.
+    }
+
+    private func performDeleteAccount() async {
+        guard !isDeletingAccount else { return }
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
+        deleteAccountError = nil
+        do {
+            try await sessionManager.deleteAccount()
+            // authState flipping to .unauthenticated swaps ContentView back
+            // to AuthView — no explicit navigation needed.
+        } catch APIError.unauthorized {
+            // Token refresh failed mid-delete: the session is dead but the
+            // account was NOT deleted. Fall back to a plain local sign-out
+            // (the app-wide convention for a dead session) — the user lands
+            // on sign-in with their account intact and can retry after
+            // re-authenticating.
+            await sessionManager.signOut()
+        } catch {
+            deleteAccountError = error
+        }
     }
 }
 
