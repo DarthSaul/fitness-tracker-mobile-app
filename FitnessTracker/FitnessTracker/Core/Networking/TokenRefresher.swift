@@ -102,3 +102,11 @@ nonisolated struct AuthTokensResponse: Decodable, Sendable {
     let accessToken: String
     let refreshToken: String
 }
+
+/// POST /api/auth/native/email/signup. Tokens are present only when
+/// `confirmationRequired` is false (email confirmations disabled server-side).
+nonisolated struct EmailSignUpResponse: Decodable, Sendable {
+    let confirmationRequired: Bool
+    let accessToken: String?
+    let refreshToken: String?
+}
