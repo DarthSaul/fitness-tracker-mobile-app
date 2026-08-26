@@ -67,19 +67,21 @@ struct AuthViewModelEmailFormTests {
 
     // MARK: - Mode switching
 
-    @Test("switching modes clears messages but keeps the email")
+    @Test("switching modes clears messages and the resend affordance but keeps the email")
     func switchModeClearsMessages() {
         let (viewModel, _) = makeViewModel()
         viewModel.openEmailForm()
         viewModel.email = "jane@example.com"
         viewModel.formError = "boom"
         viewModel.successMessage = "done"
+        viewModel.pendingConfirmationEmail = "jane@example.com"
 
-        viewModel.switchMode(.signUp)
+        viewModel.switchMode(.reset)
 
-        #expect(viewModel.formMode == .signUp)
+        #expect(viewModel.formMode == .reset)
         #expect(viewModel.formError == nil)
         #expect(viewModel.successMessage == nil)
+        #expect(viewModel.pendingConfirmationEmail == nil)
         #expect(viewModel.email == "jane@example.com")
     }
 
@@ -153,10 +155,26 @@ struct AuthViewModelEmailFormTests {
             Data(#"{"success":true}"#.utf8)
         }
         viewModel.pendingConfirmationEmail = "jane@example.com"
+        viewModel.email = "jane@example.com"
 
         await viewModel.resendConfirmationEmail()
 
         #expect(viewModel.successMessage == "Confirmation email sent.")
+        #expect(viewModel.formError == nil)
+    }
+
+    // No network stub: if the mismatch guard failed, MockAPIClient would throw
+    // .missingHandler and surface it in formError.
+    @Test("resend is dropped when the email field no longer matches")
+    func resendDroppedOnEditedEmail() async {
+        let (viewModel, _) = makeViewModel()
+        viewModel.pendingConfirmationEmail = "jane@example.com"
+        viewModel.email = "someone-else@example.com"
+
+        await viewModel.resendConfirmationEmail()
+
+        #expect(viewModel.pendingConfirmationEmail == nil)
+        #expect(viewModel.successMessage == nil)
         #expect(viewModel.formError == nil)
     }
 

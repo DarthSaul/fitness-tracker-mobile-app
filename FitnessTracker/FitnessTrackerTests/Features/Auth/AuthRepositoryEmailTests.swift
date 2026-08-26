@@ -5,11 +5,24 @@ import Testing
 /// KEYCHAIN CAVEAT: there is no keychain protocol — `SessionManager.didSignIn`
 /// writes the refresh token into the *real simulator keychain* (existing house
 /// precedent; SessionManager tests instantiate a real `KeychainService`). Every
-/// test that completes `didSignIn` must tear down via `manager.signOut()` so
-/// state doesn't leak across tests or suites.
+/// test that completes `didSignIn` must run its sign-in and assertions inside
+/// `withSessionTeardown` so the keychain is cleared even when the body throws.
 @Suite("AuthRepository email flows")
 @MainActor
 struct AuthRepositoryEmailTests {
+    /// Runs the body, then always tears the session down — a thrown error must
+    /// not leave the refresh token behind in the simulator keychain.
+    private func withSessionTeardown(
+        _ manager: SessionManager, _ body: () async throws -> Void
+    ) async throws {
+        do {
+            try await body()
+        } catch {
+            await manager.signOut()
+            throw error
+        }
+        await manager.signOut()
+    }
     private func makeRepository() -> (AuthRepository, SessionManager, MockAPIClient) {
         let manager = SessionManager(keychain: KeychainService(), tokenStore: TokenStore())
         let client = MockAPIClient()
@@ -46,12 +59,12 @@ struct AuthRepositoryEmailTests {
         }
         client.stub(.getMe, response: fixtureProfile)
 
-        try await repository.signInWithEmail(email: "jane@example.com", password: "testpass123")
+        try await withSessionTeardown(manager) {
+            try await repository.signInWithEmail(email: "jane@example.com", password: "testpass123")
 
-        #expect(manager.authState == .authenticated(userId: "user-001"))
-        #expect(manager.userProfile == fixtureProfile)
-
-        await manager.signOut()
+            #expect(manager.authState == .authenticated(userId: "user-001"))
+            #expect(manager.userProfile == fixtureProfile)
+        }
     }
 
     @Test("sign-in 401 propagates and leaves the session signed out")
@@ -95,14 +108,14 @@ struct AuthRepositoryEmailTests {
         }
         client.stub(.getMe, response: fixtureProfile)
 
-        let outcome = try await repository.signUpWithEmail(
-            email: "jane@example.com", password: "testpass123", name: nil
-        )
+        try await withSessionTeardown(manager) {
+            let outcome = try await repository.signUpWithEmail(
+                email: "jane@example.com", password: "testpass123", name: nil
+            )
 
-        #expect(outcome == .signedIn)
-        #expect(manager.authState == .authenticated(userId: "user-001"))
-
-        await manager.signOut()
+            #expect(outcome == .signedIn)
+            #expect(manager.authState == .authenticated(userId: "user-001"))
+        }
     }
 
     @Test("sign-up claiming no confirmation but missing tokens throws the contract error")

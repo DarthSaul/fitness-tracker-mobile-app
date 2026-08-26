@@ -112,12 +112,15 @@ final class AuthViewModel {
     }
 
     /// Keeps the email (and any typed password) so hopping between sign-in,
-    /// sign-up, and reset doesn't force re-entry.
+    /// sign-up, and reset doesn't force re-entry. The resend affordance is
+    /// dismissed — it belongs to the check-your-email moment, not to the
+    /// reset form or a fresh sign-up.
     @MainActor
     func switchMode(_ mode: AuthFormMode) {
         formMode = mode
         formError = nil
         successMessage = nil
+        pendingConfirmationEmail = nil
     }
 
     @MainActor
@@ -187,8 +190,17 @@ final class AuthViewModel {
     func resendConfirmationEmail() async {
         guard let pendingEmail = pendingConfirmationEmail else { return }
 
+        // The user may have edited the field since we recorded the address —
+        // resending to an email the user can no longer see would mislead.
+        let currentEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard currentEmail.isEmpty || currentEmail == pendingEmail else {
+            pendingConfirmationEmail = nil
+            return
+        }
+
         isLoading = true
         formError = nil
+        successMessage = nil
         defer { isLoading = false }
 
         do {
