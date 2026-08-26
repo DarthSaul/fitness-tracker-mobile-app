@@ -64,4 +64,20 @@ nonisolated enum APIError: Error, LocalizedError, Equatable {
         let statusMessage: String?
         let message: String?
     }
+
+    /// h3 errors can carry a machine-readable `data.code` (e.g.
+    /// `email_not_confirmed` from native email sign-in). Returns nil when the
+    /// body has no decodable code.
+    static func decodeServerErrorCode(from data: Data) -> String? {
+        guard !data.isEmpty else { return nil }
+        let envelope = try? JSONDecoder().decode(ServerErrorCodeEnvelope.self, from: data)
+        return envelope?.data?.code
+    }
+
+    private struct ServerErrorCodeEnvelope: Decodable {
+        struct Details: Decodable {
+            let code: String?
+        }
+        let data: Details?
+    }
 }

@@ -14,6 +14,12 @@ enum APIEndpoint {
     // Auth
     case appleSignIn(AppleSignInBody)
     case googleSignIn(GoogleSignInBody)
+    case emailSignIn(EmailSignInBody)
+    case emailSignUp(EmailSignUpBody)
+    case resendConfirmationEmail(ResendConfirmationBody)
+    /// Reuses the web reset route — it's session-agnostic and the emailed
+    /// link opens the web reset page (no native variant exists).
+    case requestPasswordReset(PasswordResetBody)
     case refreshToken(RefreshTokenBody)
     case logout
     case getMe
@@ -113,6 +119,10 @@ extension APIEndpoint {
         // Auth
         case .appleSignIn: return "/api/auth/native/apple"
         case .googleSignIn: return "/api/auth/native/google"
+        case .emailSignIn: return "/api/auth/native/email/signin"
+        case .emailSignUp: return "/api/auth/native/email/signup"
+        case .resendConfirmationEmail: return "/api/auth/native/email/resend-confirmation"
+        case .requestPasswordReset: return "/api/auth/email/reset-password"
         case .refreshToken: return "/api/auth/refresh"
         case .logout: return "/api/auth/logout"
         case .getMe: return "/api/auth/me"
@@ -210,7 +220,9 @@ extension APIEndpoint {
              .getFeedback:
             return .get
 
-        case .appleSignIn, .googleSignIn, .refreshToken, .logout,
+        case .appleSignIn, .googleSignIn, .emailSignIn, .emailSignUp,
+             .resendConfirmationEmail, .requestPasswordReset,
+             .refreshToken, .logout,
              .saveProgram,
              .scheduleWorkout,
              .createWorkout, .recordSet, .addExtraSet, .swapExercise, .addAdHocSet,
@@ -241,6 +253,10 @@ extension APIEndpoint {
         switch self {
         case .appleSignIn(let b): return b
         case .googleSignIn(let b): return b
+        case .emailSignIn(let b): return b
+        case .emailSignUp(let b): return b
+        case .resendConfirmationEmail(let b): return b
+        case .requestPasswordReset(let b): return b
         case .refreshToken(let b): return b
         case .saveProgram(let id): return SaveProgramBody(programId: id)
         case .scheduleWorkout(let b): return b
@@ -374,6 +390,25 @@ nonisolated struct AppleSignInBody: Encodable, Sendable {
 
 nonisolated struct GoogleSignInBody: Encodable, Sendable {
     let idToken: String
+}
+
+nonisolated struct EmailSignInBody: Encodable, Sendable {
+    let email: String
+    let password: String
+}
+
+nonisolated struct EmailSignUpBody: Encodable, Sendable {
+    let email: String
+    let password: String
+    let name: String?
+}
+
+nonisolated struct ResendConfirmationBody: Encodable, Sendable {
+    let email: String
+}
+
+nonisolated struct PasswordResetBody: Encodable, Sendable {
+    let email: String
 }
 
 nonisolated struct RefreshTokenBody: Encodable, Sendable {
