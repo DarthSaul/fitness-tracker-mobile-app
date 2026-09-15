@@ -16,7 +16,7 @@ All lanes commit and tag **locally only**. Push when you are happy with the resu
 - **`fastlane/.env` populated.** Copy `fastlane/.env.example` and fill in `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `ASC_KEY_FILEPATH`. The file is gitignored.
 - **The `.p8` key** at the path named by `ASC_KEY_FILEPATH`, normally `~/.appstoreconnect/private_keys/AuthKey_XXXXXXXXXX.p8`. Generate it at [App Store Connect → Integrations → API keys](https://appstoreconnect.apple.com/access/integrations/api) with the App Manager role. Apple only offers the download once.
 - **Xcode signed in** to the Apple Developer account (Xcode → Settings → Accounts) so automatic signing can fetch the App Store distribution profile at archive time.
-- **A clean working tree.** `bump`, `beta`, and `release` each commit or tag. Stash unrelated edits first.
+- **A clean working tree.** `bump`, `beta`, and `release` each commit or tag, so every lane refuses to start if `git status` shows changes. Stash unrelated edits first.
 
 ## Release flow
 
@@ -47,7 +47,7 @@ You can override the TestFlight text for a single build with `bundle exec fastla
 bundle exec fastlane beta
 ```
 
-Repeat as often as needed. Each run asks TestFlight for the highest build number, adds one, archives the Release configuration, uploads, and commits `Bump build to N for TestFlight`.
+Repeat as often as needed. Each run asks TestFlight for the highest build number, adds one, archives the Release configuration, uploads, commits `Bump build to N for TestFlight`, and tags that commit `build-N`. The tag records exactly which source went into build N; `release` uses it later.
 
 What to expect:
 
@@ -65,7 +65,7 @@ If the release depends on API changes, deploy them from the `fitness-tracker` se
 bundle exec fastlane release
 ```
 
-This does **not** rebuild. It reads the marketing version from the project, finds the latest TestFlight build with that version, creates or updates the App Store version in App Store Connect, uploads the release notes, attaches the build, and submits it for review with **phased release** enabled and **automatic release** off. It then tags the current commit `vX.Y.Z-N`.
+This does **not** rebuild. It reads the marketing version from the project, finds the latest TestFlight build with that version, creates or updates the App Store version in App Store Connect, uploads the release notes, attaches the build, and submits it for review with **phased release** enabled and **automatic release** off. It then tags the commit that build N was archived from (found via its `build-N` tag) as `vX.Y.Z-N`, even if your HEAD has moved on since. If the `build-N` tag is missing locally, the lane fails after the submission rather than tagging unrelated source; see Troubleshooting.
 
 Before uploading metadata, Fastlane renders an HTML preview and asks you to confirm. Once you trust the flow, set `force: true` on `upload_to_app_store` in the Fastfile to skip that prompt.
 
@@ -95,7 +95,7 @@ Pause when Sentry shows a new crash or error that affects a meaningful share of 
 git push && git push --tags
 ```
 
-`bump`, `beta`, and `release` all committed or tagged locally. Push so `main` and the tag `vX.Y.Z-N` reflect what shipped.
+`bump`, `beta`, and `release` all committed or tagged locally. Push so `main`, the `build-N` tags, and the release tag `vX.Y.Z-N` reflect what shipped.
 
 ## Hotfix
 
@@ -126,6 +126,10 @@ TestFlight builds and the App Store build share the bundle ID `me.fitness-app.tr
 **`beta` hangs or times out at "Waiting for processing".** Apple's processing occasionally takes longer than the 30-minute cap, and the lane exits with an error even though the upload succeeded. Check TestFlight in App Store Connect. If the build is there, add it to the external group by hand. Do not re-run `beta`; it would upload a duplicate build. The build-number commit was not made, so run `git status` and commit the `project.pbxproj` change yourself.
 
 **`No TestFlight build found for version X.Y.Z`.** `release` only looks at builds whose marketing version matches the project. Either `beta` has not run since the last `bump`, the build is still processing, or the `bump` commit is not on your current branch. Run `beta` (or wait), then retry.
+
+**`release` fails with `No local tag build-N`.** The submission to Apple already succeeded; only the git tag was skipped. The build was uploaded from another checkout, or its `build-N` tag was never pushed. Run `git fetch --tags` and re-run `release`, or tag by hand once you know the source commit: `git tag vX.Y.Z-N <sha>`.
+
+**A lane refuses to start with `Git repository is dirty`.** Every lane checks for a clean tree before doing anything. Commit or stash your changes and re-run.
 
 **`beta` fails after processing with a group error.** The name in `EXTERNAL_GROUPS` (`fastlane/Fastfile`) does not match App Store Connect → TestFlight → External Testing. Group names are case-sensitive. Fix the constant, then add the already-uploaded build to the group manually; do not re-run `beta`.
 

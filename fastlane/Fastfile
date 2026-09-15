@@ -40,18 +40,31 @@ EXTERNAL_GROUPS = ["Friends"]
 # the start of every release train. Path is relative to the repo root.
 RELEASE_NOTES_PATH = "fastlane/metadata/en-US/release_notes.txt"
 
+# `beta` tags the commit each TestFlight build was archived from as
+# "#{BUILD_TAG_PREFIX}#{build_number}" (e.g. build-17). `release` resolves that
+# tag so the vX.Y.Z-N release tag lands on the build's real source commit, not
+# on whatever HEAD happens to be when `release` runs.
+BUILD_TAG_PREFIX = "build-"
+
 platform :ios do
 
   # ---------------------------------------------------------------------------
-  # before_all — App Store Connect API key authentication, shared by all lanes.
+  # before_all — preflight checks shared by all lanes.
   #
-  # Loads the .p8 private key and configures Fastlane's API-key-aware actions
-  # (latest_testflight_build_number, upload_to_testflight, upload_to_app_store,
-  # etc.) to use it automatically. Far more reliable than Apple-ID/password + 2FA.
+  # 1. Clean working tree. Every lane ends by committing or tagging, and
+  #    `commit_version_bump` refuses to run over unrelated modifications — for
+  #    `beta` that refusal would only surface AFTER the archive and upload.
+  #    Failing here first keeps a dirty tree from producing an orphaned build.
   #
-  # The values come from `fastlane/.env` (which Fastlane loads natively).
+  # 2. App Store Connect API key authentication. Loads the .p8 private key and
+  #    configures Fastlane's API-key-aware actions (latest_testflight_build_number,
+  #    upload_to_testflight, upload_to_app_store, etc.) to use it automatically.
+  #    Far more reliable than Apple-ID/password + 2FA. The values come from
+  #    `fastlane/.env` (which Fastlane loads natively).
   # ---------------------------------------------------------------------------
   before_all do
+    ensure_git_status_clean
+
     app_store_connect_api_key(
       key_id:      ENV.fetch("ASC_KEY_ID"),
       issuer_id:   ENV.fetch("ASC_ISSUER_ID"),
@@ -149,9 +162,10 @@ platform :ios do
   #   4. Archive the app (Release config, app-store export)
   #   5. Upload the .ipa to TestFlight, wait for processing, distribute to
   #      EXTERNAL_GROUPS
-  #   6. Commit the build-number bump locally (no push — review and push manually)
+  #   6. Commit the build-number bump locally and tag it build-N (no push —
+  #      review and push manually)
   #
-  # Authentication happens in `before_all` above.
+  # Clean-tree check and authentication happen in `before_all` above.
   # ---------------------------------------------------------------------------
   desc "Build and upload a new beta build to TestFlight (auto-distributed to EXTERNAL_GROUPS)"
   lane :beta do |options|
@@ -235,7 +249,13 @@ platform :ios do
       message:   "Bump build to #{next_build} for TestFlight",
     )
 
-    UI.success("✓ #{version} (#{next_build}) uploaded to TestFlight, distributed to #{EXTERNAL_GROUPS.join(', ')}, and committed locally. Push when ready.")
+    # Tag that commit as the source of build N. The archive above was built
+    # from exactly this tree (the bump was written before `build_app` ran), so
+    # the bump commit — not the pre-lane HEAD — is what shipped. `release`
+    # looks this tag up to place the vX.Y.Z-N tag on the right commit.
+    add_git_tag(tag: "#{BUILD_TAG_PREFIX}#{next_build}")
+
+    UI.success("✓ #{version} (#{next_build}) uploaded to TestFlight, distributed to #{EXTERNAL_GROUPS.join(', ')}, committed and tagged #{BUILD_TAG_PREFIX}#{next_build} locally. Push when ready.")
   end
 
   # ---------------------------------------------------------------------------
@@ -249,7 +269,8 @@ platform :ios do
   #   2. Find the latest TestFlight build number for that version; fail if none
   #   3. Create/update the App Store version, upload metadata (release notes),
   #      attach the build, and submit for review with phased release enabled
-  #   4. Tag the commit `vX.Y.Z-BUILD` (no push — push tags manually)
+  #   4. Tag the build's source commit (found via its build-N tag) `vX.Y.Z-BUILD`
+  #      (no push — push tags manually)
   #
   # After this lane the version sits in "Waiting for Review" in App Store
   # Connect. Because `automatic_release: false`, an approved version waits in
@@ -305,11 +326,26 @@ platform :ios do
       },
     )
 
-    # 4. Tag the release locally.
-    tag = "v#{version}-#{build_number}"
-    add_git_tag(tag: tag)
+    # 4. Tag the release locally — on the commit the build was archived from.
+    #
+    # `beta` tagged that commit build-N. Resolve it rather than tagging HEAD,
+    # which may have moved on (or be a different branch) since the upload. If
+    # the tag is missing the build came from somewhere this checkout can't
+    # vouch for, so refuse rather than tag unrelated source.
+    build_tag = "#{BUILD_TAG_PREFIX}#{build_number}"
+    unless git_tag_exists(tag: build_tag)
+      UI.user_error!("No local tag #{build_tag} for the submitted build. `beta` creates it; if the build was uploaded from another checkout, fetch its tags (`git fetch --tags`) and re-run `release` — the App Store submission above already went through.")
+    end
+    source_sha = sh("git rev-list -n 1 #{build_tag}", log: false).strip
+    head_sha   = sh("git rev-parse HEAD", log: false).strip
+    if source_sha != head_sha
+      UI.important("HEAD (#{head_sha[0, 7]}) is not the source of build #{build_number}; tagging #{source_sha[0, 7]} (#{build_tag}) instead.")
+    end
 
-    UI.success("✓ #{version} (#{build_number}) submitted for App Store review and tagged #{tag}.")
+    tag = "v#{version}-#{build_number}"
+    add_git_tag(tag: tag, commit: source_sha)
+
+    UI.success("✓ #{version} (#{build_number}) submitted for App Store review and tagged #{tag} at #{source_sha[0, 7]}.")
     UI.important("Push the tag when ready: `git push && git push --tags`. Then watch App Store Connect for \"Waiting for Review\" → \"Pending Developer Release\".")
   end
 
