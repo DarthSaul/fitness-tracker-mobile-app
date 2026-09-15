@@ -30,7 +30,7 @@ Run this **once** at the start of a release train. It rewrites `MARKETING_VERSIO
 
 Two numbers identify a build:
 
-- **Marketing version** (`MARKETING_VERSION`, e.g. `1.1.0`) is what users see on the App Store. Bumping it creates a new version in App Store Connect. Only `bump` changes it.
+- **Marketing version** (`MARKETING_VERSION`, e.g. `1.1.0`) is what users see on the App Store. `bump` only changes it in the Xcode project; App Store Connect creates the matching version when the first build carrying it is uploaded by `beta`, and `release` fills it in. Only `bump` changes it.
 - **Build number** (`CURRENT_PROJECT_VERSION`, e.g. `17`) only has to be unique within a marketing version. `beta` bumps it automatically on every upload, so you never edit it by hand.
 
 Use `patch` for fixes to the live version, `minor` for new features, `major` for breaking redesigns.
@@ -53,7 +53,7 @@ What to expect:
 
 - **The lane blocks while Apple processes the build,** typically 5 to 30 minutes. This is required, because a build can only be assigned to an external group after processing. The lane gives up after 30 minutes; see Troubleshooting.
 - **The external group receives every build.** The group name is the `EXTERNAL_GROUPS` constant in `fastlane/Fastfile` (`Friends` today) and must match App Store Connect exactly.
-- **The first build of a new marketing version goes through Beta App Review,** which usually takes about a day. Testers get it once Apple approves. Later builds of the same marketing version skip that review and reach testers as soon as processing finishes.
+- **Every build is submitted for Beta App Review,** and external testers only receive a build after Apple approves it. The first build of a new marketing version gets a full review, which usually takes about a day. Later builds of the same marketing version are normally approved within minutes, but that is Apple's call, not a guarantee. Whether testers are notified also depends on the group's "Automatically notify testers" setting in App Store Connect; with it off, notify them by hand.
 
 ### 4. Deploy server changes first
 
@@ -65,7 +65,7 @@ If the release depends on API changes, deploy them from the `fitness-tracker` se
 bundle exec fastlane release
 ```
 
-This does **not** rebuild. It reads the marketing version from the project, finds the latest TestFlight build with that version, creates or updates the App Store version in App Store Connect, uploads the release notes, attaches the build, and submits it for review with **phased release** enabled and **automatic release** off. It then tags the commit that build N was archived from (found via its `build-N` tag) as `vX.Y.Z-N`, even if your HEAD has moved on since. If the `build-N` tag is missing locally, the lane fails after the submission rather than tagging unrelated source; see Troubleshooting.
+This does **not** rebuild. It reads the marketing version from the project, finds the latest TestFlight build with that version, creates or updates the App Store version in App Store Connect, uploads the release notes, attaches the build, and submits it for review with **phased release** enabled and **automatic release** off. It then tags the commit that build N was archived from (found via its `build-N` tag) as `vX.Y.Z-N`, even if your HEAD has moved on since. The `build-N` tag is checked **before** anything is submitted; if it is missing locally the lane stops there, with nothing sent to Apple, rather than tagging unrelated source; see Troubleshooting.
 
 Before uploading metadata, Fastlane renders an HTML preview and asks you to confirm. Once you trust the flow, set `force: true` on `upload_to_app_store` in the Fastfile to skip that prompt.
 
@@ -74,7 +74,7 @@ Status in App Store Connect after the lane finishes:
 - **Waiting for Review** → the submission is queued. Review usually takes one to two days.
 - **In Review** → a reviewer has it.
 - **Pending Developer Release** → approved, but not yet live because automatic release is off. Nothing happens until you press the button in step 6.
-- **Ready for Distribution** → the version is live (or the phased rollout has begun).
+- **Ready for Distribution** → Apple has approved it and you have pressed **Release This Version** (step 6). Approval alone does not make the version available: with automatic release off it stays in Pending Developer Release until you release it, and once released the phased rollout controls who actually gets it.
 - **Rejected** → read the Resolution Center message, fix, run `beta` again, then `release` again. The live version is unaffected.
 
 ### 6. Release it
@@ -83,7 +83,7 @@ In App Store Connect open the version and press **Release This Version**.
 
 Because phased release is on, the update rolls out to users who have automatic updates enabled over **7 days**, roughly 1%, 2%, 5%, 10%, 20%, 50%, then 100%. Anyone can install it immediately from the App Store page; phasing only affects automatic updates. While the rollout is in progress you can:
 
-- **Pause** it if crash reports or Sentry spike. Pause for as long as you need; the seven-day clock stops.
+- **Pause** it if crash reports or Sentry spike. The seven-day clock stops while paused, but Apple caps the total time paused, across all pauses, at 30 days.
 - **Resume** it once a fix is verified, or
 - **Release to all users** to skip the remaining phases.
 
@@ -127,7 +127,7 @@ TestFlight builds and the App Store build share the bundle ID `me.fitness-app.tr
 
 **`No TestFlight build found for version X.Y.Z`.** `release` only looks at builds whose marketing version matches the project. Either `beta` has not run since the last `bump`, the build is still processing, or the `bump` commit is not on your current branch. Run `beta` (or wait), then retry.
 
-**`release` fails with `No local tag build-N`.** The submission to Apple already succeeded; only the git tag was skipped. The build was uploaded from another checkout, or its `build-N` tag was never pushed. Run `git fetch --tags` and re-run `release`, or tag by hand once you know the source commit: `git tag vX.Y.Z-N <sha>`.
+**`release` fails with `No local tag build-N`.** Nothing was submitted; the lane checks for the tag before contacting Apple. The build was uploaded from another checkout, or its `build-N` tag was never pushed. Run `git fetch --tags`; if the tag does not exist anywhere, find the commit the build was archived from (the `Bump build to N for TestFlight` commit) and create it by hand with `git tag build-N <sha>`. Then re-run `release`.
 
 **A lane refuses to start with `Git repository is dirty`.** Every lane checks for a clean tree before doing anything. Commit or stash your changes and re-run.
 

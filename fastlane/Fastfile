@@ -267,10 +267,11 @@ platform :ios do
   # Flow:
   #   1. Read the current marketing version from the project
   #   2. Find the latest TestFlight build number for that version; fail if none
-  #   3. Create/update the App Store version, upload metadata (release notes),
+  #   3. Resolve that build's source commit via its build-N tag; fail if the
+  #      tag is missing (checked BEFORE submitting so a failure here is free)
+  #   4. Create/update the App Store version, upload metadata (release notes),
   #      attach the build, and submit for review with phased release enabled
-  #   4. Tag the build's source commit (found via its build-N tag) `vX.Y.Z-BUILD`
-  #      (no push — push tags manually)
+  #   5. Tag the source commit `vX.Y.Z-BUILD` (no push — push tags manually)
   #
   # After this lane the version sits in "Waiting for Review" in App Store
   # Connect. Because `automatic_release: false`, an approved version waits in
@@ -294,9 +295,26 @@ platform :ios do
     if build_number.to_i <= 0
       UI.user_error!("No TestFlight build found for version #{version}. Run `bundle exec fastlane beta` first (and wait for processing to finish).")
     end
+
+    # 3. Resolve the commit the build was archived from — before submitting.
+    #
+    # `beta` tagged that commit build-N. Resolve it rather than tagging HEAD,
+    # which may have moved on (or be a different branch) since the upload. If
+    # the tag is missing the build came from somewhere this checkout can't
+    # vouch for, so refuse — and do it here, before anything is sent to Apple,
+    # so the fix is just "fetch the tag and re-run".
+    build_tag = "#{BUILD_TAG_PREFIX}#{build_number}"
+    unless git_tag_exists(tag: build_tag)
+      UI.user_error!("No local tag #{build_tag} for build #{build_number}. `beta` creates it; if the build was uploaded from another checkout, fetch its tags (`git fetch --tags`) and re-run `release`. Nothing has been submitted.")
+    end
+    source_sha = sh("git rev-list -n 1 #{build_tag}", log: false).strip
+    head_sha   = sh("git rev-parse HEAD", log: false).strip
+    if source_sha != head_sha
+      UI.important("HEAD (#{head_sha[0, 7]}) is not the source of build #{build_number}; the release tag will go on #{source_sha[0, 7]} (#{build_tag}) instead.")
+    end
     UI.message("Submitting #{version} (#{build_number}) for App Store review")
 
-    # 3. Submit for review.
+    # 4. Submit for review.
     #
     # `upload_to_app_store` is the modern alias for `deliver`. With
     # `skip_binary_upload: true` it attaches the already-processed TestFlight
@@ -326,22 +344,7 @@ platform :ios do
       },
     )
 
-    # 4. Tag the release locally — on the commit the build was archived from.
-    #
-    # `beta` tagged that commit build-N. Resolve it rather than tagging HEAD,
-    # which may have moved on (or be a different branch) since the upload. If
-    # the tag is missing the build came from somewhere this checkout can't
-    # vouch for, so refuse rather than tag unrelated source.
-    build_tag = "#{BUILD_TAG_PREFIX}#{build_number}"
-    unless git_tag_exists(tag: build_tag)
-      UI.user_error!("No local tag #{build_tag} for the submitted build. `beta` creates it; if the build was uploaded from another checkout, fetch its tags (`git fetch --tags`) and re-run `release` — the App Store submission above already went through.")
-    end
-    source_sha = sh("git rev-list -n 1 #{build_tag}", log: false).strip
-    head_sha   = sh("git rev-parse HEAD", log: false).strip
-    if source_sha != head_sha
-      UI.important("HEAD (#{head_sha[0, 7]}) is not the source of build #{build_number}; tagging #{source_sha[0, 7]} (#{build_tag}) instead.")
-    end
-
+    # 5. Tag the release locally — on the source commit resolved in step 3.
     tag = "v#{version}-#{build_number}"
     add_git_tag(tag: tag, commit: source_sha)
 
