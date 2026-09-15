@@ -1,6 +1,11 @@
 # Fastfile — release automation for FitnessTracker iOS.
 #
-# Run with: `bundle exec fastlane beta`
+# Run with:
+#   bundle exec fastlane bump type:patch|minor|major   # start a release train
+#   bundle exec fastlane beta                          # ship a TestFlight build
+#   bundle exec fastlane release                       # submit to App Store review
+#
+# The full cycle (and when to run each lane) is documented in ../RELEASE.md.
 #
 # Authentication: App Store Connect API key (JWT-based). The .p8 private key
 # lives outside this repo; its path and the matching Key ID / Issuer ID are
@@ -15,32 +20,51 @@ fastlane_version "2.225.0"
 default_platform(:ios)
 
 # Project paths — kept here so lanes don't repeat magic strings.
+#
+# Directory gotcha: Fastlane *actions* resolve relative paths from the repo
+# root, but plain Ruby code inside a lane (File.read etc.) runs with the
+# `fastlane/` folder as its working directory. Pass REPO_ROOT-joined paths to
+# Ruby and the bare relative paths to actions.
+REPO_ROOT = File.expand_path("..", FastlaneCore::FastlaneFolder.path)
 XCODEPROJ = "FitnessTracker/FitnessTracker.xcodeproj"
 SCHEME    = "FitnessTracker"
+BUNDLE_ID = "me.fitness-app.tracker"
+
+# External TestFlight groups that receive every `beta` build. Each name must
+# match the group name in App Store Connect → TestFlight → External Testing
+# EXACTLY (case- and whitespace-sensitive) or the upload fails after processing.
+EXTERNAL_GROUPS = ["Friends"]
+
+# Release notes used as the TestFlight "What to Test" text and, via
+# `upload_to_app_store`, as the App Store "What's New" text. Edit this file at
+# the start of every release train. Path is relative to the repo root.
+RELEASE_NOTES_PATH = "fastlane/metadata/en-US/release_notes.txt"
+
+# `beta` tags the commit each TestFlight build was archived from as
+# "#{BUILD_TAG_PREFIX}#{build_number}" (e.g. build-17). `release` resolves that
+# tag so the vX.Y.Z-N release tag lands on the build's real source commit, not
+# on whatever HEAD happens to be when `release` runs.
+BUILD_TAG_PREFIX = "build-"
 
 platform :ios do
 
   # ---------------------------------------------------------------------------
-  # beta — build the Release configuration and ship it to TestFlight.
+  # before_all — preflight checks shared by all lanes.
   #
-  # Flow:
-  #   1. Authenticate with App Store Connect via API key
-  #   2. Ask TestFlight what the latest build number is, bump by 1
-  #   3. Write the new build number into the Xcode project
-  #   4. Archive the app (Release config, app-store export)
-  #   5. Upload the .ipa to TestFlight
-  #   6. Commit the build-number bump locally (no push — review and push manually)
+  # 1. Clean working tree. Every lane ends by committing or tagging, and
+  #    `commit_version_bump` refuses to run over unrelated modifications — for
+  #    `beta` that refusal would only surface AFTER the archive and upload.
+  #    Failing here first keeps a dirty tree from producing an orphaned build.
+  #
+  # 2. App Store Connect API key authentication. Loads the .p8 private key and
+  #    configures Fastlane's API-key-aware actions (latest_testflight_build_number,
+  #    upload_to_testflight, upload_to_app_store, etc.) to use it automatically.
+  #    Far more reliable than Apple-ID/password + 2FA. The values come from
+  #    `fastlane/.env` (which Fastlane loads natively).
   # ---------------------------------------------------------------------------
-  desc "Build and upload a new beta build to TestFlight"
-  lane :beta do
+  before_all do
+    ensure_git_status_clean
 
-    # 1. App Store Connect API key authentication.
-    #
-    # Loads the .p8 private key and configures Fastlane's API-key-aware actions
-    # (latest_testflight_build_number, upload_to_testflight, etc.) to use it
-    # automatically. Far more reliable than Apple-ID/password + 2FA.
-    #
-    # The values come from `fastlane/.env` (which Fastlane loads natively).
     app_store_connect_api_key(
       key_id:      ENV.fetch("ASC_KEY_ID"),
       issuer_id:   ENV.fetch("ASC_ISSUER_ID"),
@@ -48,6 +72,106 @@ platform :ios do
       duration:    1200,            # JWT lifetime in seconds (max 1200)
       in_house:    false,           # false = App Store / TestFlight; true = enterprise
     )
+  end
+
+  # ---------------------------------------------------------------------------
+  # bump — start a new release train by bumping MARKETING_VERSION (X.Y.Z).
+  #
+  # Usage: `bundle exec fastlane bump type:patch|minor|major` (default: patch)
+  #
+  # Marketing version vs. build number:
+  #   - MARKETING_VERSION (X.Y.Z) is the user-visible App Store version. Bumping
+  #     it is what creates a new "version" in App Store Connect, and the first
+  #     TestFlight build of a new marketing version is what triggers the
+  #     one-time Beta App Review for external tester groups (~1 day). Later
+  #     builds of the same version skip that review.
+  #   - CURRENT_PROJECT_VERSION (the build number) is bumped automatically by
+  #     `beta` on every upload and only has to be unique per marketing version.
+  #
+  # Flow:
+  #   1. Validate `type`
+  #   2. Read the current MARKETING_VERSION from the project
+  #   3. Compute the next version and write it into project.pbxproj
+  #   4. Commit the bump locally (no push — review and push manually)
+  #
+  # Why not `increment_version_number`? That action shells out to
+  # `agvtool new-marketing-version`, which only rewrites CFBundleShortVersionString
+  # in Info.plist files. This project uses the Xcode 11+ MARKETING_VERSION build
+  # setting (Info.plist is generated), so agvtool leaves the real value untouched
+  # and `agvtool what-marketing-version` returns nothing — the action errors out
+  # before it gets that far. We rewrite the build setting in project.pbxproj
+  # directly instead. Every target (app, unit tests, UI tests) shares the same
+  # MARKETING_VERSION today, so all of them are bumped together.
+  # ---------------------------------------------------------------------------
+  desc "Bump the marketing version (type:patch|minor|major, default patch) and commit it"
+  lane :bump do |options|
+
+    # 1. Validate the bump type.
+    type = (options[:type] || "patch").to_s.strip.downcase
+    unless %w[patch minor major].include?(type)
+      UI.user_error!("Unknown bump type '#{type}'. Use one of: patch, minor, major")
+    end
+
+    # 2. Read the current marketing version.
+    #
+    # `get_version_number` understands the MARKETING_VERSION build setting
+    # (unlike `increment_version_number`, see the lane comment above).
+    current_version = get_version_number(xcodeproj: XCODEPROJ, target: SCHEME)
+    unless current_version =~ /\A\d+\.\d+\.\d+\z/
+      UI.user_error!("MARKETING_VERSION '#{current_version}' is not in X.Y.Z form; fix it in Xcode first")
+    end
+
+    # 3. Compute the next version and write it into project.pbxproj.
+    major, minor, patch = current_version.split(".").map(&:to_i)
+    next_version =
+      case type
+      when "major" then "#{major + 1}.0.0"
+      when "minor" then "#{major}.#{minor + 1}.0"
+      else              "#{major}.#{minor}.#{patch + 1}"
+      end
+    UI.message("MARKETING_VERSION: #{current_version} → #{next_version} (#{type})")
+
+    pbxproj_path = File.join(REPO_ROOT, XCODEPROJ, "project.pbxproj")
+    contents     = File.read(pbxproj_path)
+    updated      = contents.gsub(/MARKETING_VERSION = [^;]+;/, "MARKETING_VERSION = #{next_version};")
+    UI.user_error!("No MARKETING_VERSION build setting found in #{pbxproj_path}") if updated == contents
+    File.write(pbxproj_path, updated)
+
+    # 4. Commit the bump locally.
+    #
+    # Only touches project.pbxproj / Info.plist version changes — won't sweep
+    # up unrelated working-tree edits. We deliberately do NOT push.
+    commit_version_bump(
+      xcodeproj: XCODEPROJ,
+      message:   "Bump version to #{next_version}",
+    )
+
+    UI.success("✓ Marketing version bumped to #{next_version} and committed locally.")
+    UI.important("Next: edit #{RELEASE_NOTES_PATH}, then run `bundle exec fastlane beta`.")
+  end
+
+  # ---------------------------------------------------------------------------
+  # beta — build the Release configuration and ship it to TestFlight.
+  #
+  # Usage: `bundle exec fastlane beta [changelog:"What to test"]`
+  #
+  # Flow:
+  #   1. Read the marketing version (for logging only — `bump` owns it)
+  #   2. Ask TestFlight what the latest build number is, bump by 1
+  #   3. Write the new build number into the Xcode project
+  #   4. Archive the app (Release config, app-store export)
+  #   5. Upload the .ipa to TestFlight, wait for processing, distribute to
+  #      EXTERNAL_GROUPS
+  #   6. Commit the build-number bump locally and tag it build-N (no push —
+  #      review and push manually)
+  #
+  # Clean-tree check and authentication happen in `before_all` above.
+  # ---------------------------------------------------------------------------
+  desc "Build and upload a new beta build to TestFlight (auto-distributed to EXTERNAL_GROUPS)"
+  lane :beta do |options|
+
+    # 1. Marketing version, for log/success messages.
+    version = get_version_number(xcodeproj: XCODEPROJ, target: SCHEME)
 
     # 2. Determine the next build number.
     #
@@ -55,11 +179,11 @@ platform :ios do
     # (across all train/version groups). `initial_build_number: 0` handles the
     # first-ever upload, where TestFlight has nothing on record.
     latest_build = latest_testflight_build_number(
-      app_identifier: "me.fitness-app.tracker",
+      app_identifier: BUNDLE_ID,
       initial_build_number: 0,
     )
     next_build = latest_build + 1
-    UI.message("TestFlight latest build: #{latest_build} → bumping to #{next_build}")
+    UI.message("Version #{version} — TestFlight latest build: #{latest_build} → bumping to #{next_build}")
 
     # 3. Write the new CURRENT_PROJECT_VERSION into the project.
     #
@@ -86,15 +210,33 @@ platform :ios do
       include_symbols: true,            # ship dSYMs so crash reports symbolicate
     )
 
-    # 5. Upload to TestFlight.
+    # 5. Upload to TestFlight and distribute to the external group(s).
     #
-    # `skip_waiting_for_build_processing: true` returns as soon as the upload
-    # finishes; Apple's processing happens server-side and can take 5–30 min.
-    # Set to false if you want this lane to block until the build is testable.
+    # "What to Test" text: the `changelog:` lane option wins, then the contents
+    # of RELEASE_NOTES_PATH, then a plain "Build N". External distribution
+    # requires a changelog, so this is never empty.
+    changelog = options[:changelog].to_s.strip
+    release_notes_file = File.join(REPO_ROOT, RELEASE_NOTES_PATH)
+    if changelog.empty? && File.exist?(release_notes_file)
+      changelog = File.read(release_notes_file).strip
+    end
+    changelog = "Build #{next_build}" if changelog.empty?
+
+    # `skip_waiting_for_build_processing: false` is REQUIRED for external
+    # distribution — pilot can only assign a build to a group once Apple has
+    # finished processing it. This blocks the lane for ~5–30 min.
+    # `wait_processing_timeout_duration` caps that wait (seconds).
+    #
+    # `skip_submission` must be false: pilot short-circuits its whole distribute
+    # step when it is true, so the build would never reach EXTERNAL_GROUPS.
     upload_to_testflight(
-      app_identifier: "me.fitness-app.tracker",
-      skip_waiting_for_build_processing: true,
-      skip_submission: true,            # don't auto-submit for external review
+      app_identifier: BUNDLE_ID,
+      changelog:      changelog,
+      distribute_external: true,
+      groups:         EXTERNAL_GROUPS,
+      skip_submission: false,
+      skip_waiting_for_build_processing: false,
+      wait_processing_timeout_duration: 1800,
     )
 
     # 6. Commit the build-number bump locally.
@@ -107,7 +249,107 @@ platform :ios do
       message:   "Bump build to #{next_build} for TestFlight",
     )
 
-    UI.success("✓ Build #{next_build} uploaded to TestFlight and committed locally. Push when ready.")
+    # Tag that commit as the source of build N. The archive above was built
+    # from exactly this tree (the bump was written before `build_app` ran), so
+    # the bump commit — not the pre-lane HEAD — is what shipped. `release`
+    # looks this tag up to place the vX.Y.Z-N tag on the right commit.
+    add_git_tag(tag: "#{BUILD_TAG_PREFIX}#{next_build}")
+
+    UI.success("✓ #{version} (#{next_build}) uploaded to TestFlight, distributed to #{EXTERNAL_GROUPS.join(', ')}, committed and tagged #{BUILD_TAG_PREFIX}#{next_build} locally. Push when ready.")
+  end
+
+  # ---------------------------------------------------------------------------
+  # release — submit the latest TestFlight build of the current version to
+  # App Store review. Does NOT rebuild or upload a binary.
+  #
+  # Usage: `bundle exec fastlane release`
+  #
+  # Flow:
+  #   1. Read the current marketing version from the project
+  #   2. Find the latest TestFlight build number for that version; fail if none
+  #   3. Resolve that build's source commit via its build-N tag; fail if the
+  #      tag is missing (checked BEFORE submitting so a failure here is free)
+  #   4. Create/update the App Store version, upload metadata (release notes),
+  #      attach the build, and submit for review with phased release enabled
+  #   5. Tag the source commit `vX.Y.Z-BUILD` (no push — push tags manually)
+  #
+  # After this lane the version sits in "Waiting for Review" in App Store
+  # Connect. Because `automatic_release: false`, an approved version waits in
+  # "Pending Developer Release" until you press "Release This Version".
+  # ---------------------------------------------------------------------------
+  desc "Submit the latest TestFlight build of the current version for App Store review"
+  lane :release do
+
+    # 1. Current marketing version.
+    version = get_version_number(xcodeproj: XCODEPROJ, target: SCHEME)
+
+    # 2. Latest TestFlight build for exactly this version.
+    #
+    # `initial_build_number: 0` makes the action return 0 (instead of raising)
+    # when TestFlight has no build for this version yet.
+    build_number = latest_testflight_build_number(
+      app_identifier: BUNDLE_ID,
+      version:        version,
+      initial_build_number: 0,
+    )
+    if build_number.to_i <= 0
+      UI.user_error!("No TestFlight build found for version #{version}. Run `bundle exec fastlane beta` first (and wait for processing to finish).")
+    end
+
+    # 3. Resolve the commit the build was archived from — before submitting.
+    #
+    # `beta` tagged that commit build-N. Resolve it rather than tagging HEAD,
+    # which may have moved on (or be a different branch) since the upload. If
+    # the tag is missing the build came from somewhere this checkout can't
+    # vouch for, so refuse — and do it here, before anything is sent to Apple,
+    # so the fix is just "fetch the tag and re-run".
+    build_tag = "#{BUILD_TAG_PREFIX}#{build_number}"
+    unless git_tag_exists(tag: build_tag)
+      UI.user_error!("No local tag #{build_tag} for build #{build_number}. `beta` creates it; if the build was uploaded from another checkout, fetch its tags (`git fetch --tags`) and re-run `release`. Nothing has been submitted.")
+    end
+    source_sha = sh("git rev-list -n 1 #{build_tag}", log: false).strip
+    head_sha   = sh("git rev-parse HEAD", log: false).strip
+    if source_sha != head_sha
+      UI.important("HEAD (#{head_sha[0, 7]}) is not the source of build #{build_number}; the release tag will go on #{source_sha[0, 7]} (#{build_tag}) instead.")
+    end
+    UI.message("Submitting #{version} (#{build_number}) for App Store review")
+
+    # 4. Submit for review.
+    #
+    # `upload_to_app_store` is the modern alias for `deliver`. With
+    # `skip_binary_upload: true` it attaches the already-processed TestFlight
+    # build identified by `app_version` + `build_number`. Metadata comes from
+    # ./fastlane/metadata (release notes only, for now); screenshots are skipped.
+    #
+    # `force` is deliberately left unset so deliver renders an HTML preview of
+    # the metadata it is about to upload and asks for confirmation. Once the
+    # flow is trusted, add `force: true` to skip that prompt (needed for CI).
+    #
+    # `precheck_include_in_app_purchases: false` — precheck cannot inspect IAPs
+    # when authenticating with an API key, and the app has none anyway.
+    upload_to_app_store(
+      app_identifier: BUNDLE_ID,
+      app_version:    version,
+      build_number:   build_number.to_s,
+      skip_binary_upload: true,
+      skip_screenshots:   true,
+      skip_metadata:      false,          # upload release notes from fastlane/metadata
+      submit_for_review:  true,
+      automatic_release:  false,          # manual "Release This Version" after approval
+      phased_release:     true,           # 7-day gradual rollout to auto-updaters
+      precheck_include_in_app_purchases: false,
+      submission_information: {
+        add_id_info_uses_idfa:            false,  # no advertising identifier usage
+        export_compliance_uses_encryption: false, # HTTPS only → exempt (see ITSAppUsesNonExemptEncryption)
+      },
+    )
+
+    # 5. Tag the release locally — on the source commit resolved in step 3.
+    tag = "v#{version}-#{build_number}"
+    add_git_tag(tag: tag, commit: source_sha)
+
+    UI.success("✓ #{version} (#{build_number}) submitted for App Store review and tagged #{tag} at #{source_sha[0, 7]}.")
+    UI.important("Push the tag when ready: `git push && git push --tags`. Then watch App Store Connect for \"Waiting for Review\" → \"Pending Developer Release\".")
   end
 
 end

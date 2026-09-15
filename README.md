@@ -101,6 +101,10 @@ Unit tests use Apple's [`swift-testing`](https://developer.apple.com/xcode/swift
 
 Run the suite from Xcode with **⌘U**.
 
+## Releasing
+
+Releases are driven by three Fastlane lanes: `bundle exec fastlane bump type:minor` starts a release train, `bundle exec fastlane beta` ships a TestFlight build to external testers (repeat as needed), and `bundle exec fastlane release` submits the latest TestFlight build for App Store review. The full cycle, including phased rollout and hotfixes, is documented in [`RELEASE.md`](./RELEASE.md).
+
 ## Contributing
 
 Issues and pull requests are welcome. Before opening a PR:
