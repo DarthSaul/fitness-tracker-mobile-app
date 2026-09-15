@@ -93,6 +93,7 @@ enum APIEndpoint {
     case getExercises(search: String?)
     case getCoreExercises
     case getExerciseNotes(exerciseId: String)
+    case getExerciseInfo(exerciseId: String)
     case updateExerciseNotes(exerciseId: String, body: UpdateExerciseNotesBody)
 
     // Analytics
@@ -188,6 +189,7 @@ extension APIEndpoint {
         case .getExercises: return "/api/exercises"
         case .getCoreExercises: return "/api/exercises/core"
         case .getExerciseNotes(let id): return "/api/exercises/\(id)/notes"
+        case .getExerciseInfo(let id): return "/api/exercises/\(id)/info"
         case .updateExerciseNotes(let id, _): return "/api/exercises/\(id)/notes"
 
         // Analytics
@@ -215,7 +217,7 @@ extension APIEndpoint {
              .getActiveWorkout, .getHistory, .getWorkout,
              .getStandaloneWorkouts, .getStandaloneWorkout,
              .getActiveStandaloneSessions, .getStandaloneSession,
-             .getExercises, .getCoreExercises, .getExerciseNotes,
+             .getExercises, .getCoreExercises, .getExerciseNotes, .getExerciseInfo,
              .getDashboard, .getAnalyticsExercises, .getAnalyticsExercise,
              .getFeedback:
             return .get

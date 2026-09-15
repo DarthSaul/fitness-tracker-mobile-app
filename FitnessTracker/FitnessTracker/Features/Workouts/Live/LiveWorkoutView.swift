@@ -268,6 +268,9 @@ struct LiveWorkoutView: View {
                             onShowNotes: {
                                 presentedSheet = .notes(NotesTarget(exerciseId: exercise.exercise.id, exerciseName: exercise.exercise.name))
                             },
+                            onShowDemo: {
+                                presentedSheet = .demo(DemoTarget(exerciseId: exercise.exercise.id, exerciseName: exercise.exercise.name))
+                            },
                             restSeconds: restSeconds(at: index, in: group)
                         )
                     }
@@ -447,6 +450,12 @@ struct LiveWorkoutView: View {
         case .swap(let t): swapSheet(for: t)
         case .trend(let t): trendSheet(for: t)
         case .notes(let t): notesSheet(for: t)
+        case .demo(let t):
+            // Square 720×720 clip fits the medium detent; large is just room
+            // to breathe.
+            ExerciseDemoSheet(exerciseId: t.exerciseId, exerciseName: t.exerciseName)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         case .workoutNotes:
             // Starts shorter than the Log-set drawer (.medium); expandable to
             // large for longer notes.
@@ -607,6 +616,7 @@ struct LiveWorkoutView: View {
         case swap(SwapTarget)
         case trend(TrendTarget)
         case notes(NotesTarget)
+        case demo(DemoTarget)
         case workoutNotes
         case adHocSearch
         case restTimer
@@ -618,6 +628,7 @@ struct LiveWorkoutView: View {
             case .swap(let t): return "swap-\(t.id)"
             case .trend(let t): return "trend-\(t.id)"
             case .notes(let t): return "notes-\(t.id)"
+            case .demo(let t): return "demo-\(t.id)"
             case .workoutNotes: return "workoutNotes"
             case .adHocSearch: return "adHocSearch"
             case .restTimer: return "restTimer"
@@ -651,6 +662,12 @@ struct LiveWorkoutView: View {
     }
 
     fileprivate struct NotesTarget: Identifiable {
+        let exerciseId: String
+        let exerciseName: String
+        var id: String { exerciseId }
+    }
+
+    fileprivate struct DemoTarget: Identifiable {
         let exerciseId: String
         let exerciseName: String
         var id: String { exerciseId }

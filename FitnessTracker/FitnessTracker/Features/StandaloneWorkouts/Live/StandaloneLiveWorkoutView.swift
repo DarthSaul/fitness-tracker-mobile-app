@@ -207,6 +207,9 @@ struct StandaloneLiveWorkoutView: View {
                             onShowNotes: {
                                 presentedSheet = .notes(SheetTarget(exerciseId: exercise.exercise.id, exerciseName: exercise.exercise.name))
                             },
+                            onShowDemo: {
+                                presentedSheet = .demo(SheetTarget(exerciseId: exercise.exercise.id, exerciseName: exercise.exercise.name))
+                            },
                             restSeconds: restSeconds(at: index, in: group)
                         )
                     }
@@ -333,6 +336,10 @@ struct StandaloneLiveWorkoutView: View {
             ExerciseTrendSheet(exerciseId: t.exerciseId, exerciseName: t.exerciseName)
         case .notes(let t):
             ExerciseNotesSheet(exerciseId: t.exerciseId, exerciseName: t.exerciseName)
+        case .demo(let t):
+            ExerciseDemoSheet(exerciseId: t.exerciseId, exerciseName: t.exerciseName)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
         case .adHocSearch:
             adHocSearchSheet()
         case .restTimer:
@@ -462,6 +469,7 @@ struct StandaloneLiveWorkoutView: View {
         case setLog(SetEditTarget)
         case trend(SheetTarget)
         case notes(SheetTarget)
+        case demo(SheetTarget)
         case adHocSearch
         case restTimer
 
@@ -470,6 +478,7 @@ struct StandaloneLiveWorkoutView: View {
             case .setLog(let t): return "setLog-\(t.id)"
             case .trend(let t): return "trend-\(t.id)"
             case .notes(let t): return "notes-\(t.id)"
+            case .demo(let t): return "demo-\(t.id)"
             case .adHocSearch: return "adHocSearch"
             case .restTimer: return "restTimer"
             }
