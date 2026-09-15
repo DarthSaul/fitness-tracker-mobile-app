@@ -11,6 +11,7 @@ struct StandaloneExerciseCard: View {
     let onAddExtraSet: () -> Void
     let onShowTrend: () -> Void
     let onShowNotes: () -> Void
+    let onShowDemo: () -> Void
     /// Group rest period, surfaced as the first chip. The parent passes nil
     /// when it shouldn't render here (e.g. a non-final exercise of a superset,
     /// where rest is only taken after the whole round).
@@ -40,28 +41,33 @@ struct StandaloneExerciseCard: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Button {
+            // Tap gesture rather than a Button so the demo "i" (a Button) isn't
+            // nested inside another Button — see `ExerciseCard.header`.
+            HStack(spacing: 10) {
+                HStack(spacing: 6) {
+                    Text(exercise.exercise.name)
+                        .font(.headline)
+                        .lineLimit(1)
+                    ExerciseDemoInfoButton(exerciseName: exercise.exercise.name) { deferred(onShowDemo) }
+                }
+                Spacer()
+                if isMarkedComplete {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
                 // Toggling without `withAnimation` keeps the header text
                 // anchored in place — animating the resize caused the title
                 // to bounce vertically as the row grew to fit the set grid.
                 isExpanded.toggle()
-            } label: {
-                HStack(spacing: 10) {
-                    Text(exercise.exercise.name)
-                        .font(.headline)
-                        .lineLimit(1)
-                    Spacer()
-                    if isMarkedComplete {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                    }
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityHint(isExpanded ? "Collapses the set list" : "Expands the set list")
 
             chipsRow
         }

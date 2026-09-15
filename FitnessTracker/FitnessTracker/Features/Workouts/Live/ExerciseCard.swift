@@ -15,6 +15,7 @@ struct ExerciseCard: View {
     let onSwap: () -> Void
     let onShowTrend: () -> Void
     let onShowNotes: () -> Void
+    let onShowDemo: () -> Void
     /// Group rest period, surfaced as the first chip. The parent passes nil
     /// when it shouldn't render here (e.g. a non-final exercise of a superset,
     /// where rest is only taken after the whole round).
@@ -68,26 +69,32 @@ struct ExerciseCard: View {
                     }
                 }
             } else {
-                Button {
+                // The row toggles via a tap gesture rather than a Button: the
+                // demo "i" inside `nameRow` is itself a Button, and a Button
+                // nested in a Button gets ambiguous tap routing (same issue
+                // the chips hit). Child Buttons take precedence over a parent
+                // `onTapGesture`, so the icon wins its own taps and the rest
+                // of the row still expands/collapses.
+                HStack(spacing: 10) {
+                    nameRow
+                    Spacer()
+                    if isMarkedComplete {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                    }
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
                     // Toggling without `withAnimation` keeps the header text
                     // anchored in place — animating the resize caused the title
                     // to bounce vertically as the row grew to fit the set grid.
                     isExpanded.toggle()
-                } label: {
-                    HStack(spacing: 10) {
-                        nameRow
-                        Spacer()
-                        if isMarkedComplete {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                        }
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                    }
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
+                .accessibilityAddTraits(.isButton)
+                .accessibilityHint(isExpanded ? "Collapses the set list" : "Expands the set list")
             }
 
             chipsRow
@@ -99,6 +106,7 @@ struct ExerciseCard: View {
             Text(exercise.exercise.name)
                 .font(.headline)
                 .lineLimit(1)
+            ExerciseDemoInfoButton(exerciseName: exercise.exercise.name, action: deferredDemo)
             if viewModel.isSwapped(programExerciseId: exercise.id) {
                 Text("Swapped")
                     .font(.caption2.weight(.semibold))
@@ -270,6 +278,13 @@ struct ExerciseCard: View {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(80))
             onShowNotes()
+        }
+    }
+
+    private func deferredDemo() {
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(80))
+            onShowDemo()
         }
     }
 }
