@@ -178,11 +178,22 @@ final class HomeViewModel {
 
     // MARK: - Load
 
+    /// Bumped by every `load()`. Loads overlap — the view task, pull-to-refresh,
+    /// the live-workout dismissal and the run-change observer can all fire
+    /// while one is in flight — and an older load finishing last must not
+    /// publish over a newer one (e.g. re-showing a run that was just ended).
+    private var loadGeneration = 0
+
     func load() async {
+        loadGeneration += 1
+        let generation = loadGeneration
+        var isCurrent: Bool { generation == loadGeneration }
+
         isLoading = true
         loadError = nil
         defer {
-            isLoading = false
+            // A superseded load leaves the spinner to the newer one.
+            if isCurrent { isLoading = false }
             hasLoadedOnce = true
         }
 
@@ -196,6 +207,7 @@ final class HomeViewModel {
             async let historyTask = fetchCalendarHistory()
             async let standaloneSessionsTask = standaloneRepository.fetchActiveSessions()
             let (program, workout, sessions) = try await (activeProgramTask, activeWorkoutTask, sessionsTask)
+            guard isCurrent else { return }
             // A different run id (activate can return one, even for the same
             // program) means the loaded schedule belongs to the previous run —
             // drop it now rather than show it against the new run while the
@@ -210,26 +222,34 @@ final class HomeViewModel {
             do {
                 // Assigned only when the whole paging loop succeeds — on a
                 // refresh failure, stale highlights beat blanked ones.
-                self.history = try await historyTask
+                let history = try await historyTask
+                guard isCurrent else { return }
+                self.history = history
             } catch {
                 Logger.data.error("Failed to fetch history: \(error)")
             }
 
             do {
-                self.activeStandaloneSessions = try await standaloneSessionsTask
+                let standaloneSessions = try await standaloneSessionsTask
+                guard isCurrent else { return }
+                self.activeStandaloneSessions = standaloneSessions
             } catch {
                 Logger.data.error("Failed to fetch active standalone sessions: \(error)")
             }
+            guard isCurrent else { return }
 
             // Scheduled workouts depend on having an active program — fetch in a
             // second pass once we know the userProgramId.
             if let userProgramId = program?.id {
                 do {
-                    self.scheduledWorkouts = try await repository.fetchScheduledWorkouts(userProgramId: userProgramId)
+                    let scheduled = try await repository.fetchScheduledWorkouts(userProgramId: userProgramId)
+                    guard isCurrent else { return }
+                    self.scheduledWorkouts = scheduled
                 } catch let apiError as APIError where apiError == .unauthorized {
                     await sessionManager.signOut()
                     return
                 } catch {
+                    guard isCurrent else { return }
                     // Surface the failure to the user but keep the rest of the
                     // dashboard usable — the active program / workout / sessions
                     // we just loaded are still valid; only the schedule list is missing.
@@ -244,6 +264,7 @@ final class HomeViewModel {
             await sessionManager.signOut()
         } catch {
             Logger.data.error("HomeViewModel.load failed: \(error)")
+            guard isCurrent else { return }
             self.loadError = error
         }
     }

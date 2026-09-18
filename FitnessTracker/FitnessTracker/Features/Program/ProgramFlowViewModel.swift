@@ -78,18 +78,39 @@ final class ProgramFlowViewModel {
             await sessionManager.signOut()
             return false
         } catch APIError.httpError(let statusCode, _, _) where statusCode == 409 {
-            // The run turned terminal elsewhere (another device, or the final
-            // day was just completed). Reload: if it is no longer the active
-            // run, the outcome the user asked for already holds.
-            await load()
-            if activeProgram?.id != userProgramId { return true }
-            actionError = "This program can't be ended yet. Complete a workout first."
-            return false
+            // Either the run turned terminal elsewhere (another device, or the
+            // final day was just completed) — the outcome the user asked for
+            // already holds — or it has no completed workouts yet. Ask the
+            // server which: "no longer active" is not enough, since a run that
+            // was merely paused elsewhere is still open.
+            return await isRunOver(userProgramId: userProgramId)
         } catch {
             Logger.data.error("endProgramEarly failed for \(userProgramId): \(error)")
             actionError = error.localizedDescription
             return false
         }
+    }
+
+    /// Resolves a 409 from ending the run. True only when the refreshed run is
+    /// terminal; otherwise the run is still open and the error is surfaced.
+    private func isRunOver(userProgramId: String) async -> Bool {
+        do {
+            let runs = try await userProgramRepository.fetchUserPrograms()
+            // The list holds one current run per program and omits archived
+            // ones, so a run missing from it has been archived or superseded.
+            guard let run = runs.first(where: { $0.id == userProgramId }) else { return true }
+            if run.completedAt != nil || run.archivedAt != nil { return true }
+            actionError = "This program can't be ended yet. Complete a workout first."
+        } catch let apiError as APIError where apiError == .unauthorized {
+            await sessionManager.signOut()
+            return false
+        } catch {
+            Logger.data.error("Failed to refresh runs after a 409 on end early: \(error)")
+            actionError = error.localizedDescription
+        }
+        // Still open: keep this screen current rather than dismissing it.
+        await load()
+        return false
     }
 
     // MARK: - Status

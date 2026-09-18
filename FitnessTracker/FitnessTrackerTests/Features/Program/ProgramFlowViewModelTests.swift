@@ -185,40 +185,65 @@ struct ProgramFlowViewModelTests {
         #expect(vm.isEndingProgram == false)
     }
 
-    @Test("endProgramEarly treats a 409 as ended once the run is no longer active")
-    func endProgramEarlyConflictAlreadyEnded() async {
+    private func makeRun(
+        id: String = "up1", isActive: Bool, completedAt: Date? = nil
+    ) -> UserProgramWithProgramDTO {
+        UserProgramWithProgramDTO(
+            id: id, userId: "u1", programId: "p1", isActive: isActive,
+            currentWeek: 2, currentDay: 2, startedAt: .now,
+            program: UserProgramWithProgramDTO.NestedProgram(id: "p1", name: "Test", description: nil),
+            completedAt: completedAt
+        )
+    }
+
+    /// A view model whose complete call 409s, with `runs` as the refreshed list.
+    private func makeConflictingViewModel(runs: [UserProgramWithProgramDTO]) async -> ProgramFlowViewModel {
         let client = MockAPIClient()
         client.handlers["PATCH /api/user-programs/up1/complete"] = { _ in
             throw APIError.httpError(statusCode: 409, message: "Program already completed", data: Data())
         }
+        client.stub(.getUserPrograms, response: runs)
         let vm = makeViewModel(
             active: makeActiveProgram(),
             sessions: [makeSession(week: 1, day: 1, status: .completed)],
             client: client
         )
         await vm.load()
-        // The run finished elsewhere: the reload finds no active program.
-        client.handlers["GET /api/user-programs/active"] = { _ in
-            throw APIError.httpError(statusCode: 404, message: nil, data: Data())
-        }
+        return vm
+    }
+
+    @Test("endProgramEarly treats a 409 as ended when the refreshed run is completed")
+    func endProgramEarlyConflictAlreadyEnded() async {
+        let vm = await makeConflictingViewModel(runs: [makeRun(isActive: false, completedAt: .now)])
 
         let ended = await vm.endProgramEarly()
         #expect(ended == true)
         #expect(vm.actionError == nil)
     }
 
-    @Test("endProgramEarly surfaces a 409 when the run is still active")
-    func endProgramEarlyConflictStillActive() async {
-        let client = MockAPIClient()
-        client.handlers["PATCH /api/user-programs/up1/complete"] = { _ in
-            throw APIError.httpError(statusCode: 409, message: "No completed workouts in this run", data: Data())
-        }
-        let vm = makeViewModel(
-            active: makeActiveProgram(),
-            sessions: [makeSession(week: 1, day: 1, status: .completed)],
-            client: client
-        )
-        await vm.load()
+    @Test("endProgramEarly treats a 409 as ended when the run left the library")
+    func endProgramEarlyConflictRunGone() async {
+        // Archived runs are omitted, and a restart supersedes the old id.
+        let vm = await makeConflictingViewModel(runs: [makeRun(id: "up2", isActive: true)])
+
+        let ended = await vm.endProgramEarly()
+        #expect(ended == true)
+        #expect(vm.actionError == nil)
+    }
+
+    @Test("endProgramEarly surfaces a 409 when the run is still open")
+    func endProgramEarlyConflictStillOpen() async {
+        let vm = await makeConflictingViewModel(runs: [makeRun(isActive: true)])
+
+        let ended = await vm.endProgramEarly()
+        #expect(ended == false)
+        #expect(vm.actionError != nil)
+    }
+
+    @Test("a 409 on a run that was only paused elsewhere is not treated as ended")
+    func endProgramEarlyConflictPausedElsewhere() async {
+        // No longer the active run, but still open — must not report success.
+        let vm = await makeConflictingViewModel(runs: [makeRun(isActive: false)])
 
         let ended = await vm.endProgramEarly()
         #expect(ended == false)

@@ -11,8 +11,34 @@ final class MockAPIClient: APIClientProtocol {
     /// missing test setup.
     var handlers: [String: (APIEndpoint) throws -> Data] = [:]
 
+    // MARK: - Holding a response
+    // Lets a test model a slow request: the response is resolved when the
+    // request is made (so it reflects the server state at that moment) but
+    // delivered only once the test calls `release(_:)`. One-shot per key.
+    @MainActor private var keysToHold: Set<String> = []
+    @MainActor private var heldRequests: [String: CheckedContinuation<Void, Never>] = [:]
+
+    @MainActor func holdNextResponse(for endpoint: APIEndpoint) {
+        keysToHold.insert(Self.key(for: endpoint))
+    }
+
+    @MainActor func isHolding(_ endpoint: APIEndpoint) -> Bool {
+        heldRequests[Self.key(for: endpoint)] != nil
+    }
+
+    @MainActor func release(_ endpoint: APIEndpoint) {
+        heldRequests.removeValue(forKey: Self.key(for: endpoint))?.resume()
+    }
+
+    @MainActor private func holdIfNeeded(_ endpoint: APIEndpoint) async {
+        let key = Self.key(for: endpoint)
+        guard keysToHold.remove(key) != nil else { return }
+        await withCheckedContinuation { heldRequests[key] = $0 }
+    }
+
     func send<T: Decodable>(_ endpoint: APIEndpoint) async throws(APIError) -> T {
         let data = try resolve(endpoint)
+        await holdIfNeeded(endpoint)
         do {
             return try JSONCoding.decoder.decode(T.self, from: data)
         } catch let err as DecodingError {
