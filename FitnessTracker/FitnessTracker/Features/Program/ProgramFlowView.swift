@@ -32,14 +32,20 @@ struct ProgramFlowView: View {
         }
         .navigationTitle("Manage Program")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await viewModel.load()
-            // Auto-expand the current week, mirroring the web behavior.
-            if let program = viewModel.activeProgram {
-                expandedWeeks.insert(program.currentWeek)
-            }
+        .task { await reload() }
+        .refreshable { await reload() }
+    }
+
+    /// Loads, then auto-expands the current week (mirroring the web
+    /// behavior). Only when the current week changed — first load, or an
+    /// edit that advanced the program — so a routine reload doesn't re-open a
+    /// week the user collapsed.
+    private func reload() async {
+        let previousWeek = viewModel.activeProgram?.currentWeek
+        await viewModel.load()
+        if let currentWeek = viewModel.activeProgram?.currentWeek, currentWeek != previousWeek {
+            expandedWeeks.insert(currentWeek)
         }
-        .refreshable { await viewModel.load() }
     }
 
     private func content(program: ActiveUserProgramDTO) -> some View {
@@ -47,32 +53,44 @@ struct ProgramFlowView: View {
             Section { Text(program.program.name).foregroundStyle(.secondary) }
 
             ForEach(program.program.weeks, id: \.id) { week in
+                // Hand-rolled disclosure rather than DisclosureGroup: inside a
+                // List, DisclosureGroup indents its child rows, which left the
+                // day rows with an extra leading gutter.
                 Section {
-                    DisclosureGroup(
-                        isExpanded: Binding(
-                            get: { expandedWeeks.contains(week.weekNumber) },
-                            set: { isExpanded in
-                                if isExpanded { expandedWeeks.insert(week.weekNumber) }
-                                else { expandedWeeks.remove(week.weekNumber) }
-                            }
-                        )
-                    ) {
+                    weekHeader(week)
+                    if expandedWeeks.contains(week.weekNumber) {
                         ForEach(week.days, id: \.id) { day in
                             dayRow(weekNumber: week.weekNumber, day: day)
-                        }
-                    } label: {
-                        HStack(spacing: 8) {
-                            Text("Week \(week.weekNumber)").font(.headline)
-                            Spacer()
-                            Text("\(week.days.count) days")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
                         }
                     }
                 }
             }
         }
         .listStyle(.insetGrouped)
+    }
+
+    private func weekHeader(_ week: ActiveUserProgramDTO.ActiveProgramWeek) -> some View {
+        let isExpanded = expandedWeeks.contains(week.weekNumber)
+        return Button {
+            withAnimation {
+                if isExpanded { expandedWeeks.remove(week.weekNumber) }
+                else { expandedWeeks.insert(week.weekNumber) }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text("Week \(week.weekNumber)").font(.headline)
+                Spacer()
+                Text("\(week.days.count) days")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -117,7 +135,7 @@ struct ProgramFlowView: View {
                     day: day,
                     existingSessionId: session?.id,
                     repository: workoutRepository,
-                    onChange: { Task { await viewModel.load() } }
+                    onChange: { Task { await reload() } }
                 )
             } label: {
                 label

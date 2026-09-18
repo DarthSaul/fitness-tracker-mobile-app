@@ -19,6 +19,10 @@ struct ActiveProgramProgressCard: View {
                 progressBadge
                 programInfo(program: program)
             }
+            // Both cells fill the row's height (maxHeight: .infinity below);
+            // fixedSize caps that at the taller cell's ideal height so the
+            // cards match whether the program title takes one line or two.
+            .fixedSize(horizontal: false, vertical: true)
         )
     }
 
@@ -41,6 +45,7 @@ struct ActiveProgramProgressCard: View {
             .frame(width: 64, height: 64)
         }
         .padding(12)
+        .frame(maxHeight: .infinity)
         .background(Color(uiColor: .secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 14))
     }
@@ -77,7 +82,7 @@ struct ActiveProgramProgressCard: View {
                 .background(Color.accentColor.opacity(0.15), in: Capsule())
             }
             .padding(16)
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(uiColor: .secondarySystemBackground))
             .clipShape(RoundedRectangle(cornerRadius: 14))
         }

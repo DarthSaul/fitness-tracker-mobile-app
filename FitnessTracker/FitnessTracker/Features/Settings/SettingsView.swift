@@ -89,17 +89,14 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(isDeletingAccount || isSigningOut)
-                .confirmationDialog(
+                .confirmationAlert(
                     "Delete your account?",
                     isPresented: $showDeleteConfirmation,
-                    titleVisibility: .visible
+                    message: "This permanently deletes your account and all of your data, including your entire workout history. This cannot be undone.",
+                    confirmLabel: "Delete Account",
+                    confirmRole: .destructive
                 ) {
-                    Button("Delete Account", role: .destructive) {
-                        Task { await performDeleteAccount() }
-                    }
-                    Button("Cancel", role: .cancel) {}
-                } message: {
-                    Text("This permanently deletes your account and all of your data, including your entire workout history. This cannot be undone.")
+                    Task { await performDeleteAccount() }
                 }
             } footer: {
                 Text("Deleting your account removes all of your data from our servers.")

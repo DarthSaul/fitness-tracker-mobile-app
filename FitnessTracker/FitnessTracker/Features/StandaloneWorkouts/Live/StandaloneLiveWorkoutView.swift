@@ -31,15 +31,22 @@ struct StandaloneLiveWorkoutView: View {
                 .safeAreaInset(edge: .bottom) { bottomBar }
                 .task { await viewModel.load() }
                 .sheet(item: $presentedSheet, content: sheetContent(for:))
-                .alert("Complete this workout?", isPresented: $showCompleteConfirmation) {
-                    completeDialogActions
-                } message: {
-                    Text("This finalizes your session. It won't affect your program.")
+                .confirmationAlert(
+                    "Complete this workout?",
+                    isPresented: $showCompleteConfirmation,
+                    message: "This finalizes your session. It won't affect your program.",
+                    confirmLabel: "Complete"
+                ) {
+                    Task { if await viewModel.completeWorkout() { dismiss() } }
                 }
-                .alert("Abandon this workout?", isPresented: $showAbandonConfirmation) {
-                    abandonDialogActions
-                } message: {
-                    Text("All recorded sets for this session will be discarded.")
+                .confirmationAlert(
+                    "Abandon this workout?",
+                    isPresented: $showAbandonConfirmation,
+                    message: "All recorded sets for this session will be discarded.",
+                    confirmLabel: "Abandon",
+                    confirmRole: .destructive
+                ) {
+                    Task { if await viewModel.abandonWorkout() { dismiss() } }
                 }
         }
     }
@@ -443,24 +450,6 @@ struct StandaloneLiveWorkoutView: View {
         ) { exercise in
             await vm.addAdhocExercise(name: exercise.name)
         }
-    }
-
-    // MARK: - Dialog actions
-
-    @ViewBuilder
-    private var completeDialogActions: some View {
-        Button("Complete") {
-            Task { if await viewModel.completeWorkout() { dismiss() } }
-        }
-        Button("Cancel", role: .cancel) { }
-    }
-
-    @ViewBuilder
-    private var abandonDialogActions: some View {
-        Button("Abandon", role: .destructive) {
-            Task { if await viewModel.abandonWorkout() { dismiss() } }
-        }
-        Button("Cancel", role: .cancel) { }
     }
 
     // MARK: - Targets (sheet identifiers)

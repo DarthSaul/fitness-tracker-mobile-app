@@ -158,6 +158,13 @@ private struct ProgramRow: View {
                         .padding(.vertical, 2)
                         .background(.green.opacity(0.2), in: Capsule())
                         .foregroundStyle(.green)
+                } else if viewModel.isCompleted(programId: program.id) {
+                    Text(completedLabel)
+                        .font(.caption2.weight(.semibold))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.purple.opacity(0.2), in: Capsule())
+                        .foregroundStyle(.purple)
                 } else if viewModel.isSaved(programId: program.id) {
                     Image(systemName: "bookmark.fill")
                         .font(.caption)
@@ -172,5 +179,10 @@ private struct ProgramRow: View {
             }
         }
         .padding(.vertical, 4)
+    }
+
+    private var completedLabel: String {
+        let count = viewModel.completedRunCount(programId: program.id)
+        return count > 1 ? "Completed ×\(count)" : "Completed"
     }
 }

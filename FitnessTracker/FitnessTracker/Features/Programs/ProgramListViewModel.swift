@@ -57,7 +57,7 @@ final class ProgramListViewModel {
         case .saved:
             return programs.filter { savedMap[$0.id] != nil }
         case .active:
-            return programs.filter { savedMap[$0.id]?.isActive == true }
+            return programs.filter { savedMap[$0.id]?.isActiveRun == true }
         }
     }
 
@@ -66,7 +66,7 @@ final class ProgramListViewModel {
     }
 
     var hasActiveProgram: Bool {
-        userPrograms.contains { $0.isActive }
+        userPrograms.contains { $0.isActiveRun }
     }
 
     func isSaved(programId: String) -> Bool {
@@ -74,7 +74,17 @@ final class ProgramListViewModel {
     }
 
     func isActive(programId: String) -> Bool {
-        savedMap[programId]?.isActive == true
+        savedMap[programId]?.isActiveRun == true
+    }
+
+    /// The program's current run is finished. Activating it again starts a
+    /// fresh run at week 1 day 1 (the server never resumes a completed run).
+    func isCompleted(programId: String) -> Bool {
+        savedMap[programId]?.isCompleted == true
+    }
+
+    func completedRunCount(programId: String) -> Int {
+        savedMap[programId]?.completedRunCount ?? 0
     }
 
     func isSaving(programId: String) -> Bool {
@@ -135,7 +145,7 @@ final class ProgramListViewModel {
 
         // Server enforces single-active too, but we surface the message client-side
         // so the user gets immediate feedback rather than a 409 round-trip.
-        if !existing.isActive && hasActiveProgram {
+        if !existing.isActiveRun && hasActiveProgram {
             actionError = "You already have an active program. Deactivate it before starting a new one."
             return
         }
@@ -144,7 +154,10 @@ final class ProgramListViewModel {
         defer { activatingUserProgramIds.remove(existing.id) }
 
         do {
-            if existing.isActive {
+            // Activating a completed run is how "Start again" works: the
+            // server opens a fresh run with a new id, which the refresh below
+            // adopts.
+            if existing.isActiveRun {
                 try await userProgramRepository.deactivateProgram(userProgramId: existing.id)
             } else {
                 try await userProgramRepository.activateProgram(userProgramId: existing.id)

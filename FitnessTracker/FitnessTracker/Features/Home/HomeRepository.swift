@@ -16,6 +16,10 @@ final class HomeRepository {
     func fetchActiveUserProgram() async throws -> ActiveUserProgramDTO? {
         do {
             let dto: ActiveUserProgramDTO = try await apiClient.send(.getActiveUserProgram)
+            // The server matches on isActive alone, and until its reconcile
+            // migration lands an old row can be isActive yet completed. A
+            // finished run is never the active program.
+            guard dto.isActive, dto.completedAt == nil else { return nil }
             return dto
         } catch let error where Self.isNotFound(error) {
             return nil

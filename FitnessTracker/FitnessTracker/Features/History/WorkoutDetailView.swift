@@ -1,20 +1,50 @@
 import SwiftUI
 
-/// Read-only view of a completed workout. Reuses the active-workout endpoint
+/// Summary of a completed workout. Reuses the active-workout endpoint
 /// (`GET /api/workouts/:id`) which returns the same `{ session, day }` shape
-/// for completed sessions. No edit / abandon / complete affordances.
+/// for completed sessions. The toolbar's edit icon pushes the same
+/// ProgramDayEditView that Manage Program uses — the server lets any owned
+/// session be edited in isolation, with or without an active program.
 struct WorkoutDetailView: View {
     @State private var viewModel: WorkoutDetailViewModel
+    /// Fired after an edit lands so the presenting list can refresh (an
+    /// edited date re-sorts the row).
+    private let onChange: () -> Void
 
-    init(viewModel: WorkoutDetailViewModel) {
+    init(viewModel: WorkoutDetailViewModel, onChange: @escaping () -> Void = {}) {
         _viewModel = State(initialValue: viewModel)
+        self.onChange = onChange
     }
 
     var body: some View {
         content
             .navigationTitle(headerTitle)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar { editToolbar }
             .task { await viewModel.load() }
+    }
+
+    @ToolbarContentBuilder
+    private var editToolbar: some ToolbarContent {
+        if let workout = viewModel.workout {
+            ToolbarItem(placement: .topBarTrailing) {
+                NavigationLink {
+                    ProgramDayEditView(
+                        weekNumber: workout.session.weekNumber,
+                        day: workout.day,
+                        existingSessionId: workout.session.id,
+                        repository: viewModel.repository,
+                        onChange: {
+                            Task { await viewModel.load() }
+                            onChange()
+                        }
+                    )
+                } label: {
+                    Image(systemName: "pencil")
+                }
+                .accessibilityLabel("Edit workout")
+            }
+        }
     }
 
     @ViewBuilder

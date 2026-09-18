@@ -87,8 +87,14 @@ final class HomeViewModel {
         return activeProgram.program.weeks.reduce(0) { $0 + $1.days.count }
     }
 
+    /// Distinct days, not sessions: a day logged twice must not push progress
+    /// past 100%.
     var completedDays: Int {
-        sessions.filter { $0.status == .completed }.count
+        Set(
+            sessions
+                .filter { $0.status == .completed }
+                .map { "\($0.weekNumber)-\($0.dayNumber)" }
+        ).count
     }
 
     /// Integer percentage clamped to 0...100. Returns 0 when the program has no days.

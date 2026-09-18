@@ -75,6 +75,12 @@ struct ProgramDetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
+            if listViewModel.isCompleted(programId: program.id) {
+                let count = listViewModel.completedRunCount(programId: program.id)
+                Label(count > 1 ? "Completed \(count) times" : "Completed", systemImage: "checkmark.seal.fill")
+                    .font(.subheadline)
+                    .foregroundStyle(.purple)
+            }
             HStack(spacing: 8) {
                 saveButton
                 activateButton
@@ -106,6 +112,9 @@ struct ProgramDetailView: View {
         if listViewModel.isSaved(programId: program.id) {
             let isActive = listViewModel.isActive(programId: program.id)
             let isActivating = listViewModel.isActivating(programId: program.id)
+            // A finished run is never resumed — activating it starts a fresh
+            // run at week 1 day 1, so the action reads "Start again".
+            let isCompleted = !isActive && listViewModel.isCompleted(programId: program.id)
             Button {
                 Task { await listViewModel.toggleActive(programId: program.id) }
             } label: {
@@ -113,9 +122,9 @@ struct ProgramDetailView: View {
                     if isActivating {
                         ProgressView().controlSize(.small)
                     } else {
-                        Image(systemName: isActive ? "stop.circle.fill" : "play.circle.fill")
+                        Image(systemName: isActive ? "stop.circle.fill" : (isCompleted ? "arrow.clockwise.circle.fill" : "play.circle.fill"))
                     }
-                    Text(isActive ? "Deactivate" : "Activate")
+                    Text(isActive ? "Deactivate" : (isCompleted ? "Start again" : "Activate"))
                 }
             }
             .buttonStyle(.borderedProminent)

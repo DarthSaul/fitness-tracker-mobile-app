@@ -87,6 +87,18 @@ struct HomeRepositoryTests {
         #expect(dto == nil)
     }
 
+    @Test("fetchActiveUserProgram returns nil for a run that is isActive but completed")
+    func fetchActiveIgnoresCompletedRun() async throws {
+        let client = MockAPIClient()
+        var completed = makeActiveProgramDTO()
+        completed.completedAt = Date(timeIntervalSince1970: 1_700_500_000)
+        client.stub(.getActiveUserProgram, response: completed)
+        let repo = HomeRepository(apiClient: client)
+
+        let dto = try await repo.fetchActiveUserProgram()
+        #expect(dto == nil)
+    }
+
     @Test("fetchActiveWorkout returns nil on 404")
     func fetchActiveWorkoutNotFound() async throws {
         let client = MockAPIClient()
