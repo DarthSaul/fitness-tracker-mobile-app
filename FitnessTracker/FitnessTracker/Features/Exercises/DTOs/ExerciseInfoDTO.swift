@@ -15,6 +15,16 @@ nonisolated struct ExerciseInfoDTO: Codable, Sendable, Equatable, Identifiable {
     let posterUrl: String?
     let mediaExpiresAt: Date?
 
-    var animationURL: URL? { animationUrl.flatMap(URL.init(string:)) }
-    var posterURL: URL? { posterUrl.flatMap(URL.init(string:)) }
+    var animationURL: URL? { animationUrl.flatMap(Self.mediaURL) }
+    var posterURL: URL? { posterUrl.flatMap(Self.mediaURL) }
+
+    /// `URL(string:)` percent-encodes invalid characters on iOS 17+ instead of
+    /// returning nil, so parse strictly and require an absolute http(s) URL.
+    private static func mediaURL(_ string: String) -> URL? {
+        guard let url = URL(string: string, encodingInvalidCharacters: false),
+              let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              url.host != nil
+        else { return nil }
+        return url
+    }
 }
