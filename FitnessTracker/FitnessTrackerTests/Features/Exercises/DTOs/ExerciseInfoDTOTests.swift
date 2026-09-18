@@ -67,6 +67,18 @@ struct ExerciseInfoDTOTests {
         #expect(dto.animationURL == nil)
     }
 
+    @Test("a relative media URL yields no URL")
+    func relativeURL() throws {
+        let json = #"""
+        { "id": "ex1", "name": "Bench Press", "videoUrl": null,
+          "animationUrl": "demo.mp4", "posterUrl": "/poster.jpg", "mediaExpiresAt": null }
+        """#.data(using: .utf8)!
+
+        let dto = try decoder.decode(ExerciseInfoDTO.self, from: json)
+        #expect(dto.animationURL == nil)
+        #expect(dto.posterURL == nil)
+    }
+
     @Test("getExerciseInfo endpoint targets /api/exercises/:id/info with GET")
     func endpoint() {
         let endpoint = APIEndpoint.getExerciseInfo(exerciseId: "ex1")
