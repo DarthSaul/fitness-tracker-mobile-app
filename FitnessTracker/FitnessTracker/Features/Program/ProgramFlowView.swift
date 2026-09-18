@@ -41,14 +41,8 @@ struct ProgramFlowView: View {
         }
         .navigationTitle("Manage Program")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await viewModel.load()
-            // Auto-expand the current week, mirroring the web behavior.
-            if let program = viewModel.activeProgram {
-                expandedWeeks.insert(program.currentWeek)
-            }
-        }
-        .refreshable { await viewModel.load() }
+        .task { await reload() }
+        .refreshable { await reload() }
         .confirmationAlert(
             "End program early?",
             isPresented: $showEndProgramConfirmation,
@@ -75,6 +69,18 @@ struct ProgramFlowView: View {
             get: { viewModel.actionError != nil },
             set: { if !$0 { viewModel.actionError = nil } }
         )
+    }
+
+    /// Loads, then auto-expands the current week (mirroring the web
+    /// behavior). Only when the current week changed — first load, or an
+    /// edit that advanced the program — so a routine reload doesn't re-open a
+    /// week the user collapsed.
+    private func reload() async {
+        let previousWeek = viewModel.activeProgram?.currentWeek
+        await viewModel.load()
+        if let currentWeek = viewModel.activeProgram?.currentWeek, currentWeek != previousWeek {
+            expandedWeeks.insert(currentWeek)
+        }
     }
 
     private func content(program: ActiveUserProgramDTO) -> some View {
@@ -183,7 +189,7 @@ struct ProgramFlowView: View {
                     day: day,
                     existingSessionId: session?.id,
                     repository: workoutRepository,
-                    onChange: { Task { await viewModel.load() } }
+                    onChange: { Task { await reload() } }
                 )
             } label: {
                 label
