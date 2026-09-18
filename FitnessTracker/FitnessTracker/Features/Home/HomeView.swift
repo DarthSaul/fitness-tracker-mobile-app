@@ -7,6 +7,7 @@ struct HomeView: View {
     @State private var viewModel: HomeViewModel
     @State private var scheduleSheetPresented = false
     @Environment(LiveWorkoutPresentation.self) private var liveWorkout
+    @Environment(ProgramRunChanges.self) private var runChanges
     private let homeRepository: HomeRepository
     private let workoutRepository: WorkoutRepository
     private let standaloneRepository: StandaloneWorkoutRepository
@@ -111,6 +112,12 @@ struct HomeView: View {
             if wasPresented && !isPresented {
                 Task { await viewModel.load() }
             }
+        }
+        // The run changed (activated / paused / ended, possibly from the
+        // Programs tab). Activate can hand back a different run id, so refetch
+        // rather than keep anything loaded under the previous one.
+        .onChange(of: runChanges.revision) {
+            Task { await viewModel.load() }
         }
         .sheet(isPresented: $scheduleSheetPresented) {
             ScheduleWorkoutSheet(viewModel: viewModel)

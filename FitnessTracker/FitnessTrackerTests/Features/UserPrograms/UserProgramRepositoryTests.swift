@@ -100,6 +100,16 @@ struct UserProgramRepositoryTests {
         try await repo.deactivateProgram(userProgramId: "up1")
     }
 
+    @Test("completeProgram dispatches PATCH /api/user-programs/:id/complete")
+    func completeProgramHitsEndpoint() async throws {
+        let client = MockAPIClient()
+        client.stub(.completeProgram(userProgramId: "up1"), response: voidStub)
+        let repo = UserProgramRepository(apiClient: client)
+
+        #expect(MockAPIClient.key(for: .completeProgram(userProgramId: "up1")) == "PATCH /api/user-programs/up1/complete")
+        try await repo.completeProgram(userProgramId: "up1")
+    }
+
     @Test("activateProgram propagates .unauthorized")
     func activateProgramUnauthorized() async throws {
         let client = MockAPIClient()

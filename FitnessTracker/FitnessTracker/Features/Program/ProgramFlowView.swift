@@ -7,12 +7,21 @@ import SwiftUI
 struct ProgramFlowView: View {
     @State private var viewModel: ProgramFlowViewModel
     @State private var expandedWeeks: Set<Int> = []
+    @State private var showEndProgramConfirmation = false
     private let workoutRepository: WorkoutRepository
+    /// Called once the run has been ended early, before this view pops, so
+    /// the Home dashboard can drop the run it is still showing.
+    private let onProgramEnded: () -> Void
     @Environment(\.dismiss) private var dismiss
 
-    init(viewModel: ProgramFlowViewModel, workoutRepository: WorkoutRepository) {
+    init(
+        viewModel: ProgramFlowViewModel,
+        workoutRepository: WorkoutRepository,
+        onProgramEnded: @escaping () -> Void = {}
+    ) {
         _viewModel = State(initialValue: viewModel)
         self.workoutRepository = workoutRepository
+        self.onProgramEnded = onProgramEnded
     }
 
     var body: some View {
@@ -34,6 +43,32 @@ struct ProgramFlowView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task { await reload() }
         .refreshable { await reload() }
+        .confirmationAlert(
+            "End program early?",
+            isPresented: $showEndProgramConfirmation,
+            message: "This marks the program as completed where you stopped. Unfinished and scheduled workouts, including any workout in progress, are deleted. Your completed workouts stay in History, and you can start the program again from the Programs tab.",
+            confirmLabel: "End Program",
+            confirmRole: .destructive
+        ) {
+            Task {
+                if await viewModel.endProgramEarly() {
+                    onProgramEnded()
+                    dismiss()
+                }
+            }
+        }
+        .alert("Couldn't end program", isPresented: actionErrorBinding) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(viewModel.actionError ?? "")
+        }
+    }
+
+    private var actionErrorBinding: Binding<Bool> {
+        Binding(
+            get: { viewModel.actionError != nil },
+            set: { if !$0 { viewModel.actionError = nil } }
+        )
     }
 
     /// Loads, then auto-expands the current week (mirroring the web
@@ -63,6 +98,25 @@ struct ProgramFlowView: View {
                             dayRow(weekNumber: week.weekNumber, day: day)
                         }
                     }
+                }
+            }
+
+            if viewModel.canEndProgramEarly {
+                Section {
+                    Button(role: .destructive) {
+                        showEndProgramConfirmation = true
+                    } label: {
+                        HStack {
+                            Text("End program early")
+                            if viewModel.isEndingProgram {
+                                Spacer()
+                                ProgressView().controlSize(.small)
+                            }
+                        }
+                    }
+                    .disabled(viewModel.isEndingProgram)
+                } footer: {
+                    Text("Finishes this run now. Completed workouts are kept.")
                 }
             }
         }

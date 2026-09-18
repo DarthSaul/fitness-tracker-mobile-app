@@ -33,20 +33,26 @@ final class ProgramListViewModel {
 
     private(set) var savingProgramIds: Set<String> = []
     private(set) var activatingUserProgramIds: Set<String> = []
+    private(set) var endingUserProgramIds: Set<String> = []
 
     // MARK: - Dependencies
     private let programRepository: ProgramRepository
     private let userProgramRepository: UserProgramRepository
     private let sessionManager: SessionManager
+    /// Fired after any mutation that changes which run is current (activate,
+    /// deactivate, end early, unsave) so other tabs can drop run-keyed state.
+    private let onRunChanged: () -> Void
 
     init(
         programRepository: ProgramRepository,
         userProgramRepository: UserProgramRepository,
-        sessionManager: SessionManager
+        sessionManager: SessionManager,
+        onRunChanged: @escaping () -> Void = {}
     ) {
         self.programRepository = programRepository
         self.userProgramRepository = userProgramRepository
         self.sessionManager = sessionManager
+        self.onRunChanged = onRunChanged
     }
 
     // MARK: - Derived State
@@ -85,6 +91,19 @@ final class ProgramListViewModel {
 
     func completedRunCount(programId: String) -> Int {
         savedMap[programId]?.completedRunCount ?? 0
+    }
+
+    /// An open run that has moved past week 1 day 1 can be ended early. The
+    /// position only advances on a completed workout, which is what the
+    /// server requires (it 409s a run with no completed workouts).
+    func canEndEarly(programId: String) -> Bool {
+        guard let run = savedMap[programId], !run.isCompleted, run.archivedAt == nil else { return false }
+        return run.currentWeek > 1 || run.currentDay > 1
+    }
+
+    func isEndingEarly(programId: String) -> Bool {
+        guard let userProgramId = savedMap[programId]?.id else { return false }
+        return endingUserProgramIds.contains(userProgramId)
     }
 
     func isSaving(programId: String) -> Bool {
@@ -126,6 +145,7 @@ final class ProgramListViewModel {
         do {
             if let existing = savedMap[programId] {
                 try await userProgramRepository.unsaveProgram(userProgramId: existing.id)
+                onRunChanged()
             } else {
                 try await userProgramRepository.saveProgram(programId: programId)
             }
@@ -163,10 +183,45 @@ final class ProgramListViewModel {
                 try await userProgramRepository.activateProgram(userProgramId: existing.id)
             }
             await refreshUserPrograms()
+            onRunChanged()
         } catch let apiError as APIError where apiError == .unauthorized {
             await sessionManager.signOut()
+        } catch APIError.httpError(let statusCode, _, _) where statusCode == 409 {
+            // "Program already active": it already is, or a concurrent
+            // activation won. Either way the server's state is the answer.
+            await refreshUserPrograms()
+            onRunChanged()
         } catch {
             Logger.data.error("toggleActive failed for \(programId): \(error)")
+            actionError = error.localizedDescription
+        }
+    }
+
+    // MARK: - End early
+    /// Ends the program's open run (active or paused) before its final day.
+    /// The run becomes "Completed"; restarting is a separate "Start again".
+    func endProgramEarly(programId: String) async {
+        guard let existing = savedMap[programId], !existing.isCompleted else { return }
+        guard !endingUserProgramIds.contains(existing.id) else { return }
+
+        endingUserProgramIds.insert(existing.id)
+        defer { endingUserProgramIds.remove(existing.id) }
+
+        do {
+            try await userProgramRepository.completeProgram(userProgramId: existing.id)
+            await refreshUserPrograms()
+            onRunChanged()
+        } catch let apiError as APIError where apiError == .unauthorized {
+            await sessionManager.signOut()
+        } catch APIError.httpError(let statusCode, _, _) where statusCode == 409 {
+            // Already completed elsewhere, or no completed workouts yet.
+            await refreshUserPrograms()
+            onRunChanged()
+            if savedMap[programId]?.isCompleted != true {
+                actionError = "This program can't be ended yet. Complete a workout first."
+            }
+        } catch {
+            Logger.data.error("endProgramEarly failed for \(programId): \(error)")
             actionError = error.localizedDescription
         }
     }

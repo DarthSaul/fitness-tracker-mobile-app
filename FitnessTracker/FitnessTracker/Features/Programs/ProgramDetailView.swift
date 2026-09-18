@@ -9,6 +9,7 @@ struct ProgramDetailView: View {
     @State private var isLoading = false
     @State private var loadError: Error?
     @State private var selectedDay: SelectedDay?
+    @State private var showEndProgramConfirmation = false
 
     init(program: ProgramModel, listViewModel: ProgramListViewModel, repository: ProgramRepository) {
         self.program = program
@@ -86,8 +87,41 @@ struct ProgramDetailView: View {
                 activateButton
             }
             .padding(.top, 4)
+            endEarlyButton
         }
         .padding(.vertical, 4)
+    }
+
+    /// Ends the open run — active or paused — before its final day. Separate
+    /// from Deactivate, which only pauses and resumes at the same position.
+    @ViewBuilder
+    private var endEarlyButton: some View {
+        if listViewModel.canEndEarly(programId: program.id) {
+            let isEnding = listViewModel.isEndingEarly(programId: program.id)
+            Button(role: .destructive) {
+                showEndProgramConfirmation = true
+            } label: {
+                HStack(spacing: 6) {
+                    if isEnding {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "flag.checkered")
+                    }
+                    Text("End program early")
+                }
+            }
+            .buttonStyle(.bordered)
+            .disabled(isEnding)
+            .confirmationAlert(
+                "End program early?",
+                isPresented: $showEndProgramConfirmation,
+                message: "This marks the program as completed where you stopped. Unfinished and scheduled workouts, including any workout in progress, are deleted. Your completed workouts stay in History, and you can start the program again at any time.",
+                confirmLabel: "End Program",
+                confirmRole: .destructive
+            ) {
+                Task { await listViewModel.endProgramEarly(programId: program.id) }
+            }
+        }
     }
 
     private var saveButton: some View {

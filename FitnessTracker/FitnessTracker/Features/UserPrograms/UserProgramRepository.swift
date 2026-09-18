@@ -37,4 +37,14 @@ final class UserProgramRepository {
     func deactivateProgram(userProgramId: String) async throws {
         try await apiClient.send(.deactivateProgram(userProgramId: userProgramId))
     }
+
+    // MARK: - End early
+    /// Ends an open run (active or paused) before its final day. Terminal,
+    /// unlike deactivate: the server stamps `completedAt` and deletes the
+    /// run's unfinished sessions and scheduled workouts, keeping completed
+    /// workouts. 409s when the run is already terminal or has no completed
+    /// workouts yet.
+    func completeProgram(userProgramId: String) async throws {
+        try await apiClient.send(.completeProgram(userProgramId: userProgramId))
+    }
 }

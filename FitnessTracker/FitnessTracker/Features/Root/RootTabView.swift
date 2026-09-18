@@ -13,6 +13,7 @@ struct RootTabView: View {
     @State private var resumeViewModel: ResumeWorkoutViewModel?
     @State private var tabSelection = TabSelection()
     @State private var liveWorkout = LiveWorkoutPresentation()
+    @State private var runChanges = ProgramRunChanges()
 
     var body: some View {
         TabView(selection: $tabSelection.current) {
@@ -38,6 +39,12 @@ struct RootTabView: View {
         }
         .environment(tabSelection)
         .environment(liveWorkout)
+        .environment(runChanges)
+        // Ending a run early deletes its in-progress workout server-side, so
+        // the banner must not keep offering to resume it.
+        .onChange(of: runChanges.revision) {
+            Task { await resumeViewModel?.refresh() }
+        }
         .fullScreenCover(item: $liveWorkout.target) {
             // Cover dismissed → refresh the resume banner so it disappears
             // when the workout has been completed or abandoned.

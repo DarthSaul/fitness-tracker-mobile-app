@@ -5,6 +5,7 @@ struct ProgramsTab: View {
     @Environment(APIClient.self) private var apiClient
     @Environment(SessionManager.self) private var sessionManager
     @Environment(\.modelContext) private var modelContext
+    @Environment(ProgramRunChanges.self) private var runChanges
 
     var body: some View {
         let programRepo = ProgramRepository(apiClient: apiClient, modelContext: modelContext)
@@ -12,7 +13,8 @@ struct ProgramsTab: View {
         let viewModel = ProgramListViewModel(
             programRepository: programRepo,
             userProgramRepository: userProgramRepo,
-            sessionManager: sessionManager
+            sessionManager: sessionManager,
+            onRunChanged: { [runChanges] in runChanges.notify() }
         )
         NavigationStack {
             ProgramListView(viewModel: viewModel, programRepository: programRepo)
