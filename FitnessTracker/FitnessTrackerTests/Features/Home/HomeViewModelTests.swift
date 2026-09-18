@@ -200,6 +200,34 @@ struct HomeViewModelTests {
         #expect(vm.loadError == nil)
     }
 
+    @Test("reload onto a new run refetches the schedule under the new run id")
+    func reloadAdoptsNewRun() async throws {
+        // "Start again" activates a completed run and the server answers with
+        // a fresh run under a different id. Nothing loaded for the old run —
+        // scheduled workouts in particular — may carry over.
+        let (vm, client) = makeViewModel(
+            active: makeActiveProgram(id: "up1", currentWeek: 2, currentDay: 3),
+            scheduled: [makeScheduled(id: "sw1", week: 2, day: 3, on: .now)]
+        )
+        await vm.load()
+        #expect(vm.scheduledWorkouts.map(\.id) == ["sw1"])
+
+        client.stub(.getActiveUserProgram, response: makeActiveProgram(id: "up2"))
+        var requestedRunIds: [String] = []
+        client.handlers["GET /api/scheduled-workouts"] = { endpoint in
+            if case .getScheduledWorkouts(let userProgramId, _, _) = endpoint {
+                requestedRunIds.append(userProgramId)
+            }
+            return try JSONCoding.encoder.encode(ScheduledWorkoutsResponseDTO(scheduledWorkouts: []))
+        }
+        await vm.load()
+
+        #expect(vm.activeProgram?.id == "up2")
+        #expect(vm.activeProgram?.currentWeek == 1)
+        #expect(requestedRunIds == ["up2"])
+        #expect(vm.scheduledWorkouts.isEmpty)
+    }
+
     // MARK: - Derived
 
     @Test("progressPercent rounds to nearest integer 0...100")

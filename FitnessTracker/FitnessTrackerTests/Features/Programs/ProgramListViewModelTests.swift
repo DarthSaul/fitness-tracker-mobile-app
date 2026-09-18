@@ -21,6 +21,8 @@ struct ProgramListViewModelTests {
         id: String,
         programId: String,
         isActive: Bool,
+        currentWeek: Int = 1,
+        currentDay: Int = 1,
         completedAt: Date? = nil,
         runNumber: Int? = nil,
         completedRunCount: Int? = nil
@@ -30,8 +32,8 @@ struct ProgramListViewModelTests {
             userId: "u1",
             programId: programId,
             isActive: isActive,
-            currentWeek: 1,
-            currentDay: 1,
+            currentWeek: currentWeek,
+            currentDay: currentDay,
             startedAt: Date(timeIntervalSince1970: 1_700_000_000),
             program: UserProgramWithProgramDTO.NestedProgram(
                 id: programId,
@@ -46,7 +48,8 @@ struct ProgramListViewModelTests {
 
     private func makeViewModel(
         programs: [ProgramSummaryDTO] = [],
-        userPrograms: [UserProgramWithProgramDTO] = []
+        userPrograms: [UserProgramWithProgramDTO] = [],
+        onRunChanged: @escaping () -> Void = {}
     ) throws -> (ProgramListViewModel, MockAPIClient) {
         let client = MockAPIClient()
         client.stub(.getPrograms, response: programs)
@@ -60,7 +63,8 @@ struct ProgramListViewModelTests {
         let vm = ProgramListViewModel(
             programRepository: programRepo,
             userProgramRepository: userProgramRepo,
-            sessionManager: session
+            sessionManager: session,
+            onRunChanged: onRunChanged
         )
         return (vm, client)
     }
@@ -308,5 +312,123 @@ struct ProgramListViewModelTests {
 
         #expect(vm.actionError == nil)
         #expect(vm.isActive(programId: "p2") == true)
+    }
+
+    @Test("a 409 on activate refetches and adopts the server's run")
+    func activateConflictRefetches() async throws {
+        var runChanges = 0
+        let (vm, client) = try makeViewModel(
+            programs: [makeProgramDTO(id: "p1", name: "A")],
+            userPrograms: [makeUserProgramDTO(id: "up1", programId: "p1", isActive: false)],
+            onRunChanged: { runChanges += 1 }
+        )
+        await vm.load()
+
+        client.handlers["PATCH /api/user-programs/up1/activate"] = { _ in
+            throw APIError.httpError(statusCode: 409, message: "Program already active", data: Data())
+        }
+        // A concurrent activation won and opened a run with a different id.
+        client.stub(.getUserPrograms, response: [
+            makeUserProgramDTO(id: "up9", programId: "p1", isActive: true),
+        ])
+
+        await vm.toggleActive(programId: "p1")
+
+        #expect(vm.actionError == nil)
+        #expect(vm.isActive(programId: "p1") == true)
+        #expect(vm.savedMap["p1"]?.id == "up9")
+        #expect(runChanges == 1)
+    }
+
+    // MARK: - End early
+
+    @Test("canEndEarly is true only for an open run past week 1 day 1")
+    func canEndEarlyMatrix() async throws {
+        let done = Date(timeIntervalSince1970: 1_700_500_000)
+        let (vm, _) = try makeViewModel(
+            programs: [
+                makeProgramDTO(id: "p1", name: "A"),
+                makeProgramDTO(id: "p2", name: "B"),
+                makeProgramDTO(id: "p3", name: "C"),
+                makeProgramDTO(id: "p4", name: "D"),
+                makeProgramDTO(id: "p5", name: "E"),
+            ],
+            userPrograms: [
+                makeUserProgramDTO(id: "up1", programId: "p1", isActive: true),
+                makeUserProgramDTO(id: "up2", programId: "p2", isActive: true, currentWeek: 1, currentDay: 2),
+                makeUserProgramDTO(id: "up3", programId: "p3", isActive: false, currentWeek: 3, currentDay: 1),
+                makeUserProgramDTO(id: "up4", programId: "p4", isActive: false, currentWeek: 3, currentDay: 1, completedAt: done),
+            ]
+        )
+        await vm.load()
+
+        #expect(vm.canEndEarly(programId: "p1") == false) // nothing completed yet
+        #expect(vm.canEndEarly(programId: "p2") == true)  // active, underway
+        #expect(vm.canEndEarly(programId: "p3") == true)  // paused, underway
+        #expect(vm.canEndEarly(programId: "p4") == false) // already terminal
+        #expect(vm.canEndEarly(programId: "p5") == false) // not saved
+    }
+
+    @Test("endProgramEarly completes the run, then shows it as completed")
+    func endProgramEarlyCompletesRun() async throws {
+        var runChanges = 0
+        let (vm, client) = try makeViewModel(
+            programs: [makeProgramDTO(id: "p1", name: "A")],
+            userPrograms: [makeUserProgramDTO(id: "up1", programId: "p1", isActive: true, currentWeek: 2)],
+            onRunChanged: { runChanges += 1 }
+        )
+        await vm.load()
+
+        client.stub(.completeProgram(userProgramId: "up1"), response: voidStub)
+        client.stub(.getUserPrograms, response: [
+            makeUserProgramDTO(
+                id: "up1", programId: "p1", isActive: false, currentWeek: 2,
+                completedAt: Date(timeIntervalSince1970: 1_700_500_000), completedRunCount: 1
+            ),
+        ])
+
+        await vm.endProgramEarly(programId: "p1")
+
+        #expect(vm.actionError == nil)
+        #expect(vm.isActive(programId: "p1") == false)
+        #expect(vm.isCompleted(programId: "p1") == true)
+        #expect(vm.canEndEarly(programId: "p1") == false)
+        #expect(vm.isEndingEarly(programId: "p1") == false)
+        #expect(runChanges == 1)
+    }
+
+    @Test("endProgramEarly explains a 409 when the run is still open")
+    func endProgramEarlyConflictStillOpen() async throws {
+        let (vm, client) = try makeViewModel(
+            programs: [makeProgramDTO(id: "p1", name: "A")],
+            userPrograms: [makeUserProgramDTO(id: "up1", programId: "p1", isActive: false, currentWeek: 2)]
+        )
+        await vm.load()
+
+        client.handlers["PATCH /api/user-programs/up1/complete"] = { _ in
+            throw APIError.httpError(statusCode: 409, message: "No completed workouts in this run", data: Data())
+        }
+
+        await vm.endProgramEarly(programId: "p1")
+
+        #expect(vm.actionError != nil)
+        #expect(vm.isCompleted(programId: "p1") == false)
+    }
+
+    @Test("endProgramEarly does nothing for an already completed run")
+    func endProgramEarlyIgnoresCompletedRun() async throws {
+        let (vm, _) = try makeViewModel(
+            programs: [makeProgramDTO(id: "p1", name: "A")],
+            userPrograms: [makeUserProgramDTO(
+                id: "up1", programId: "p1", isActive: false,
+                completedAt: Date(timeIntervalSince1970: 1_700_500_000)
+            )]
+        )
+        await vm.load()
+
+        // No complete stub: a request would surface as a missing-handler error.
+        await vm.endProgramEarly(programId: "p1")
+
+        #expect(vm.actionError == nil)
     }
 }

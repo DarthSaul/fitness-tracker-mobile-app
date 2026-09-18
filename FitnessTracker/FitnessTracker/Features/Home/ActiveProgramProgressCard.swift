@@ -8,6 +8,8 @@ struct ActiveProgramProgressCard: View {
     let homeRepository: HomeRepository
     let workoutRepository: WorkoutRepository
     @Environment(SessionManager.self) private var sessionManager
+    @Environment(APIClient.self) private var apiClient
+    @Environment(ProgramRunChanges.self) private var runChanges
 
     var body: some View {
         guard let program = viewModel.activeProgram else {
@@ -55,9 +57,14 @@ struct ActiveProgramProgressCard: View {
             ProgramFlowView(
                 viewModel: ProgramFlowViewModel(
                     homeRepository: homeRepository,
+                    userProgramRepository: UserProgramRepository(apiClient: apiClient),
                     sessionManager: sessionManager
                 ),
-                workoutRepository: workoutRepository
+                workoutRepository: workoutRepository,
+                // Ending the run deletes its scheduled workouts and any
+                // in-progress session server-side; signal the change so Home
+                // and the resume banner stop showing them.
+                onProgramEnded: { runChanges.notify() }
             )
         } label: {
             HStack {

@@ -42,6 +42,8 @@ enum APIEndpoint {
     case unsaveProgram(userProgramId: String)
     case activateProgram(userProgramId: String)
     case deactivateProgram(userProgramId: String)
+    /// Ends an open run early (terminal — unlike deactivate, which pauses).
+    case completeProgram(userProgramId: String)
 
     // Scheduled Workouts
     case getScheduledWorkouts(userProgramId: String, from: Date?, to: Date?)
@@ -142,6 +144,7 @@ extension APIEndpoint {
         case .unsaveProgram(let id): return "/api/user-programs/\(id)"
         case .activateProgram(let id): return "/api/user-programs/\(id)/activate"
         case .deactivateProgram(let id): return "/api/user-programs/\(id)/deactivate"
+        case .completeProgram(let id): return "/api/user-programs/\(id)/complete"
 
         // Scheduled Workouts
         case .getScheduledWorkouts: return "/api/scheduled-workouts"
@@ -233,7 +236,7 @@ extension APIEndpoint {
              .createFeedback:
             return .post
 
-        case .activateProgram, .deactivateProgram,
+        case .activateProgram, .deactivateProgram, .completeProgram,
              .updateWorkoutNotes, .updateWorkoutDate, .completeWorkout, .updateSet,
              .updateStandaloneSet, .completeStandaloneSession,
              .completeCoreWorkout,

@@ -196,6 +196,13 @@ final class HomeViewModel {
             async let historyTask = fetchCalendarHistory()
             async let standaloneSessionsTask = standaloneRepository.fetchActiveSessions()
             let (program, workout, sessions) = try await (activeProgramTask, activeWorkoutTask, sessionsTask)
+            // A different run id (activate can return one, even for the same
+            // program) means the loaded schedule belongs to the previous run —
+            // drop it now rather than show it against the new run while the
+            // second-pass fetch below is in flight.
+            if program?.id != activeProgram?.id {
+                self.scheduledWorkouts = []
+            }
             self.activeProgram = program
             self.activeWorkout = workout
             self.sessions = sessions

@@ -59,9 +59,9 @@ struct ProgramFlowViewModelTests {
 
     private func makeViewModel(
         active: ActiveUserProgramDTO?,
-        sessions: [ActiveProgramSessionDTO]
+        sessions: [ActiveProgramSessionDTO],
+        client: MockAPIClient = MockAPIClient()
     ) -> ProgramFlowViewModel {
-        let client = MockAPIClient()
         if let active {
             client.stub(.getActiveUserProgram, response: active)
         } else {
@@ -71,8 +71,14 @@ struct ProgramFlowViewModelTests {
 
         let homeRepo = HomeRepository(apiClient: client)
         let session = SessionManager(keychain: KeychainService(), tokenStore: TokenStore())
-        return ProgramFlowViewModel(homeRepository: homeRepo, sessionManager: session)
+        return ProgramFlowViewModel(
+            homeRepository: homeRepo,
+            userProgramRepository: UserProgramRepository(apiClient: client),
+            sessionManager: session
+        )
     }
+
+    private let voidStub: [String: Bool] = ["ok": true]
 
     @Test("status returns .completed when a completed session exists")
     func statusCompleted() async {
@@ -141,5 +147,99 @@ struct ProgramFlowViewModelTests {
         #expect(vm.isLiveAtCurrentPosition(week: 2, day: 2) == true)
         #expect(vm.isLiveAtCurrentPosition(week: 2, day: 1) == false)
         #expect(vm.isLiveAtCurrentPosition(week: 1, day: 1) == false)
+    }
+
+    // MARK: - End early
+
+    @Test("canEndProgramEarly needs a completed workout in the run")
+    func canEndEarlyRequiresCompletedSession() async {
+        let fresh = makeViewModel(
+            active: makeActiveProgram(currentWeek: 1, currentDay: 1),
+            sessions: [makeSession(week: 1, day: 1, status: .inProgress)]
+        )
+        await fresh.load()
+        #expect(fresh.canEndProgramEarly == false)
+
+        let underway = makeViewModel(
+            active: makeActiveProgram(),
+            sessions: [makeSession(week: 1, day: 1, status: .completed)]
+        )
+        await underway.load()
+        #expect(underway.canEndProgramEarly == true)
+    }
+
+    @Test("endProgramEarly completes the active run and reports success")
+    func endProgramEarlySuccess() async {
+        let client = MockAPIClient()
+        client.stub(.completeProgram(userProgramId: "up1"), response: voidStub)
+        let vm = makeViewModel(
+            active: makeActiveProgram(),
+            sessions: [makeSession(week: 1, day: 1, status: .completed)],
+            client: client
+        )
+        await vm.load()
+
+        let ended = await vm.endProgramEarly()
+        #expect(ended == true)
+        #expect(vm.actionError == nil)
+        #expect(vm.isEndingProgram == false)
+    }
+
+    @Test("endProgramEarly treats a 409 as ended once the run is no longer active")
+    func endProgramEarlyConflictAlreadyEnded() async {
+        let client = MockAPIClient()
+        client.handlers["PATCH /api/user-programs/up1/complete"] = { _ in
+            throw APIError.httpError(statusCode: 409, message: "Program already completed", data: Data())
+        }
+        let vm = makeViewModel(
+            active: makeActiveProgram(),
+            sessions: [makeSession(week: 1, day: 1, status: .completed)],
+            client: client
+        )
+        await vm.load()
+        // The run finished elsewhere: the reload finds no active program.
+        client.handlers["GET /api/user-programs/active"] = { _ in
+            throw APIError.httpError(statusCode: 404, message: nil, data: Data())
+        }
+
+        let ended = await vm.endProgramEarly()
+        #expect(ended == true)
+        #expect(vm.actionError == nil)
+    }
+
+    @Test("endProgramEarly surfaces a 409 when the run is still active")
+    func endProgramEarlyConflictStillActive() async {
+        let client = MockAPIClient()
+        client.handlers["PATCH /api/user-programs/up1/complete"] = { _ in
+            throw APIError.httpError(statusCode: 409, message: "No completed workouts in this run", data: Data())
+        }
+        let vm = makeViewModel(
+            active: makeActiveProgram(),
+            sessions: [makeSession(week: 1, day: 1, status: .completed)],
+            client: client
+        )
+        await vm.load()
+
+        let ended = await vm.endProgramEarly()
+        #expect(ended == false)
+        #expect(vm.actionError != nil)
+    }
+
+    @Test("endProgramEarly surfaces other failures and stays on screen")
+    func endProgramEarlyFailure() async {
+        let client = MockAPIClient()
+        client.handlers["PATCH /api/user-programs/up1/complete"] = { _ in
+            throw APIError.httpError(statusCode: 500, message: "Failed to complete program", data: Data())
+        }
+        let vm = makeViewModel(
+            active: makeActiveProgram(),
+            sessions: [makeSession(week: 1, day: 1, status: .completed)],
+            client: client
+        )
+        await vm.load()
+
+        let ended = await vm.endProgramEarly()
+        #expect(ended == false)
+        #expect(vm.actionError == "Failed to complete program")
     }
 }

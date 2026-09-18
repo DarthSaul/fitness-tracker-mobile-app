@@ -17,13 +17,22 @@ final class ProgramFlowViewModel {
     var sessions: [ActiveProgramSessionDTO] = []
     var isLoading = false
     var loadError: Error?
+    private(set) var isEndingProgram = false
+    /// Surfaced when ending the program early fails.
+    var actionError: String?
 
     // MARK: - Dependencies
     private let homeRepository: HomeRepository
+    private let userProgramRepository: UserProgramRepository
     private let sessionManager: SessionManager
 
-    init(homeRepository: HomeRepository, sessionManager: SessionManager) {
+    init(
+        homeRepository: HomeRepository,
+        userProgramRepository: UserProgramRepository,
+        sessionManager: SessionManager
+    ) {
         self.homeRepository = homeRepository
+        self.userProgramRepository = userProgramRepository
         self.sessionManager = sessionManager
     }
 
@@ -43,6 +52,43 @@ final class ProgramFlowViewModel {
         } catch {
             Logger.data.error("ProgramFlowViewModel.load failed: \(error)")
             self.loadError = error
+        }
+    }
+
+    // MARK: - End early
+
+    /// The server 409s ending a run with no completed workouts (there is
+    /// nothing to end at week 1 day 1), so the action stays hidden until then.
+    var canEndProgramEarly: Bool {
+        activeProgram != nil && sessions.contains { $0.status == .completed }
+    }
+
+    /// Ends the active run before its final day. Returns true when the run is
+    /// over and the caller should leave this screen. Restarting is a separate
+    /// "Start again" (activate) from the Programs tab.
+    func endProgramEarly() async -> Bool {
+        guard let userProgramId = activeProgram?.id, !isEndingProgram else { return false }
+        isEndingProgram = true
+        defer { isEndingProgram = false }
+
+        do {
+            try await userProgramRepository.completeProgram(userProgramId: userProgramId)
+            return true
+        } catch let apiError as APIError where apiError == .unauthorized {
+            await sessionManager.signOut()
+            return false
+        } catch APIError.httpError(let statusCode, _, _) where statusCode == 409 {
+            // The run turned terminal elsewhere (another device, or the final
+            // day was just completed). Reload: if it is no longer the active
+            // run, the outcome the user asked for already holds.
+            await load()
+            if activeProgram?.id != userProgramId { return true }
+            actionError = "This program can't be ended yet. Complete a workout first."
+            return false
+        } catch {
+            Logger.data.error("endProgramEarly failed for \(userProgramId): \(error)")
+            actionError = error.localizedDescription
+            return false
         }
     }
 
