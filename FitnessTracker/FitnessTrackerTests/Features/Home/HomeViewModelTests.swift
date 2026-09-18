@@ -180,6 +180,26 @@ struct HomeViewModelTests {
         #expect(vm.loadError == nil)
     }
 
+    @Test("reload after the active program goes away clears it without error")
+    func reloadClearsActiveProgram() async throws {
+        // The state transition behind DR-DUMBBELL-IOS-6: Home is showing an
+        // active program, the user deactivates it elsewhere, Home reloads.
+        let (vm, client) = makeViewModel(active: makeActiveProgram())
+        await vm.load()
+        #expect(vm.activeProgram != nil)
+
+        client.handlers["GET /api/user-programs/active"] = { _ in
+            throw APIError.httpError(statusCode: 404, message: nil, data: Data())
+        }
+        await vm.load()
+
+        #expect(vm.activeProgram == nil)
+        #expect(vm.hasActiveProgram == false)
+        #expect(vm.hasLoadedOnce == true)
+        #expect(vm.nextWorkoutDay == nil)
+        #expect(vm.loadError == nil)
+    }
+
     // MARK: - Derived
 
     @Test("progressPercent rounds to nearest integer 0...100")
