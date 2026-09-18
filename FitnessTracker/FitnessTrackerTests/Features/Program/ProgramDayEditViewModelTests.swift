@@ -235,6 +235,37 @@ struct ProgramDayEditViewModelTests {
         #expect(ok == true)
     }
 
+    @Test("completeWithBackdate on a COMPLETED session patches the date instead of re-completing")
+    func completeOnCompletedSessionUpdatesDate() async throws {
+        let client = MockAPIClient()
+        let session = ActiveWorkoutResponseDTO.ActiveWorkoutSession(
+            id: "ws1", userId: "u1", userProgramId: "up1",
+            weekNumber: 1, dayNumber: 1, status: .completed,
+            startedAt: .now, completedAt: .now, notes: nil,
+            completedSets: [makeCompletedSet(id: "cs1", exerciseSetId: "es1")],
+            userProgram: UserProgramDTO(
+                id: "up1", userId: "u1", programId: "p1", isActive: false,
+                currentWeek: 1, currentDay: 2, startedAt: .now
+            ),
+            workoutExerciseSwaps: []
+        )
+        client.stub(.getWorkout(id: "ws1"), response: ActiveWorkoutResponseDTO(session: session, day: makeProgramDay()))
+        // Intentionally NOT stubbing PATCH …/complete — it 409s on a completed
+        // session, so dispatching it would throw .missingHandler and fail here.
+        client.handlers["PATCH /api/workouts/ws1"] = { _ in
+            try JSONCoding.encoder.encode(UpdateWorkoutResponseDTO(id: "ws1", notes: nil, completedAt: .now))
+        }
+
+        var changeCount = 0
+        let vm = makeViewModel(client: client, existingSessionId: "ws1", onChange: { changeCount += 1 })
+        await vm.loadIfNeeded()
+        let ok = await vm.completeWithBackdate()
+
+        #expect(ok == true)
+        #expect(vm.actionError == nil)
+        #expect(changeCount == 1)
+    }
+
     @Test("discard succeeds, clears local state, reports true")
     func discardClears() async throws {
         let client = MockAPIClient()

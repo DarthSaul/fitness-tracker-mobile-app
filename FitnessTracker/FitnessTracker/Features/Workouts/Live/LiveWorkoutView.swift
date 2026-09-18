@@ -40,15 +40,22 @@ struct LiveWorkoutView: View {
                 // .confirmationDialog gets when it's triggered from inside a
                 // toolbar Menu — the Menu has already started dismissing by
                 // the time the dialog wants to anchor itself to the trigger.
-                .alert("Complete this workout?", isPresented: $showCompleteConfirmation) {
-                    completeDialogActions
-                } message: {
-                    Text("This finalizes your session and advances your program.")
+                .confirmationAlert(
+                    "Complete this workout?",
+                    isPresented: $showCompleteConfirmation,
+                    message: "This finalizes your session and advances your program.",
+                    confirmLabel: "Complete"
+                ) {
+                    Task { if await viewModel.completeWorkout() { dismiss() } }
                 }
-                .alert("Abandon this workout?", isPresented: $showAbandonConfirmation) {
-                    abandonDialogActions
-                } message: {
-                    Text("All recorded sets for this session will be discarded.")
+                .confirmationAlert(
+                    "Abandon this workout?",
+                    isPresented: $showAbandonConfirmation,
+                    message: "All recorded sets for this session will be discarded.",
+                    confirmLabel: "Abandon",
+                    confirmRole: .destructive
+                ) {
+                    Task { if await viewModel.abandonWorkout() { dismiss() } }
                 }
         }
     }
@@ -577,24 +584,6 @@ struct LiveWorkoutView: View {
         ) { exercise in
             await vm.addAdHocExercise(name: exercise.name)
         }
-    }
-
-    // MARK: - Dialog actions
-
-    @ViewBuilder
-    private var completeDialogActions: some View {
-        Button("Complete") {
-            Task { if await viewModel.completeWorkout() { dismiss() } }
-        }
-        Button("Cancel", role: .cancel) { }
-    }
-
-    @ViewBuilder
-    private var abandonDialogActions: some View {
-        Button("Abandon", role: .destructive) {
-            Task { if await viewModel.abandonWorkout() { dismiss() } }
-        }
-        Button("Cancel", role: .cancel) { }
     }
 
     // MARK: - Helpers

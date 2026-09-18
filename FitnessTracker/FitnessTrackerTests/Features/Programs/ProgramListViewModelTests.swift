@@ -20,7 +20,10 @@ struct ProgramListViewModelTests {
     private func makeUserProgramDTO(
         id: String,
         programId: String,
-        isActive: Bool
+        isActive: Bool,
+        completedAt: Date? = nil,
+        runNumber: Int? = nil,
+        completedRunCount: Int? = nil
     ) -> UserProgramWithProgramDTO {
         UserProgramWithProgramDTO(
             id: id,
@@ -34,7 +37,10 @@ struct ProgramListViewModelTests {
                 id: programId,
                 name: "p",
                 description: nil
-            )
+            ),
+            completedAt: completedAt,
+            runNumber: runNumber,
+            completedRunCount: completedRunCount
         )
     }
 
@@ -225,5 +231,82 @@ struct ProgramListViewModelTests {
         #expect(vm.actionError != nil)
         #expect(vm.isActive(programId: "p2") == false)
         #expect(vm.isActive(programId: "p1") == true)
+    }
+
+    // MARK: - Program runs
+
+    @Test("a completed run never counts as active, even if the row is still isActive")
+    func completedRunIsNotActive() async throws {
+        let done = Date(timeIntervalSince1970: 1_700_500_000)
+        let (vm, _) = try makeViewModel(
+            programs: [makeProgramDTO(id: "p1", name: "A")],
+            userPrograms: [makeUserProgramDTO(
+                id: "up1", programId: "p1", isActive: true,
+                completedAt: done, runNumber: 1, completedRunCount: 1
+            )]
+        )
+        await vm.load()
+
+        #expect(vm.isCompleted(programId: "p1") == true)
+        #expect(vm.completedRunCount(programId: "p1") == 1)
+        #expect(vm.isActive(programId: "p1") == false)
+        #expect(vm.hasActiveProgram == false)
+        vm.filter = .active
+        #expect(vm.filteredPrograms.isEmpty)
+    }
+
+    @Test("toggleActive on a completed run activates it and adopts the fresh run's id")
+    func toggleActiveRestartsCompletedRun() async throws {
+        let done = Date(timeIntervalSince1970: 1_700_500_000)
+        let (vm, client) = try makeViewModel(
+            programs: [makeProgramDTO(id: "p1", name: "A")],
+            userPrograms: [makeUserProgramDTO(
+                id: "up1", programId: "p1", isActive: false,
+                completedAt: done, runNumber: 1, completedRunCount: 1
+            )]
+        )
+        await vm.load()
+
+        client.stub(.activateProgram(userProgramId: "up1"), response: voidStub)
+        // The server opens a new run — the refreshed list carries a different id.
+        client.stub(.getUserPrograms, response: [makeUserProgramDTO(
+            id: "up2", programId: "p1", isActive: true,
+            runNumber: 2, completedRunCount: 1
+        )])
+
+        await vm.toggleActive(programId: "p1")
+
+        #expect(vm.actionError == nil)
+        #expect(vm.savedMap["p1"]?.id == "up2")
+        #expect(vm.isActive(programId: "p1") == true)
+        #expect(vm.isCompleted(programId: "p1") == false)
+        #expect(vm.completedRunCount(programId: "p1") == 1)
+    }
+
+    @Test("a completed program does not block activating another one")
+    func completedRunDoesNotBlockActivation() async throws {
+        let done = Date(timeIntervalSince1970: 1_700_500_000)
+        let (vm, client) = try makeViewModel(
+            programs: [
+                makeProgramDTO(id: "p1", name: "A"),
+                makeProgramDTO(id: "p2", name: "B"),
+            ],
+            userPrograms: [
+                makeUserProgramDTO(id: "up1", programId: "p1", isActive: true, completedAt: done),
+                makeUserProgramDTO(id: "up2", programId: "p2", isActive: false),
+            ]
+        )
+        await vm.load()
+
+        client.stub(.activateProgram(userProgramId: "up2"), response: voidStub)
+        client.stub(.getUserPrograms, response: [
+            makeUserProgramDTO(id: "up1", programId: "p1", isActive: false, completedAt: done),
+            makeUserProgramDTO(id: "up2", programId: "p2", isActive: true),
+        ])
+
+        await vm.toggleActive(programId: "p2")
+
+        #expect(vm.actionError == nil)
+        #expect(vm.isActive(programId: "p2") == true)
     }
 }

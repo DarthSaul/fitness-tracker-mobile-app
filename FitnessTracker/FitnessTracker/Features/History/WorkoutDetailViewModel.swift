@@ -11,7 +11,8 @@ final class WorkoutDetailViewModel {
     var isLoading = false
     var loadError: Error?
 
-    private let repository: WorkoutRepository
+    /// Internal so WorkoutDetailView can hand it to the pushed edit view.
+    let repository: WorkoutRepository
 
     init(workoutId: String, repository: WorkoutRepository) {
         self.workoutId = workoutId

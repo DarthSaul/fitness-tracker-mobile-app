@@ -35,20 +35,23 @@ struct ProgramDayEditView: View {
             .toolbar { trashToolbar }
             .task { await viewModel.loadIfNeeded() }
             .sheet(item: $setBeingEdited, content: setLogSheet(for:))
-            .confirmationDialog(
+            .confirmationAlert(
                 "Discard this session?",
                 isPresented: $showDiscardConfirmation,
-                titleVisibility: .visible,
-                actions: { discardDialogActions },
-                message: { Text("All logged sets for this session will be removed. This can't be undone.") }
-            )
-            .confirmationDialog(
+                message: "All logged sets for this session will be removed. This can't be undone.",
+                confirmLabel: "Discard",
+                confirmRole: .destructive
+            ) {
+                Task { if await viewModel.discard() { dismiss() } }
+            }
+            .confirmationAlert(
                 "Save this workout?",
                 isPresented: $showSaveConfirmation,
-                titleVisibility: .visible,
-                actions: { saveDialogActions },
-                message: { Text(saveDialogMessage) }
-            )
+                message: saveDialogMessage,
+                confirmLabel: "Save"
+            ) {
+                Task { if await viewModel.completeWithBackdate() { dismiss() } }
+            }
     }
 
     private var formContent: some View {
@@ -83,9 +86,11 @@ struct ProgramDayEditView: View {
         }
     }
 
+    // Completed sessions can't be discarded — the server 409s on
+    // DELETE /api/workouts/:id once a session is COMPLETED.
     @ToolbarContentBuilder
     private var trashToolbar: some ToolbarContent {
-        if viewModel.session != nil {
+        if let session = viewModel.session, session.status != .completed {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(role: .destructive) {
                     showDiscardConfirmation = true
@@ -95,22 +100,6 @@ struct ProgramDayEditView: View {
                 .disabled(viewModel.isAbandoning)
             }
         }
-    }
-
-    @ViewBuilder
-    private var discardDialogActions: some View {
-        Button("Discard", role: .destructive) {
-            Task { if await viewModel.discard() { dismiss() } }
-        }
-        Button("Cancel", role: .cancel) { }
-    }
-
-    @ViewBuilder
-    private var saveDialogActions: some View {
-        Button("Save") {
-            Task { if await viewModel.completeWithBackdate() { dismiss() } }
-        }
-        Button("Cancel", role: .cancel) { }
     }
 
     private func setLogSheet(for target: SetEditTarget) -> some View {
@@ -197,21 +186,41 @@ struct ProgramDayEditView: View {
 
     private var actionsSection: some View {
         Section {
-            HStack {
+            // One row with an explicit Divider: the Form's automatic row
+            // separator aligns its leading edge to the Label's text (past the
+            // icon), which left it visibly off-center.
+            VStack(spacing: 12) {
                 Label("\(viewModel.loggedSetsCount) of \(viewModel.totalTemplateSets) sets logged", systemImage: "checklist")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
-            Button {
-                showSaveConfirmation = true
-            } label: {
-                HStack {
-                    if viewModel.isCompleting { ProgressView().controlSize(.small) }
-                    Text(viewModel.isCompleting ? "Saving…" : "Save workout")
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Divider()
+                Button {
+                    showSaveConfirmation = true
+                } label: {
+                    // Same icon + label treatment as LiveWorkoutView's
+                    // "Complete Workout" CTA. The maxWidth frame lives on the
+                    // label so the prominent background fills the row.
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark.circle.fill")
+                        Text(viewModel.isCompleting ? "Saving…" : "Save Workout")
+                    }
+                    .font(.body.weight(.semibold))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 4)
+                    .overlay(alignment: .trailing) {
+                        if viewModel.isCompleting {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(.white)
+                        }
+                    }
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(viewModel.isCompleting || viewModel.loggedSetsCount == 0)
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(viewModel.isCompleting || viewModel.loggedSetsCount == 0)
+            .padding(.vertical, 4)
         }
     }
 

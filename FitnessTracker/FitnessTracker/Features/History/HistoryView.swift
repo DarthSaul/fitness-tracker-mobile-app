@@ -100,10 +100,13 @@ struct HistoryView: View {
     private func detailDestination(for entry: HistoryEntryDTO) -> some View {
         switch entry {
         case .program(let session):
-            WorkoutDetailView(viewModel: WorkoutDetailViewModel(
-                workoutId: session.id,
-                repository: workoutRepository
-            ))
+            WorkoutDetailView(
+                viewModel: WorkoutDetailViewModel(
+                    workoutId: session.id,
+                    repository: workoutRepository
+                ),
+                onChange: { Task { await viewModel.load() } }
+            )
         case .standalone(let session):
             StandaloneSessionDetailView(viewModel: StandaloneSessionDetailViewModel(
                 sessionId: session.id,

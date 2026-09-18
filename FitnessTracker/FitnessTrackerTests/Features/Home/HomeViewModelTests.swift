@@ -216,6 +216,28 @@ struct HomeViewModelTests {
         #expect(vm.progressPercent == 50)
     }
 
+    @Test("completedDays counts distinct days, so a day logged twice can't inflate progress")
+    func completedDaysAreDistinct() async throws {
+        let active = makeActiveProgram(weeks: [(1, 2)])
+        let duplicate = ActiveProgramSessionDTO(
+            id: "s1-1-again", userId: "u1", userProgramId: "up1",
+            weekNumber: 1, dayNumber: 1, status: .completed,
+            startedAt: .now, completedAt: .now, notes: nil,
+            count: ActiveProgramSessionDTO.Count(completedSets: 0)
+        )
+        let (vm, _) = makeViewModel(
+            active: active,
+            sessions: [
+                makeSession(week: 1, day: 1),
+                duplicate,
+                makeSession(week: 1, day: 2),
+            ]
+        )
+        await vm.load()
+        #expect(vm.completedDays == 2)
+        #expect(vm.progressPercent == 100)
+    }
+
     @Test("nextWorkoutDay points at the program's currentWeek/currentDay")
     func nextWorkout() async throws {
         let active = makeActiveProgram(currentWeek: 2, currentDay: 2)

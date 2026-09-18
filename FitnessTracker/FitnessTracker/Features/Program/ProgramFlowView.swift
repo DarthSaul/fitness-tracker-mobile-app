@@ -47,32 +47,44 @@ struct ProgramFlowView: View {
             Section { Text(program.program.name).foregroundStyle(.secondary) }
 
             ForEach(program.program.weeks, id: \.id) { week in
+                // Hand-rolled disclosure rather than DisclosureGroup: inside a
+                // List, DisclosureGroup indents its child rows, which left the
+                // day rows with an extra leading gutter.
                 Section {
-                    DisclosureGroup(
-                        isExpanded: Binding(
-                            get: { expandedWeeks.contains(week.weekNumber) },
-                            set: { isExpanded in
-                                if isExpanded { expandedWeeks.insert(week.weekNumber) }
-                                else { expandedWeeks.remove(week.weekNumber) }
-                            }
-                        )
-                    ) {
+                    weekHeader(week)
+                    if expandedWeeks.contains(week.weekNumber) {
                         ForEach(week.days, id: \.id) { day in
                             dayRow(weekNumber: week.weekNumber, day: day)
-                        }
-                    } label: {
-                        HStack(spacing: 8) {
-                            Text("Week \(week.weekNumber)").font(.headline)
-                            Spacer()
-                            Text("\(week.days.count) days")
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
                         }
                     }
                 }
             }
         }
         .listStyle(.insetGrouped)
+    }
+
+    private func weekHeader(_ week: ActiveUserProgramDTO.ActiveProgramWeek) -> some View {
+        let isExpanded = expandedWeeks.contains(week.weekNumber)
+        return Button {
+            withAnimation {
+                if isExpanded { expandedWeeks.remove(week.weekNumber) }
+                else { expandedWeeks.insert(week.weekNumber) }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text("Week \(week.weekNumber)").font(.headline)
+                Spacer()
+                Text("\(week.days.count) days")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tint)
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
