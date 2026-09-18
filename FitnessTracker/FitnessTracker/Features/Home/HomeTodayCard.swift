@@ -13,8 +13,8 @@ struct HomeTodayCard: View {
     var body: some View {
         if let active = viewModel.activeWorkout {
             ResumeCard(active: active)
-        } else if viewModel.hasActiveProgram {
-            StartNextCard(viewModel: viewModel)
+        } else if let program = viewModel.activeProgram {
+            StartNextCard(viewModel: viewModel, program: program)
         } else if !viewModel.hasLoadedOnce {
             LoadingCard()
         } else {
@@ -110,6 +110,12 @@ private struct ResumeCard: View {
 
 private struct StartNextCard: View {
     let viewModel: HomeViewModel
+    /// Unwrapped by the parent's `if let`. Passed as a value rather than
+    /// re-read from `viewModel.activeProgram` here: when a reload clears the
+    /// active program, SwiftUI can re-evaluate this body in the same
+    /// transaction before HomeTodayCard swaps it out, so a force-unwrap
+    /// inside this body crashes (DR-DUMBBELL-IOS-6).
+    let program: ActiveUserProgramDTO
     @Environment(LiveWorkoutPresentation.self) private var liveWorkout
     @State private var showPreview = false
     /// "One active workout at a time" prompt — shown when Start is tapped
@@ -117,7 +123,6 @@ private struct StartNextCard: View {
     @State private var showStandaloneConflict = false
 
     var body: some View {
-        let program = viewModel.activeProgram!
         // Card is no longer wrapped in one big Button — Preview and Start are
         // both real interactive controls inside a non-tappable container so
         // they don't collide with each other or with NavigationLink/Sheet
