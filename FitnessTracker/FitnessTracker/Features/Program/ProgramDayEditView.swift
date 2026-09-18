@@ -218,13 +218,21 @@ struct ProgramDayEditView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
-                .disabled(viewModel.isCompleting || viewModel.loggedSetsCount == 0)
+                .disabled(viewModel.isCompleting || !canSave)
             }
             .padding(.vertical, 4)
         }
     }
 
     // MARK: - Helpers
+
+    /// The "log at least one set" rule only guards completing a fresh
+    /// retroactive session. An already-completed workout can always save a
+    /// date change — it may hold only extra / ad-hoc sets, which
+    /// `loggedSetsCount` (template sets only) doesn't count.
+    private var canSave: Bool {
+        viewModel.session?.status == .completed || viewModel.loggedSetsCount > 0
+    }
 
     private var formattedWorkoutDate: String {
         let f = DateFormatter()
