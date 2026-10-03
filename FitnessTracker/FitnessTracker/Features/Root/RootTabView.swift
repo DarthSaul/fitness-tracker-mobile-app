@@ -10,6 +10,7 @@ import SwiftUI
 struct RootTabView: View {
     @Environment(APIClient.self) private var apiClient
     @Environment(SessionManager.self) private var sessionManager
+    @Environment(PushRegistrar.self) private var pushRegistrar
     @State private var resumeViewModel: ResumeWorkoutViewModel?
     @State private var tabSelection = TabSelection()
     @State private var liveWorkout = LiveWorkoutPresentation()
@@ -58,6 +59,13 @@ struct RootTabView: View {
                 resumeViewModel = ResumeWorkoutViewModel(apiClient: apiClient)
             }
             await resumeViewModel?.refresh()
+        }
+        .task {
+            // Signed in (this view only exists while authenticated): ask for
+            // notification permission once, and register this launch's APNs
+            // token if it arrived before the session did.
+            await pushRegistrar.requestAuthorizationIfNeeded()
+            await pushRegistrar.registerIfPossible()
         }
     }
 

@@ -22,7 +22,13 @@ enum KeychainError: Error, LocalizedError {
 
 // MARK: - Service
 actor KeychainService {
-    private let service = "me.fitness-app.tracker"
+    private let service: String
+
+    /// `service` namespaces the items. Tests pass their own so parallel
+    /// suites don't read or delete each other's tokens.
+    init(service: String = "me.fitness-app.tracker") {
+        self.service = service
+    }
 
     // MARK: - Save
     func save(_ value: String, for key: KeychainKey) throws {

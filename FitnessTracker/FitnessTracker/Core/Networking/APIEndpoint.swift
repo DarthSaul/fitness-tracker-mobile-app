@@ -21,8 +21,13 @@ enum APIEndpoint {
     /// link opens the web reset page (no native variant exists).
     case requestPasswordReset(PasswordResetBody)
     case refreshToken(RefreshTokenBody)
-    case logout
+    /// Native logout: revokes the refresh token and, on a user-initiated
+    /// sign-out, the device's push token. Never sent on a forced sign-out or
+    /// after account deletion.
+    case logout(LogoutBody)
     case getMe
+    /// PATCH /api/auth/me with any subset of the settings fields.
+    case updateMe(UpdateMeBody)
     /// Permanently deletes the account and all server data. The server
     /// cascades identities, workout history, programs, refresh tokens, and
     /// device tokens in one operation — do NOT follow up with `.logout` or
@@ -113,6 +118,54 @@ enum APIEndpoint {
     /// `APIClient.sendMultipart`) so this case carries no Encodable payload.
     case createFeedback
     case updateFeedback(id: String, body: UpdateFeedbackBody)
+
+    // Social — users
+    case searchUsers(query: String)
+    case getUser(id: String)
+    case getUserPosts(userId: String, page: PageQuery)
+    case checkUsernameAvailability(username: String)
+
+    // Social — follows
+    case follow(FollowBody)
+    /// Unfollow, or cancel my pending request. `204` even when not following.
+    case unfollow(userId: String)
+    case getFollowing
+    case getFollowers
+    case removeFollower(userId: String)
+    case getFollowRequests(direction: FollowRequestDirection)
+    case acceptFollowRequest(id: String)
+    /// Decline (as the followee) or cancel (as the requester).
+    case deleteFollowRequest(id: String)
+
+    // Social — feed and posts
+    case getFeed(page: PageQuery)
+    /// POST /api/post-photos. Multipart (field `photo`), built by
+    /// `APIClient.sendMultipart`, so this case carries no Encodable payload.
+    case uploadPostPhoto
+    case createPost(CreatePostBody)
+    case getPost(id: String)
+    case updatePost(id: String, body: UpdatePostBody)
+    case deletePost(id: String)
+
+    // Social — reactions. `emoji` is the raw emoji: the URL builder
+    // percent-encodes it (👍 → %F0%9F%91%8D). Pre-encoding would double-encode.
+    case addReaction(postId: String, emoji: String)
+    case removeReaction(postId: String, emoji: String)
+    case getReactors(postId: String, emoji: String, page: PageQuery)
+
+    // Social — safety
+    case getBlocks
+    case block(BlockBody)
+    case unblock(userId: String)
+    case report(ReportBody)
+
+    // Notifications
+    case getNotifications(status: NotificationListFilter, page: PageQuery)
+    case getUnreadNotificationCount
+    case updateNotification(id: String, body: UpdateNotificationBody)
+    case markAllNotificationsRead(MarkAllReadBody)
+    case getNotificationPreferences
+    case updateNotificationPreferences(UpdateNotificationPreferencesBody)
 }
 
 // MARK: - Request Building
@@ -129,6 +182,7 @@ extension APIEndpoint {
         case .refreshToken: return "/api/auth/refresh"
         case .logout: return "/api/auth/logout"
         case .getMe: return "/api/auth/me"
+        case .updateMe: return "/api/auth/me"
         case .deleteAccount: return "/api/auth/me"
 
         // Programs
@@ -208,6 +262,50 @@ extension APIEndpoint {
         case .getFeedback: return "/api/feedback"
         case .createFeedback: return "/api/feedback"
         case .updateFeedback(let id, _): return "/api/feedback/\(id)"
+
+        // Social — users
+        case .searchUsers: return "/api/users/search"
+        case .getUser(let id): return "/api/users/\(id)"
+        case .getUserPosts(let userId, _): return "/api/users/\(userId)/posts"
+        case .checkUsernameAvailability: return "/api/users/username-available"
+
+        // Social — follows
+        case .follow: return "/api/following"
+        case .unfollow(let userId): return "/api/following/\(userId)"
+        case .getFollowing: return "/api/following"
+        case .getFollowers: return "/api/followers"
+        case .removeFollower(let userId): return "/api/followers/\(userId)"
+        case .getFollowRequests: return "/api/follow-requests"
+        case .acceptFollowRequest(let id): return "/api/follow-requests/\(id)/accept"
+        case .deleteFollowRequest(let id): return "/api/follow-requests/\(id)"
+
+        // Social — feed and posts
+        case .getFeed: return "/api/feed"
+        case .uploadPostPhoto: return "/api/post-photos"
+        case .createPost: return "/api/posts"
+        case .getPost(let id): return "/api/posts/\(id)"
+        case .updatePost(let id, _): return "/api/posts/\(id)"
+        case .deletePost(let id): return "/api/posts/\(id)"
+
+        // Social — reactions
+        case .addReaction(let postId, let emoji),
+             .removeReaction(let postId, let emoji),
+             .getReactors(let postId, let emoji, _):
+            return "/api/posts/\(postId)/reactions/\(emoji)"
+
+        // Social — safety
+        case .getBlocks: return "/api/blocks"
+        case .block: return "/api/blocks"
+        case .unblock(let userId): return "/api/blocks/\(userId)"
+        case .report: return "/api/reports"
+
+        // Notifications
+        case .getNotifications: return "/api/notifications"
+        case .getUnreadNotificationCount: return "/api/notifications/unread-count"
+        case .updateNotification(let id, _): return "/api/notifications/\(id)"
+        case .markAllNotificationsRead: return "/api/notifications/read-all"
+        case .getNotificationPreferences, .updateNotificationPreferences:
+            return "/api/notifications/preferences"
         }
     }
 
@@ -222,7 +320,11 @@ extension APIEndpoint {
              .getActiveStandaloneSessions, .getStandaloneSession,
              .getExercises, .getCoreExercises, .getExerciseNotes, .getExerciseInfo,
              .getDashboard, .getAnalyticsExercises, .getAnalyticsExercise,
-             .getFeedback:
+             .getFeedback,
+             .searchUsers, .getUser, .getUserPosts, .checkUsernameAvailability,
+             .getFollowing, .getFollowers, .getFollowRequests,
+             .getFeed, .getPost, .getReactors, .getBlocks,
+             .getNotifications, .getUnreadNotificationCount, .getNotificationPreferences:
             return .get
 
         case .appleSignIn, .googleSignIn, .emailSignIn, .emailSignUp,
@@ -233,23 +335,32 @@ extension APIEndpoint {
              .createWorkout, .recordSet, .addExtraSet, .swapExercise, .addAdHocSet,
              .createStandaloneSession, .recordStandaloneSet,
              .registerDevice,
-             .createFeedback:
+             .createFeedback,
+             .follow, .acceptFollowRequest,
+             .uploadPostPhoto, .createPost,
+             .block, .report,
+             .markAllNotificationsRead:
             return .post
 
         case .activateProgram, .deactivateProgram, .completeProgram,
              .updateWorkoutNotes, .updateWorkoutDate, .completeWorkout, .updateSet,
              .updateStandaloneSet, .completeStandaloneSession,
              .completeCoreWorkout,
-             .updateFeedback:
+             .updateFeedback,
+             .updateMe, .updatePost,
+             .updateNotification, .updateNotificationPreferences:
             return .patch
 
-        case .updateExerciseNotes, .saveCoreWorkout:
+        case .updateExerciseNotes, .saveCoreWorkout,
+             .addReaction:
             return .put
 
         case .unsaveProgram, .unscheduleWorkout,
              .abandonWorkout, .deleteSet, .deleteExtraSet, .deleteCoreWorkout,
              .deleteStandaloneSet, .abandonStandaloneSession,
-             .unregisterDevice, .deleteAccount:
+             .unregisterDevice, .deleteAccount,
+             .unfollow, .removeFollower, .deleteFollowRequest,
+             .deletePost, .removeReaction, .unblock:
             return .delete
         }
     }
@@ -263,6 +374,8 @@ extension APIEndpoint {
         case .resendConfirmationEmail(let b): return b
         case .requestPasswordReset(let b): return b
         case .refreshToken(let b): return b
+        case .logout(let b): return b
+        case .updateMe(let b): return b
         case .saveProgram(let id): return SaveProgramBody(programId: id)
         case .scheduleWorkout(let b): return b
         case .createWorkout(let b): return b
@@ -283,7 +396,25 @@ extension APIEndpoint {
         case .updateExerciseNotes(_, let b): return b
         case .registerDevice(let b): return b
         case .updateFeedback(_, let b): return b
+        case .follow(let b): return b
+        case .createPost(let b): return b
+        case .updatePost(_, let b): return b
+        case .block(let b): return b
+        case .report(let b): return b
+        case .updateNotification(_, let b): return b
+        case .markAllNotificationsRead(let b): return b
+        case .updateNotificationPreferences(let b): return b
         default: return nil
+        }
+    }
+
+    /// Extra request headers beyond Content-Type and Authorization.
+    var headers: [String: String] {
+        switch self {
+        // Selects the server's JSON (native) logout path instead of the web
+        // cookie-clearing redirect.
+        case .logout: return ["X-Client-Type": "native"]
+        default: return [:]
         }
     }
 
@@ -328,6 +459,22 @@ extension APIEndpoint {
             guard let category, !category.isEmpty else { return nil }
             return [URLQueryItem(name: "category", value: category)]
 
+        case .searchUsers(let query):
+            return [URLQueryItem(name: "q", value: query)]
+
+        case .checkUsernameAvailability(let username):
+            return [URLQueryItem(name: "username", value: username)]
+
+        case .getFollowRequests(let direction):
+            return [URLQueryItem(name: "direction", value: direction.rawValue)]
+
+        case .getFeed(let page), .getUserPosts(_, let page), .getReactors(_, _, let page):
+            let items = page.queryItems
+            return items.isEmpty ? nil : items
+
+        case .getNotifications(let status, let page):
+            return [URLQueryItem(name: "status", value: status.rawValue)] + page.queryItems
+
         default:
             return nil
         }
@@ -352,6 +499,9 @@ extension APIEndpoint {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let token = accessToken {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        for (field, value) in headers {
+            request.setValue(value, forHTTPHeaderField: field)
         }
         if let body {
             request.httpBody = try JSONCoding.encoder.encode(body)
@@ -554,8 +704,126 @@ nonisolated struct UpdateExerciseNotesBody: Encodable, Sendable {
     let notes: String
 }
 
+/// POST /api/devices/register. `token` is the APNs token as lowercase hex.
 nonisolated struct DeviceRegistrationBody: Encodable, Sendable {
     let token: String
     let platform: String
     let environment: String
+}
+
+/// POST /api/auth/logout (native). `deviceToken` is sent only on a
+/// user-initiated sign-out, alongside the refresh token that proves who is
+/// signing out; nil keys are omitted from the JSON.
+nonisolated struct LogoutBody: Encodable, Sendable, Equatable {
+    let refreshToken: String
+    let deviceToken: String?
+}
+
+/// PATCH /api/auth/me. Send any subset; nil fields are omitted. To clear the
+/// bio send `""` (the server treats `""` and `null` the same).
+nonisolated struct UpdateMeBody: Encodable, Sendable, Equatable {
+    var profileVisibility: ProfileVisibility?
+    var username: String?
+    var bio: String?
+    var showActiveProgram: Bool?
+    var showWorkoutCount: Bool?
+}
+
+/// POST /api/following.
+nonisolated struct FollowBody: Encodable, Sendable, Equatable {
+    let userId: String
+}
+
+/// POST /api/posts. A workout share names **one** of `workoutSessionId`
+/// (a `PROGRAM` history row) or `standaloneSessionId` (a `STANDALONE` row) —
+/// never both — so build it through `init(body:photoIds:sharing:)`.
+nonisolated struct CreatePostBody: Encodable, Sendable, Equatable {
+    let body: String?
+    let photoIds: [String]?
+    let workoutSessionId: String?
+    let standaloneSessionId: String?
+
+    enum SharedWorkout: Sendable, Equatable {
+        case program(sessionId: String)
+        case standalone(sessionId: String)
+    }
+
+    init(body: String?, photoIds: [String] = [], sharing workout: SharedWorkout? = nil) {
+        let trimmed = body?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.body = (trimmed?.isEmpty ?? true) ? nil : trimmed
+        self.photoIds = photoIds.isEmpty ? nil : photoIds
+        switch workout {
+        case .program(let id):
+            workoutSessionId = id
+            standaloneSessionId = nil
+        case .standalone(let id):
+            workoutSessionId = nil
+            standaloneSessionId = id
+        case nil:
+            workoutSessionId = nil
+            standaloneSessionId = nil
+        }
+    }
+}
+
+/// PATCH /api/posts/:id. Only the text can change.
+nonisolated struct UpdatePostBody: Encodable, Sendable, Equatable {
+    let body: String
+}
+
+/// POST /api/blocks.
+nonisolated struct BlockBody: Encodable, Sendable, Equatable {
+    let userId: String
+}
+
+/// POST /api/reports. Exactly one of `postId` / `userId`; build it with
+/// `.post(...)` or `.user(...)`.
+nonisolated struct ReportBody: Encodable, Sendable, Equatable {
+    let postId: String?
+    let userId: String?
+    let reason: ReportReason
+    let details: String?
+
+    private init(postId: String?, userId: String?, reason: ReportReason, details: String?) {
+        self.postId = postId
+        self.userId = userId
+        self.reason = reason
+        let trimmed = details?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.details = (trimmed?.isEmpty ?? true) ? nil : trimmed
+    }
+
+    static func post(_ postId: String, reason: ReportReason, details: String?) -> ReportBody {
+        ReportBody(postId: postId, userId: nil, reason: reason, details: details)
+    }
+
+    static func user(_ userId: String, reason: ReportReason, details: String?) -> ReportBody {
+        ReportBody(postId: nil, userId: userId, reason: reason, details: details)
+    }
+}
+
+/// `?status=` for GET /api/notifications.
+nonisolated enum NotificationListFilter: String, Sendable {
+    case unread
+    case all
+}
+
+/// PATCH /api/notifications/:id.
+nonisolated struct UpdateNotificationBody: Encodable, Sendable, Equatable {
+    let status: NotificationStatus
+}
+
+/// POST /api/notifications/read-all. `before` is the `createdAt` of the
+/// newest item on screen, sent back exactly as received.
+nonisolated struct MarkAllReadBody: Encodable, Sendable, Equatable {
+    let before: String?
+}
+
+/// PATCH /api/notifications/preferences. Any subset; nil fields are omitted.
+/// `timezone` must be an IANA name (`TimeZone.current.identifier`), never an
+/// offset.
+nonisolated struct UpdateNotificationPreferencesBody: Encodable, Sendable, Equatable {
+    var push: [String: Bool]?
+    var timezone: String?
+    var workoutReminderTime: String?
+    var workoutReminderDay: WorkoutReminderDay?
 }

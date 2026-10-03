@@ -79,8 +79,19 @@ final class MockAPIClient: APIClientProtocol {
         "\(method.rawValue) \(path)"
     }
 
+    /// Every endpoint resolved, in order — stubbed or not — so tests can
+    /// assert what was sent (bodies, query items, call counts).
+    private(set) var sentEndpoints: [APIEndpoint] = []
+
+    /// How many requests hit `"METHOD path"`.
+    func callCount(for endpoint: APIEndpoint) -> Int {
+        let key = Self.key(for: endpoint)
+        return sentEndpoints.filter { Self.key(for: $0) == key }.count
+    }
+
     // MARK: - Helpers
     private func resolve(_ endpoint: APIEndpoint) throws(APIError) -> Data {
+        sentEndpoints.append(endpoint)
         let key = Self.key(for: endpoint)
         guard let handler = handlers[key] else {
             throw APIError.missingHandler(path: key)
@@ -111,5 +122,18 @@ final class MockAPIClient: APIClientProtocol {
     /// the endpoint case is easy to construct.
     func stubUnauthorized(method: HTTPMethod, path: String) {
         handlers[Self.key(method: method, path: path)] = { _ in throw APIError.unauthorized }
+    }
+
+    /// Stub a raw JSON body — for wire-shape tests where the payload should be
+    /// exactly what the server sends rather than a re-encoded DTO.
+    func stubJSON(_ endpoint: APIEndpoint, _ json: String) {
+        handlers[Self.key(for: endpoint)] = { _ in Data(json.utf8) }
+    }
+
+    /// Stub an HTTP error status (with an optional h3-style body).
+    func stubHTTPError(_ endpoint: APIEndpoint, status: Int, message: String? = nil, body: String = "") {
+        handlers[Self.key(for: endpoint)] = { _ in
+            throw APIError.httpError(statusCode: status, message: message, data: Data(body.utf8))
+        }
     }
 }

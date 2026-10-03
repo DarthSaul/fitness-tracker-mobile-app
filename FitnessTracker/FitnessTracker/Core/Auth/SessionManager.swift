@@ -20,6 +20,9 @@ final class SessionManager {
     /// avoid an init-time dependency on APIClient (APIClient depends on
     /// TokenRefresher, which lives on SessionManager — circular if injected).
     var apiClient: (any APIClientProtocol)?
+    /// Set by the app shell. Supplies the APNs token for a user-initiated
+    /// sign-out and is told to re-register after the next sign-in.
+    var pushRegistrar: PushRegistrar?
 
     // MARK: - Init
     init(keychain: KeychainService, tokenStore: TokenStore) {
@@ -80,7 +83,50 @@ final class SessionManager {
         }
     }
 
+    /// Replaces the cached profile with a fresh `PATCH /api/auth/me` response,
+    /// if it belongs to the signed-in user.
+    func applyProfile(_ profile: UserProfile) {
+        guard case .authenticated(let userId) = authState, userId == profile.id else { return }
+        userProfile = profile
+    }
+
+    /// The signed-in user's id, for "My profile" and `isMine` checks.
+    var currentUserId: String? {
+        if case .authenticated(let userId) = authState { return userId }
+        return nil
+    }
+
     // MARK: - Sign Out
+
+    /// The user tapped Sign Out. Revokes the session server-side — the
+    /// refresh token, and this phone's push token so the next person to use
+    /// it doesn't get this user's notifications — then clears local state.
+    ///
+    /// `POST /api/auth/logout` is best-effort: if it fails (offline, server
+    /// down) the user is still signed out locally. It's skipped when there's
+    /// no refresh token, since that token is what proves who is signing out.
+    func signOutByUser() async {
+        Logger.auth.info("User-initiated sign-out.")
+        if let apiClient, let refreshToken = try? await keychain.load(.refreshToken) {
+            let body = LogoutBody(refreshToken: refreshToken, deviceToken: pushRegistrar?.deviceToken)
+            do {
+                try await apiClient.send(.logout(body))
+            } catch {
+                Logger.auth.error("Logout request failed; signing out locally anyway: \(error)")
+            }
+        }
+        await signOut()
+    }
+
+    /// Clears local session state only: Keychain, in-memory token, cached
+    /// profile, Sentry identity. No API call.
+    ///
+    /// This is the **forced** sign-out every `.unauthorized` path uses (the
+    /// refresh token is already dead), and the teardown after account
+    /// deletion (the server already revoked everything). It deliberately
+    /// leaves the device registered for push, so workout reminders keep
+    /// reaching the user's phone; tapping one routes through sign-in. For the
+    /// Sign Out button, use `signOutByUser()`.
     func signOut() async {
         Logger.auth.info("Signing out.")
 
@@ -102,6 +148,9 @@ final class SessionManager {
         userProfile = nil
         authState = .unauthenticated
         SentrySDK.setUser(nil)
+        // Whoever signs in next registers the token again (re-activating it
+        // after a user sign-out revoked it, or moving it to a new user).
+        pushRegistrar?.resetRegistration()
     }
 
     // MARK: - Delete Account
