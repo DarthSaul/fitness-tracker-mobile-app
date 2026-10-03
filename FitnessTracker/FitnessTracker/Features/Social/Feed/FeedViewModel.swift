@@ -2,93 +2,105 @@ import Foundation
 import Observation
 import OSLog
 
-/// Drives the Friends tab: the post composer and the following feed.
+/// Drives the Friends feed (design-spec 01): the following feed, the
+/// incoming follow-request shortcut row, and keeping both in step with
+/// changes made elsewhere (`SocialEvents`).
 ///
-/// The feed pages through `KeysetPaginator`. A new post is inserted at the
-/// top from the `201` response rather than refetching. Photo URLs are signed
-/// for 15 minutes, so a feed holding expired URLs is refetched when the
-/// screen comes back (`refreshIfPhotosExpired`) instead of showing broken
-/// images.
+/// Photo URLs are signed for 15 minutes, so a feed holding expired URLs is
+/// refetched when the screen comes back (`refreshIfPhotosExpired`) rather
+/// than showing broken images.
 @Observable
 @MainActor
 final class FeedViewModel {
-    // MARK: - Feed
     let feed: KeysetPaginator<PostDTO>
+    /// Pending requests to me, newest first, for the shortcut row.
+    private(set) var incomingRequests: [FollowRequestDTO] = []
 
-    // MARK: - Composer
-    var draft = ""
-    private(set) var isPosting = false
-    private(set) var postError: String?
+    private let context: SocialContext
 
-    // MARK: - Dependencies
-    private let repository: FeedRepository
-    private let sessionManager: SessionManager
-    /// The seam for the App Store Guideline 1.2 terms-of-use gate before a
-    /// first post. No API exists for it yet, so it always allows posting;
-    /// when one ships, this decides whether to show the terms first.
-    private let canPost: @MainActor () -> Bool
-
-    init(
-        repository: FeedRepository,
-        sessionManager: SessionManager,
-        pageSize: Int = 20,
-        canPost: @escaping @MainActor () -> Bool = { true }
-    ) {
-        self.repository = repository
-        self.sessionManager = sessionManager
-        self.canPost = canPost
+    init(context: SocialContext, pageSize: Int = 20) {
+        self.context = context
         self.feed = KeysetPaginator(
             pageSize: pageSize,
             endRule: .shortPage,
             cursor: \.cursor,
-            onUnauthorized: { await sessionManager.signOut() },
-            fetch: { try await repository.fetchFeed(page: $0) }
+            onUnauthorized: { await context.handleUnauthorized() },
+            fetch: { try await context.repository.fetchFeed(page: $0) }
         )
-    }
-
-    // MARK: - Composer
-
-    /// Trimmed length as the server counts it (UTF-16 code units).
-    var draftLength: Int { SocialRules.postBodyLength(draft) }
-
-    var isDraftTooLong: Bool { draftLength > SocialRules.postBodyMax }
-
-    /// Text-only for now: a body is required (photos and workout shares,
-    /// which allow an empty body, come later).
-    var canSubmit: Bool {
-        draftLength > 0 && !isDraftTooLong && !isPosting
-    }
-
-    func submit() async {
-        guard canSubmit, canPost() else { return }
-        isPosting = true
-        postError = nil
-        defer { isPosting = false }
-
-        do {
-            let post = try await repository.createPost(CreatePostBody(body: draft))
-            feed.insertAtTop(post)
-            draft = ""
-        } catch {
-            let failure = APIFailure(error)
-            if failure == .unauthorized {
-                await sessionManager.signOut()
-                return
-            }
-            Logger.data.error("Create post failed: \(error)")
-            postError = failure.message
+        context.events.subscribe(self) { [weak self] event in
+            self?.apply(event)
         }
     }
 
-    func clearPostError() {
-        postError = nil
+    // MARK: - Loading
+
+    func loadIfNeeded() async {
+        async let posts: Void = feed.loadIfNeeded()
+        async let requests: Void = loadRequests()
+        _ = await (posts, requests)
     }
 
-    // MARK: - Photo URL expiry
+    func refresh() async {
+        async let posts: Void = feed.refresh()
+        async let requests: Void = loadRequests()
+        _ = await (posts, requests)
+    }
+
+    func loadRequests() async {
+        do {
+            incomingRequests = try await context.repository.fetchFollowRequests(direction: .incoming)
+        } catch {
+            _ = await context.failure(from: error)
+            // The row is a shortcut (Activity always reaches requests), so a
+            // failure just leaves it as it was.
+            Logger.data.error("Incoming requests failed: \(error)")
+        }
+    }
 
     /// Refetches from the top when any loaded post's photo URLs have expired.
     func refreshIfPhotosExpired(now: Date = .now) async {
         guard feed.items.contains(where: { $0.photosExpired(at: now) }) else { return }
         await feed.refresh()
+    }
+
+    // MARK: - Derived
+
+    /// The empty state (design-spec 11): loaded, and nothing to show.
+    var isEmpty: Bool {
+        feed.hasLoaded && feed.items.isEmpty && feed.loadError == nil
+    }
+
+    /// "Theo, Ana and 1 other".
+    var requestsSummary: String {
+        Self.namesSummary(incomingRequests.map(\.user.firstName))
+    }
+
+    static func namesSummary(_ names: [String]) -> String {
+        switch names.count {
+        case 0: return ""
+        case 1: return names[0]
+        case 2: return "\(names[0]) and \(names[1])"
+        default:
+            let others = names.count - 2
+            return "\(names[0]), \(names[1]) and \(others) other\(others == 1 ? "" : "s")"
+        }
+    }
+
+    // MARK: - Events
+
+    private func apply(_ event: SocialEvent) {
+        switch event {
+        case .postCreated(let post):
+            feed.insertAtTop(post)
+        case .postUpdated(let post):
+            feed.replace(post)
+        case .postDeleted(let id):
+            feed.remove(id: id)
+        case .userBlocked(let userId):
+            feed.removeAll { $0.author.id == userId }
+            incomingRequests.removeAll { $0.user.id == userId }
+        case .followsChanged:
+            Task { await loadRequests() }
+        }
     }
 }

@@ -15,7 +15,7 @@ struct ContentView: View {
             AuthView(viewModel: makeAuthViewModel())
 
         case .authenticated:
-            RootTabView()
+            RootTabView(apiClient: apiClient, sessionManager: sessionManager)
         }
     }
 

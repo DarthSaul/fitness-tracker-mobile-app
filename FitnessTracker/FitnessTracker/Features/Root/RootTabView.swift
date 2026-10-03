@@ -11,10 +11,26 @@ struct RootTabView: View {
     @Environment(APIClient.self) private var apiClient
     @Environment(SessionManager.self) private var sessionManager
     @Environment(PushRegistrar.self) private var pushRegistrar
+    @Environment(PushRouter.self) private var pushRouter
     @State private var resumeViewModel: ResumeWorkoutViewModel?
     @State private var tabSelection = TabSelection()
     @State private var liveWorkout = LiveWorkoutPresentation()
     @State private var runChanges = ProgramRunChanges()
+    /// Session-scoped (this view exists only while signed in, so a new
+    /// sign-in starts fresh): social services and notification state.
+    @State private var socialContext: SocialContext
+    @State private var notifications: NotificationCenterModel
+
+    init(apiClient: any APIClientProtocol, sessionManager: SessionManager) {
+        _socialContext = State(initialValue: SocialContext(
+            repository: SocialRepository(apiClient: apiClient),
+            sessionManager: sessionManager
+        ))
+        _notifications = State(initialValue: NotificationCenterModel(
+            repository: NotificationsRepository(apiClient: apiClient),
+            sessionManager: sessionManager
+        ))
+    }
 
     var body: some View {
         TabView(selection: $tabSelection.current) {
@@ -27,20 +43,37 @@ struct RootTabView: View {
                 .tag(AppTab.friends)
 
             withResumeBanner(ProgressTab())
-                .tabItem { Label("Progress", systemImage: "chart.line.uptrend.xyaxis") }
+                .tabItem { Label("Progress", systemImage: "chart.xyaxis.line") }
                 .tag(AppTab.progress)
 
             withResumeBanner(ProgramsTab())
                 .tabItem { Label("Programs", systemImage: "dumbbell.fill") }
                 .tag(AppTab.programs)
 
-            withResumeBanner(NavigationStack { SettingsView() })
-                .tabItem { Label("Settings", systemImage: "gearshape") }
+            withResumeBanner(NavigationStack { SettingsView().friendsDestinations() })
+                .tabItem { Label("Settings", systemImage: "gearshape.fill") }
                 .tag(AppTab.settings)
         }
         .environment(tabSelection)
         .environment(liveWorkout)
         .environment(runChanges)
+        .environment(socialContext)
+        .environment(notifications)
+        .toastOverlay(socialContext.toasts)
+        .task {
+            await notifications.syncTimezone()
+            await notifications.refreshUnreadCount()
+            await openPendingPush()
+        }
+        .onChange(of: pushRouter.pending) {
+            Task { await openPendingPush() }
+        }
+        .onChange(of: pushRouter.foregroundRevision) {
+            Task { await notifications.refreshUnreadCount() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
+            Task { await notifications.syncTimezone() }
+        }
         // Ending a run early deletes its in-progress workout server-side, so
         // the banner must not keep offering to resume it.
         .onChange(of: runChanges.revision) {
@@ -67,6 +100,27 @@ struct RootTabView: View {
             await pushRegistrar.requestAuthorizationIfNeeded()
             await pushRegistrar.registerIfPossible()
         }
+    }
+
+    /// Opens a tapped push's target, then marks it read. Follower pushes
+    /// carry no actor, so the actor is looked up in the inbox to open their
+    /// profile (falling back to Activity).
+    private func openPendingPush() async {
+        guard let payload = pushRouter.take() else { return }
+        var actorId: String?
+        if payload.type == .newFollower || payload.type == .followAccepted {
+            let recent = try? await notifications.repository.fetch(status: .all, page: .firstPage)
+            actorId = recent?.first { $0.id == payload.notificationId }?.actor?.id
+        }
+        switch NotificationDestination.for(type: payload.type, target: payload.target, actorId: actorId) {
+        case .friends(let routes):
+            tabSelection.select(.friends)
+            socialContext.router.show(routes)
+        case .home:
+            tabSelection.select(.home)
+        }
+        _ = try? await notifications.repository.setStatus(id: payload.notificationId, .read)
+        await notifications.refreshUnreadCount()
     }
 
     @ViewBuilder

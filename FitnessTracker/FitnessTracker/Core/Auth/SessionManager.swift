@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import OSLog
 import Sentry
+import UserNotifications
 
 @Observable
 final class SessionManager {
@@ -119,6 +120,10 @@ final class SessionManager {
                 Logger.auth.error("Logout request failed; signing out locally anyway: \(error)")
             }
         }
+        // This user's unread count shouldn't stay on the icon for whoever
+        // uses the phone next. (A forced sign-out keeps it: the pushes, and
+        // their badge, keep coming.)
+        UNUserNotificationCenter.current().setBadgeCount(0) { _ in }
         await signOut()
     }
 

@@ -8,13 +8,18 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(APIClient.self) private var apiClient
     @Environment(SessionManager.self) private var sessionManager
+    @Environment(SocialContext.self) private var socialContext
+    @Environment(NotificationCenterModel.self) private var notifications
 
     @AppStorage(appAppearanceStorageKey) private var appearanceRaw: String = AppAppearance.system.rawValue
+    @AppStorage(SocialSettingsViewModel.askToShareDefaultsKey) private var askToShareAfterWorkouts = true
 
     @State private var isSigningOut = false
     @State private var isDeletingAccount = false
     @State private var showDeleteConfirmation = false
     @State private var deleteAccountError: APIError?
+    @State private var social: SocialSettingsViewModel?
+    @State private var confirmGoPublic = false
 
     private var appearance: Binding<AppAppearance> {
         Binding(
@@ -33,7 +38,17 @@ struct SettingsView: View {
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
 
-            Section { ProfileHeader(profile: sessionManager.userProfile) }
+            Section {
+                NavigationLink {
+                    EditProfileView(context: socialContext)
+                } label: {
+                    ProfileHeader(profile: sessionManager.userProfile, followerCount: social?.followerCount)
+                }
+            }
+
+            if let social {
+                socialSection(social)
+            }
 
             Section("Preferences") {
                 Picker(selection: appearance) {
@@ -42,6 +57,12 @@ struct SettingsView: View {
                     }
                 } label: {
                     Label("Appearance", systemImage: "circle.lefthalf.filled")
+                }
+
+                NavigationLink {
+                    NotificationPreferencesView(repository: notifications.repository, context: socialContext)
+                } label: {
+                    Label("Notifications", systemImage: "bell.badge")
                 }
 
                 NavigationLink {
@@ -107,12 +128,97 @@ struct SettingsView: View {
         .contentMargins(.top, 12, for: .scrollContent)
         .scrollingTitleChrome(title: "Settings")
         .toolbar(.hidden, for: .navigationBar)
+        .task {
+            if social == nil { social = SocialSettingsViewModel(context: socialContext) }
+            await social?.loadCounts()
+        }
+        .confirmationAlert(
+            "Make your account public?",
+            isPresented: $confirmGoPublic,
+            message: goPublicMessage,
+            confirmLabel: "Make Public"
+        ) {
+            Task { await social?.setPrivate(false) }
+        }
         .alert("Couldn't Delete Account", isPresented: deleteErrorBinding) {
             Button("Retry") { Task { await performDeleteAccount() } }
             Button("Cancel", role: .cancel) { deleteAccountError = nil }
         } message: {
             Text(deleteAccountError?.localizedDescription ?? "")
         }
+    }
+
+    // MARK: - Social
+
+    private func socialSection(_ social: SocialSettingsViewModel) -> some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { social.isPrivate },
+                set: { makePrivate in
+                    if makePrivate {
+                        Task { await social.setPrivate(true) }
+                    } else {
+                        // Going public approves pending requests: warn first.
+                        confirmGoPublic = true
+                    }
+                }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Private account")
+                    Text("Approve who can follow you")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .disabled(social.savingFields.contains("profileVisibility"))
+
+            Toggle("Ask to share after workouts", isOn: $askToShareAfterWorkouts)
+
+            Toggle(isOn: Binding(
+                get: { social.showActiveProgram },
+                set: { value in Task { await social.setShowActiveProgram(value) } }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Show current program")
+                    Text("Its name, on your profile")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Toggle(isOn: Binding(
+                get: { social.showWorkoutCount },
+                set: { value in Task { await social.setShowWorkoutCount(value) } }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Show workout count")
+                    Text("Total completed, on your profile")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            NavigationLink {
+                BlockedAccountsView(context: socialContext) { social.setBlockedCount($0) }
+            } label: {
+                LabeledContent("Blocked accounts") {
+                    if let count = social.blockedCount { Text("\(count)") }
+                }
+            }
+        } header: {
+            Text("Social")
+        } footer: {
+            Text("Your workouts are only ever yours. Posts, and the two profile stats above, are what others can see.")
+        }
+        .tint(.green)
+    }
+
+    private var goPublicMessage: String {
+        let pending = social?.pendingRequestCount ?? 0
+        let approval = pending > 0
+            ? " Your \(pending) pending request\(pending == 1 ? "" : "s") will be approved."
+            : ""
+        return "Anyone will be able to follow you and see your posts without asking.\(approval)"
     }
 
     private var deleteErrorBinding: Binding<Bool> {
@@ -159,15 +265,16 @@ struct SettingsView: View {
 
 private struct ProfileHeader: View {
     let profile: UserProfile?
+    var followerCount: Int?
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             avatar
             VStack(alignment: .leading, spacing: 2) {
                 Text(displayName)
-                    .font(.title3.weight(.semibold))
-                if let email = profile?.email {
-                    Text(email)
+                    .font(.system(size: 20, weight: .semibold))
+                if let subtitle {
+                    Text(subtitle)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -179,30 +286,29 @@ private struct ProfileHeader: View {
         .padding(.vertical, 4)
     }
 
+    /// "@saulg · 48 followers", falling back to the email before the
+    /// username loads.
+    private var subtitle: String? {
+        guard let profile else { return nil }
+        guard let username = profile.username else { return profile.email }
+        guard let followerCount else { return "@\(username)" }
+        return "@\(username) · \(followerCount) follower\(followerCount == 1 ? "" : "s")"
+    }
+
     private var displayName: String {
         if let name = profile?.name, !name.isEmpty { return name }
         if let email = profile?.email { return email }
         return "Signed in"
     }
 
-    @ViewBuilder
+    /// The same hue-tinted avatar other people see on my posts.
     private var avatar: some View {
-        ZStack {
-            Circle().fill(Color.purple.opacity(0.15))
-            Text(initials)
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(.purple)
-        }
-        .frame(width: 44, height: 44)
-    }
-
-    private var initials: String {
-        let source: String? = profile?.name?.isEmpty == false ? profile?.name : profile?.email
-        guard let s = source, !s.isEmpty else { return "·" }
-        let parts = s.split(separator: " ", maxSplits: 1)
-        if parts.count == 2 {
-            return String(parts[0].prefix(1) + parts[1].prefix(1)).uppercased()
-        }
-        return String(s.prefix(1)).uppercased()
+        InitialsAvatar(
+            seed: profile?.id ?? "",
+            name: profile?.name,
+            fallback: profile?.username ?? profile?.email ?? "·",
+            imageURL: profile?.avatarUrl.flatMap(URL.init(string:)),
+            size: 56
+        )
     }
 }
