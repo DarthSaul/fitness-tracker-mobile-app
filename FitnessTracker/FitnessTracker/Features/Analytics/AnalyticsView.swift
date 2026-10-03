@@ -31,7 +31,13 @@ struct AnalyticsView: View {
             .padding(.horizontal)
             .padding(.vertical, 12)
         }
-        .task { await viewModel.load() }
+        // Switching back to the Analytics section re-runs `.task`; skip the
+        // reload once both loads have succeeded. Pull-to-refresh always reloads.
+        .task {
+            if viewModel.dashboardStatus != .success || viewModel.exercisesStatus != .success {
+                await viewModel.load()
+            }
+        }
         .refreshable { await viewModel.load() }
         .sheet(isPresented: $isSelectorPresented) {
             AnalyticsExercisePicker(

@@ -107,6 +107,10 @@ final class SessionManager {
     /// no refresh token, since that token is what proves who is signing out.
     func signOutByUser() async {
         Logger.auth.info("User-initiated sign-out.")
+        // Stop push registration first (and let any in-flight one finish),
+        // so a registration can't land after logout and re-activate the
+        // token it revokes. The local teardown below lifts the suspension.
+        await pushRegistrar?.suspendRegistration()
         if let apiClient, let refreshToken = try? await keychain.load(.refreshToken) {
             let body = LogoutBody(refreshToken: refreshToken, deviceToken: pushRegistrar?.deviceToken)
             do {

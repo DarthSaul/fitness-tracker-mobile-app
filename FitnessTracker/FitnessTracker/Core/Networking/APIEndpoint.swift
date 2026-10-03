@@ -704,7 +704,8 @@ nonisolated struct UpdateExerciseNotesBody: Encodable, Sendable {
     let notes: String
 }
 
-/// POST /api/devices/register. `token` is the APNs token as lowercase hex.
+/// POST /api/devices/register. `token` is the APNs token as lowercase hex;
+/// `environment` is the signed build's APNs environment (`PushEnvironment`).
 nonisolated struct DeviceRegistrationBody: Encodable, Sendable {
     let token: String
     let platform: String

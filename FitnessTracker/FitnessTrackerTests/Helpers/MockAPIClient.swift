@@ -50,6 +50,7 @@ final class MockAPIClient: APIClientProtocol {
 
     func send(_ endpoint: APIEndpoint) async throws(APIError) {
         _ = try resolve(endpoint)
+        await holdIfNeeded(endpoint)
     }
 
     /// Records the most recent multipart call so tests can assert the parts
