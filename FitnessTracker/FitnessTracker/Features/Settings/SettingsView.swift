@@ -128,7 +128,9 @@ struct SettingsView: View {
         // Reset on every exit so the button doesn't stay disabled if signOut
         // returns without the view tearing down (e.g. an unforeseen error path).
         defer { isSigningOut = false }
-        await sessionManager.signOut()
+        // User-initiated: revoke the refresh token and this phone's push
+        // token server-side, then clear local state.
+        await sessionManager.signOutByUser()
         // SessionManager.authState flipping to .unauthenticated swaps
         // ContentView back to AuthView, so no explicit dismissal is needed.
     }

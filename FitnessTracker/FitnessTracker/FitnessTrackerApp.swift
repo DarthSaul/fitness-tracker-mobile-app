@@ -6,11 +6,14 @@ import OSLog
 
 @main
 struct FitnessTrackerApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     // MARK: - Core Services (created once at app lifetime)
     private let keychain = KeychainService()
     private let tokenStore = TokenStore()
     private let sessionManager: SessionManager
     private let apiClient: APIClient
+    private let pushRegistrar: PushRegistrar
     private let modelContainer: ModelContainer
 
     @AppStorage(appAppearanceStorageKey) private var appearanceRaw: String = AppAppearance.system.rawValue
@@ -55,6 +58,12 @@ struct FitnessTrackerApp: App {
         )
         sm.apiClient = apiClient
 
+        // MARK: Push
+        let registrar = PushRegistrar()
+        registrar.configure(sessionManager: sm, apiClient: apiClient)
+        sm.pushRegistrar = registrar
+        pushRegistrar = registrar
+
         // MARK: Persistence
         do {
             modelContainer = try PersistenceContainer.makeShared()
@@ -72,8 +81,15 @@ struct FitnessTrackerApp: App {
             ContentView()
                 .environment(sessionManager)
                 .environment(apiClient)
+                .environment(pushRegistrar)
                 .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
-                .task { await sessionManager.bootstrap() }
+                .task {
+                    // Hand the registrar to the delegate before bootstrap so
+                    // a token APNs already delivered is registered as soon as
+                    // the session is up.
+                    appDelegate.pushRegistrar = pushRegistrar
+                    await sessionManager.bootstrap()
+                }
                 .onOpenURL { url in GIDSignIn.sharedInstance.handle(url) }
         }
         .modelContainer(modelContainer)

@@ -57,7 +57,7 @@ struct HomeRecentHistorySection: View {
                 .padding(.horizontal)
 
                 Button {
-                    tabSelection.select(.history)
+                    tabSelection.selectProgress(.history)
                 } label: {
                     HStack(spacing: 4) {
                         Text("View all history")

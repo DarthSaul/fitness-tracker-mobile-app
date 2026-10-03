@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Top-level shell when the user is authenticated. Hosts the three primary
-/// tabs, the resume-workout banner, and the live-workout cover (program or
+/// Top-level shell when the user is authenticated. Hosts the five tabs
+/// (Home, Friends, Progress, Programs, Settings), the resume-workout banner, and the live-workout cover (program or
 /// standalone, keyed by LiveWorkoutPresentation.target).
 ///
 /// Convention: each tab's NavigationStack lives at the tab level here.
@@ -10,6 +10,7 @@ import SwiftUI
 struct RootTabView: View {
     @Environment(APIClient.self) private var apiClient
     @Environment(SessionManager.self) private var sessionManager
+    @Environment(PushRegistrar.self) private var pushRegistrar
     @State private var resumeViewModel: ResumeWorkoutViewModel?
     @State private var tabSelection = TabSelection()
     @State private var liveWorkout = LiveWorkoutPresentation()
@@ -21,13 +22,13 @@ struct RootTabView: View {
                 .tabItem { Label("Home", systemImage: "house.fill") }
                 .tag(AppTab.home)
 
-            withResumeBanner(HistoryTab())
-                .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
-                .tag(AppTab.history)
+            withResumeBanner(FriendsTab())
+                .tabItem { Label("Friends", systemImage: "person.2.fill") }
+                .tag(AppTab.friends)
 
-            withResumeBanner(AnalyticsTab())
-                .tabItem { Label("Analytics", systemImage: "chart.line.uptrend.xyaxis") }
-                .tag(AppTab.analytics)
+            withResumeBanner(ProgressTab())
+                .tabItem { Label("Progress", systemImage: "chart.line.uptrend.xyaxis") }
+                .tag(AppTab.progress)
 
             withResumeBanner(ProgramsTab())
                 .tabItem { Label("Programs", systemImage: "dumbbell.fill") }
@@ -58,6 +59,13 @@ struct RootTabView: View {
                 resumeViewModel = ResumeWorkoutViewModel(apiClient: apiClient)
             }
             await resumeViewModel?.refresh()
+        }
+        .task {
+            // Signed in (this view only exists while authenticated): ask for
+            // notification permission once, and register this launch's APNs
+            // token if it arrived before the session did.
+            await pushRegistrar.requestAuthorizationIfNeeded()
+            await pushRegistrar.registerIfPossible()
         }
     }
 
