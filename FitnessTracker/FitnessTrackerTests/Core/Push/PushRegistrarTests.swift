@@ -121,11 +121,21 @@ struct PushRegistrarTests {
 
     @Test("the environment follows the signed aps-environment, not the build configuration")
     func environmentFromSignedProfile() {
-        #expect(PushEnvironment.resolve(isSimulator: false, provisioningProfile: profile(apsEnvironment: "development")) == .sandbox)
-        #expect(PushEnvironment.resolve(isSimulator: false, provisioningProfile: profile(apsEnvironment: "production")) == .production)
+        // A Release build signed for development (installed from Xcode) is sandbox.
+        #expect(PushEnvironment.resolve(isSimulator: false, provisioningProfile: profile(apsEnvironment: "development"), isDebugBuild: false) == .sandbox)
+        #expect(PushEnvironment.resolve(isSimulator: false, provisioningProfile: profile(apsEnvironment: "production"), isDebugBuild: true) == .production)
         // App Store / TestFlight builds carry no embedded profile.
-        #expect(PushEnvironment.resolve(isSimulator: false, provisioningProfile: nil) == .production)
-        #expect(PushEnvironment.resolve(isSimulator: true, provisioningProfile: nil) == .sandbox)
+        #expect(PushEnvironment.resolve(isSimulator: false, provisioningProfile: nil, isDebugBuild: false) == .production)
+        #expect(PushEnvironment.resolve(isSimulator: true, provisioningProfile: nil, isDebugBuild: false) == .sandbox)
+    }
+
+    @Test("an unreadable profile falls back to the build configuration, not to sandbox")
+    func unreadableProfileFallsBack() {
+        let unreadable = Data("not a profile".utf8)
+        #expect(PushEnvironment.resolve(isSimulator: false, provisioningProfile: unreadable, isDebugBuild: false) == .production)
+        #expect(PushEnvironment.resolve(isSimulator: false, provisioningProfile: unreadable, isDebugBuild: true) == .sandbox)
+        #expect(PushEnvironment.resolve(isSimulator: false, provisioningProfile: profile(apsEnvironment: nil), isDebugBuild: false) == .production)
+        #expect(PushEnvironment.resolve(isSimulator: false, provisioningProfile: profile(apsEnvironment: "weird"), isDebugBuild: false) == .production)
     }
 
     @Test("aps-environment is read out of the signed profile blob")

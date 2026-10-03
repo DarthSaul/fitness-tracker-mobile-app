@@ -18,9 +18,14 @@ nonisolated enum PushEnvironment: String, Sendable {
         #else
         let isSimulator = false
         #endif
+        #if DEBUG
+        let isDebugBuild = true
+        #else
+        let isDebugBuild = false
+        #endif
         let profile = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision")
             .flatMap { try? Data(contentsOf: $0) }
-        return resolve(isSimulator: isSimulator, provisioningProfile: profile)
+        return resolve(isSimulator: isSimulator, provisioningProfile: profile, isDebugBuild: isDebugBuild)
     }()
 
     /// - Simulator: sandbox (APNs simulator tokens are sandbox tokens).
@@ -28,16 +33,32 @@ nonisolated enum PushEnvironment: String, Sendable {
     ///   which Apple re-signs for production.
     /// - Otherwise the profile's `aps-environment` entitlement: `production`
     ///   (ad hoc / enterprise) or `development`.
-    static func resolve(isSimulator: Bool, provisioningProfile: Data?) -> PushEnvironment {
+    /// - A profile whose entitlement can't be read (missing or unrecognized)
+    ///   falls back to the build configuration — Debug sandbox, Release
+    ///   production — and logs, rather than silently assuming sandbox.
+    static func resolve(isSimulator: Bool, provisioningProfile: Data?, isDebugBuild: Bool) -> PushEnvironment {
         if isSimulator { return .sandbox }
         guard let provisioningProfile else { return .production }
-        return apsEnvironment(inProvisioningProfile: provisioningProfile) == "production" ? .production : .sandbox
+        switch apsEnvironment(inProvisioningProfile: provisioningProfile) {
+        case "production": return .production
+        case "development": return .sandbox
+        case let other:
+            let fallback: PushEnvironment = isDebugBuild ? .sandbox : .production
+            Logger.app.warning(
+                "Couldn't read aps-environment from the provisioning profile (\(other ?? "missing", privacy: .public)); using \(fallback.rawValue, privacy: .public) from the build configuration."
+            )
+            return fallback
+        }
     }
 
     /// The `Entitlements.aps-environment` value from an
-    /// `embedded.mobileprovision`. The file is a CMS-signed blob with the
-    /// property list embedded as plain XML, so the plist is sliced out
-    /// rather than verifying the signature (iOS already did, at install).
+    /// `embedded.mobileprovision`.
+    ///
+    /// iOS has no public API for reading an app's own signed entitlements
+    /// (`SecTaskCopyValueForEntitlement` is macOS-only) or for decoding the
+    /// profile's CMS envelope (`CMSDecoder` isn't in the iOS SDK). The
+    /// envelope stores its property list as plain XML, so the plist is sliced
+    /// out and parsed; the signature itself was verified by iOS at install.
     static func apsEnvironment(inProvisioningProfile data: Data) -> String? {
         guard let start = data.range(of: Data("<?xml".utf8)),
               let end = data.range(of: Data("</plist>".utf8), in: start.lowerBound..<data.endIndex)
