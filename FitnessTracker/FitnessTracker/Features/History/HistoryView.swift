@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Full-list workout history. Hosted by HistoryTab inside a NavigationStack.
+/// Full-list workout history: the History section of the Progress tab, which
+/// provides the NavigationStack and the screen title.
 /// Program and standalone completions interleave chronologically (unified
 /// GET /api/history); rows push the matching detail view for their type.
 struct HistoryView: View {
@@ -21,10 +22,6 @@ struct HistoryView: View {
 
     var body: some View {
         content
-            .safeAreaInset(edge: .top, spacing: 0) {
-                ScreenTitleHeader(title: "History", emoji: "🕒")
-            }
-            .toolbar(.hidden, for: .navigationBar)
             .task { if viewModel.sessions.isEmpty { await viewModel.load() } }
             .refreshable { await viewModel.load() }
     }

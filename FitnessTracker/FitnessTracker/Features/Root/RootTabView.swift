@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Top-level shell when the user is authenticated. Hosts the three primary
-/// tabs, the resume-workout banner, and the live-workout cover (program or
+/// Top-level shell when the user is authenticated. Hosts the five tabs
+/// (Home, Friends, Progress, Programs, Settings), the resume-workout banner, and the live-workout cover (program or
 /// standalone, keyed by LiveWorkoutPresentation.target).
 ///
 /// Convention: each tab's NavigationStack lives at the tab level here.
@@ -22,13 +22,13 @@ struct RootTabView: View {
                 .tabItem { Label("Home", systemImage: "house.fill") }
                 .tag(AppTab.home)
 
-            withResumeBanner(HistoryTab())
-                .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
-                .tag(AppTab.history)
+            withResumeBanner(FriendsTab())
+                .tabItem { Label("Friends", systemImage: "person.2.fill") }
+                .tag(AppTab.friends)
 
-            withResumeBanner(AnalyticsTab())
-                .tabItem { Label("Analytics", systemImage: "chart.line.uptrend.xyaxis") }
-                .tag(AppTab.analytics)
+            withResumeBanner(ProgressTab())
+                .tabItem { Label("Progress", systemImage: "chart.line.uptrend.xyaxis") }
+                .tag(AppTab.progress)
 
             withResumeBanner(ProgramsTab())
                 .tabItem { Label("Programs", systemImage: "dumbbell.fill") }

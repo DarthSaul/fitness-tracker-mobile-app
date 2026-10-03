@@ -8,7 +8,8 @@ import Charts
 ///   4. Selected-exercise detail: e1RM sparkline (Swift Charts, tap-to-label)
 ///      and a reverse-chronological session list.
 ///
-/// The tab provides the NavigationStack — this view is content-only.
+/// The Analytics section of the Progress tab, which provides the
+/// NavigationStack and the screen title — this view is content-only.
 struct AnalyticsView: View {
     @State private var viewModel: AnalyticsViewModel
     @State private var isE1rmInfoOpen = false
@@ -21,24 +22,15 @@ struct AnalyticsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                ScreenTitleHeader(title: "Analytics", emoji: "📈")
-
-                // ScreenTitleHeader brings its own horizontal padding, so the
-                // rest of the content takes it per-child instead of on the
-                // whole stack.
-                Group {
-                    header
-                    statsGrid
-                    e1rmExplainer
-                    exerciseSelector
-                    exerciseDetail
-                }
-                .padding(.horizontal)
+                header
+                statsGrid
+                e1rmExplainer
+                exerciseSelector
+                exerciseDetail
             }
+            .padding(.horizontal)
             .padding(.vertical, 12)
         }
-        .scrollingTitleChrome(title: "Analytics")
-        .toolbar(.hidden, for: .navigationBar)
         .task { await viewModel.load() }
         .refreshable { await viewModel.load() }
         .sheet(isPresented: $isSelectorPresented) {
