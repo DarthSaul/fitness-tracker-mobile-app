@@ -3,8 +3,8 @@ import SwiftUI
 /// Today-view card with three states keyed off HomeViewModel:
 ///   1. Active workout exists  → "Resume workout" with X/Y sets progress.
 ///   2. Active program but no active workout → the Next Up card: program and
-///      position, exercise preview, program progress bar, then a "Start
-///      workout" button with a square Preview button beside it.
+///      position (with the completed/total count), exercise preview, then a
+///      "Start workout" button with a square Preview button beside it.
 ///   3. No active program → empty state pointing at Program → Explore.
 struct HomeTodayCard: View {
     let viewModel: HomeViewModel
@@ -169,9 +169,6 @@ private struct StartNextCard: View {
                     .padding(.top, 2)
                 }
 
-                ProgramProgressBar(fraction: Double(viewModel.progressPercent) / 100)
-                    .padding(.top, 4)
-
                 HStack(spacing: 8) {
                     Button {
                         if viewModel.blockingStandaloneSession != nil {
@@ -299,23 +296,5 @@ private struct PrimaryWorkoutButtonLabel: View {
             .frame(height: 46)
             .background(Color.green, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-    }
-}
-
-/// 4pt program progress bar (track gray, fill blue).
-private struct ProgramProgressBar: View {
-    let fraction: Double
-
-    var body: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Color(.systemGray4))
-                Capsule()
-                    .fill(Color.blue)
-                    .frame(width: proxy.size.width * min(max(fraction, 0), 1))
-            }
-        }
-        .frame(height: 4)
-        .accessibilityHidden(true)
     }
 }
