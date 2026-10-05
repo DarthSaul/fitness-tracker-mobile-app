@@ -65,7 +65,7 @@ final class HomeRepository {
         userProgramId: String,
         weekNumber: Int,
         dayNumber: Int,
-        scheduledDate: Date
+        scheduledDate: CalendarDay
     ) async throws -> ScheduledWorkoutDTO {
         let response: ScheduleWorkoutResponseDTO = try await apiClient.send(
             .scheduleWorkout(ScheduleWorkoutBody(

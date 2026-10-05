@@ -22,7 +22,7 @@ final class NotificationCenterModel {
         repository: NotificationsRepository,
         sessionManager: SessionManager,
         badgeSetter: @escaping @MainActor (Int) -> Void = { count in
-            UNUserNotificationCenter.current().setBadgeCount(count) { _ in }
+            Task { try? await UNUserNotificationCenter.current().setBadgeCount(count) }
         }
     ) {
         self.repository = repository

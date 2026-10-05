@@ -51,24 +51,30 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
 // MARK: - Notification taps
 
+// Both methods are main-actor isolated, not `nonisolated`: the async variants
+// are bridged from an Objective-C completion-handler method, and the handler
+// runs wherever the async body finishes. A nonisolated body finishes on the
+// cooperative pool, and UIKit asserts "Call must be made on main thread".
 extension AppDelegate: UNUserNotificationCenterDelegate {
     /// A push tapped from the lock screen or Notification Center.
-    nonisolated func userNotificationCenter(
+    @MainActor
+    func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse
     ) async {
         let userInfo = response.notification.request.content.userInfo
         guard let payload = PushPayload(userInfo: userInfo) else { return }
-        await MainActor.run { pushRouter.receive(payload) }
+        pushRouter.receive(payload)
     }
 
     /// A push arriving while the app is open: show it as a banner and
     /// refresh the unread count.
-    nonisolated func userNotificationCenter(
+    @MainActor
+    func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification
     ) async -> UNNotificationPresentationOptions {
-        await MainActor.run { pushRouter.receivedInForeground() }
+        pushRouter.receivedInForeground()
         return [.banner, .list, .sound, .badge]
     }
 }

@@ -128,7 +128,8 @@ final class HomeViewModel {
 
     /// Schedule (if any) for the selected non-today date.
     var scheduledForSelectedDate: ScheduledWorkoutDTO? {
-        scheduledWorkouts.first { calendar.isDate($0.scheduledDate, inSameDayAs: selectedDate) }
+        let day = CalendarDay(selectedDate, in: calendar)
+        return scheduledWorkouts.first { $0.scheduledDate == day }
     }
 
     /// Returns the schedule (if any) for a given week/day in the active program.
@@ -138,7 +139,7 @@ final class HomeViewModel {
 
     /// Day-string keys ("yyyy-MM-dd") used by the calendar strip to mark dates that have schedules.
     var scheduledDateKeys: Set<String> {
-        Set(scheduledWorkouts.map { Self.dayKey($0.scheduledDate, calendar: calendar) })
+        Set(scheduledWorkouts.map(\.scheduledDate.key))
     }
 
     /// Day-string keys ("yyyy-MM-dd") for dates with a completed session, used by
@@ -261,7 +262,7 @@ final class HomeViewModel {
                 userProgramId: userProgramId,
                 weekNumber: weekNumber,
                 dayNumber: dayNumber,
-                scheduledDate: selectedDate
+                scheduledDate: CalendarDay(selectedDate, in: calendar)
             )
             await refreshScheduled()
         } catch let apiError as APIError where apiError == .unauthorized {
@@ -398,8 +399,7 @@ final class HomeViewModel {
     /// "yyyy-MM-dd" key in the given calendar's time zone. Built from components
     /// rather than a shared DateFormatter so calls from any actor are safe.
     static func dayKey(_ date: Date, calendar: Calendar = .current) -> String {
-        let c = calendar.dateComponents([.year, .month, .day], from: date)
-        return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+        CalendarDay(date, in: calendar).key
     }
 }
 

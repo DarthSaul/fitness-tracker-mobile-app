@@ -582,7 +582,8 @@ nonisolated struct ScheduleWorkoutBody: Encodable, Sendable {
     let userProgramId: String
     let weekNumber: Int
     let dayNumber: Int
-    let scheduledDate: Date
+    /// Sent as `"yyyy-MM-dd"`, the local day the user picked.
+    let scheduledDate: CalendarDay
 }
 
 /// POST /api/workouts. Send `nil` for current-position; provide week/day for retroactive.
