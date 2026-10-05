@@ -17,13 +17,33 @@ struct StandaloneLiveWorkoutView: View {
     /// Rest stopwatch — owned here (not in the sheet) so it keeps counting
     /// while the timer drawer is dismissed and reopened.
     @State private var restStopwatch = RestStopwatch()
+    /// Set once the workout is completed: the cover then shows the
+    /// post-workout share prompt instead of closing.
+    @State private var completionSummary: WorkoutCompletionSummary?
     @Environment(\.dismiss) private var dismiss
+    @Environment(SocialContext.self) private var socialContext
+    @Environment(APIClient.self) private var apiClient
 
     init(viewModel: StandaloneLiveWorkoutViewModel) {
         _viewModel = State(initialValue: viewModel)
     }
 
     var body: some View {
+        if let completionSummary {
+            PostWorkoutShareView(
+                viewModel: PostWorkoutShareViewModel(
+                    summary: completionSummary,
+                    context: socialContext,
+                    historyRepository: HistoryRepository(apiClient: apiClient)
+                ),
+                onDone: { dismiss() }
+            )
+        } else {
+            workout
+        }
+    }
+
+    private var workout: some View {
         NavigationStack {
             content
                 .navigationBarTitleDisplayMode(.inline)
@@ -37,7 +57,19 @@ struct StandaloneLiveWorkoutView: View {
                     message: "This finalizes your session. It won't affect your program.",
                     confirmLabel: "Complete"
                 ) {
-                    Task { if await viewModel.completeWorkout() { dismiss() } }
+                    // Captured before completing: the summary reflects the
+                    // workout as the user finished it.
+                    let summary = viewModel.session.map {
+                        WorkoutCompletionSummary.standalone($0, workoutName: viewModel.workoutDisplayName)
+                    }
+                    Task {
+                        guard await viewModel.completeWorkout() else { return }
+                        if let summary {
+                            withAnimation { completionSummary = summary }
+                        } else {
+                            dismiss()
+                        }
+                    }
                 }
                 .confirmationAlert(
                     "Abandon this workout?",

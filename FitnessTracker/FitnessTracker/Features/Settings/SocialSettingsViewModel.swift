@@ -8,10 +8,6 @@ import OSLog
 @Observable
 @MainActor
 final class SocialSettingsViewModel {
-    /// "Ask to share after workouts" is a device setting (no API); read by
-    /// the post-workout share prompt.
-    static let askToShareDefaultsKey = "askToShareAfterWorkouts"
-
     private(set) var followerCount: Int?
     private(set) var blockedCount: Int?
     private(set) var savingFields: Set<String> = []

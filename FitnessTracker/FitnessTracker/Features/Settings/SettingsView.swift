@@ -12,7 +12,6 @@ struct SettingsView: View {
     @Environment(NotificationCenterModel.self) private var notifications
 
     @AppStorage(appAppearanceStorageKey) private var appearanceRaw: String = AppAppearance.system.rawValue
-    @AppStorage(SocialSettingsViewModel.askToShareDefaultsKey) private var askToShareAfterWorkouts = true
 
     @State private var isSigningOut = false
     @State private var isDeletingAccount = false
@@ -171,8 +170,6 @@ struct SettingsView: View {
                 }
             }
             .disabled(social.savingFields.contains("profileVisibility"))
-
-            Toggle("Ask to share after workouts", isOn: $askToShareAfterWorkouts)
 
             Toggle(isOn: Binding(
                 get: { social.showActiveProgram },
