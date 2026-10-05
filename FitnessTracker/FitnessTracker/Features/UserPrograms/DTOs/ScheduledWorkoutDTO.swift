@@ -5,7 +5,8 @@ nonisolated struct ScheduledWorkoutDTO: Codable, Sendable, Equatable, Identifiab
     let userProgramId: String
     let weekNumber: Int
     let dayNumber: Int
-    let scheduledDate: Date
+    /// A calendar day, not a moment: see `CalendarDay`.
+    let scheduledDate: CalendarDay
     let createdAt: Date
 }
 

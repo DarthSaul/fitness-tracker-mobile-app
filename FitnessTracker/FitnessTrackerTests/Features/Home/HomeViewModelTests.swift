@@ -51,7 +51,7 @@ struct HomeViewModelTests {
         ScheduledWorkoutDTO(
             id: id, userProgramId: "up1",
             weekNumber: week, dayNumber: day,
-            scheduledDate: date, createdAt: .now
+            scheduledDate: CalendarDay(date), createdAt: .now
         )
     }
 
@@ -99,7 +99,8 @@ struct HomeViewModelTests {
         activeStandalone: [StandaloneSessionListItemDTO] = [],
         historyPageSize: Int = 50,
         historyMaxPageCount: Int = 10,
-        calendarWeeksBack: Int = 52
+        calendarWeeksBack: Int = 52,
+        calendar: Calendar = .current
     ) -> (HomeViewModel, MockAPIClient) {
         let client = MockAPIClient()
         if let active {
@@ -145,6 +146,7 @@ struct HomeViewModelTests {
             historyRepository: historyRepo,
             standaloneRepository: standaloneRepo,
             sessionManager: session,
+            calendar: calendar,
             historyPageSize: historyPageSize,
             historyMaxPageCount: historyMaxPageCount,
             calendarWeeksBack: calendarWeeksBack
@@ -491,7 +493,7 @@ struct HomeViewModelTests {
         let newScheduled = makeScheduled(id: "sw-new", week: 1, day: 2, on: vm.selectedDate)
         client.stub(
             .scheduleWorkout(ScheduleWorkoutBody(
-                userProgramId: active.id, weekNumber: 1, dayNumber: 2, scheduledDate: vm.selectedDate
+                userProgramId: active.id, weekNumber: 1, dayNumber: 2, scheduledDate: CalendarDay(vm.selectedDate)
             )),
             response: ScheduleWorkoutResponseDTO(scheduledWorkout: newScheduled)
         )
@@ -613,5 +615,71 @@ struct HomeViewModelTests {
         client.stubUnauthorized(for: .abandonStandaloneSession(id: "ss1"))
 
         #expect(await vm.resolveStandaloneSessions(discard: true) == false)
+    }
+
+    // MARK: - Scheduled dates are calendar days
+
+    /// `scheduledDate` is a Postgres DATE the server sends as UTC midnight.
+    /// West of UTC that instant is the previous local evening; east of UTC,
+    /// local midnight is still the previous UTC day. Both zones must agree
+    /// the workout is on Oct 8.
+    nonisolated static let scheduleTimeZones = ["America/New_York", "Europe/Berlin"]
+
+    private func calendar(in timeZone: String) throws -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: timeZone))
+        return calendar
+    }
+
+    private func localMidnight(_ year: Int, _ month: Int, _ day: Int, in calendar: Calendar) throws -> Date {
+        try #require(calendar.date(from: DateComponents(year: year, month: month, day: day)))
+    }
+
+    @Test("a UTC-midnight scheduledDate shows on its own calendar day", arguments: scheduleTimeZones)
+    func scheduledDateIsACalendarDay(timeZone: String) async throws {
+        let calendar = try calendar(in: timeZone)
+        let active = makeActiveProgram()
+        let (vm, client) = makeViewModel(active: active, calendar: calendar)
+        client.stubJSON(
+            .getScheduledWorkouts(userProgramId: active.id, from: nil, to: nil),
+            """
+            {"scheduledWorkouts":[{"id":"sw1","userProgramId":"up1","weekNumber":1,"dayNumber":2,\
+            "scheduledDate":"2026-10-08T00:00:00.000Z","createdAt":"2026-10-01T12:00:00.000Z"}]}
+            """
+        )
+        await vm.load()
+
+        vm.selectedDate = try localMidnight(2026, 10, 8, in: calendar)
+        #expect(vm.scheduledForSelectedDate?.id == "sw1")
+        vm.selectedDate = try localMidnight(2026, 10, 7, in: calendar)
+        #expect(vm.scheduledForSelectedDate == nil)
+        #expect(vm.scheduledDateKeys == ["2026-10-08"])
+    }
+
+    @Test("scheduling a day sends that local day as yyyy-MM-dd", arguments: scheduleTimeZones)
+    func scheduleSendsLocalCalendarDay(timeZone: String) async throws {
+        let calendar = try calendar(in: timeZone)
+        let active = makeActiveProgram()
+        let (vm, client) = makeViewModel(active: active, calendar: calendar)
+        await vm.load()
+        vm.selectedDate = try localMidnight(2026, 10, 8, in: calendar)
+
+        var sent: APIEndpoint?
+        client.handlers[MockAPIClient.key(method: .post, path: "/api/scheduled-workouts")] = { endpoint in
+            sent = endpoint
+            return Data("""
+            {"scheduledWorkout":{"id":"sw1","userProgramId":"up1","weekNumber":1,"dayNumber":2,\
+            "scheduledDate":"2026-10-08T00:00:00.000Z","createdAt":"2026-10-01T12:00:00.000Z"}}
+            """.utf8)
+        }
+        await vm.schedule(weekNumber: 1, dayNumber: 2)
+
+        let request = try #require(sent).urlRequest(
+            baseURL: try #require(URL(string: "https://example.test")), accessToken: nil
+        )
+        let body = try #require(request.httpBody)
+        let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        #expect(json["scheduledDate"] as? String == "2026-10-08")
+        #expect(vm.scheduleError == nil)
     }
 }

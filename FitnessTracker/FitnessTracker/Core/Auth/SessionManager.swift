@@ -123,7 +123,7 @@ final class SessionManager {
         // This user's unread count shouldn't stay on the icon for whoever
         // uses the phone next. (A forced sign-out keeps it: the pushes, and
         // their badge, keep coming.)
-        UNUserNotificationCenter.current().setBadgeCount(0) { _ in }
+        try? await UNUserNotificationCenter.current().setBadgeCount(0)
         await signOut()
     }
 
