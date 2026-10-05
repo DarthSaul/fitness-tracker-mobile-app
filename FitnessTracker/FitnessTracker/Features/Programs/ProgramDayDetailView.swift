@@ -7,7 +7,6 @@ struct ProgramDayDetailView: View {
 
     @Environment(\.dismiss) private var dismiss
     @State private var day: ProgramDayDTO?
-    @State private var isLoading = false
     @State private var loadError: Error?
 
     init(dayId: String, dayNumber: Int, repository: ProgramRepository) {
@@ -47,15 +46,17 @@ struct ProgramDayDetailView: View {
                     }
                 }
             }
-        } else if isLoading {
-            ProgressView("Loading…")
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let loadError {
             ContentUnavailableView(
                 "Couldn't load day",
                 systemImage: "exclamationmark.triangle",
                 description: Text(loadError.localizedDescription)
             )
+        } else {
+            // Also covers the pre-load state: this branch must always render
+            // a view, or the `.task` attached to `content` never fires.
+            ProgressView("Loading…")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 
@@ -67,9 +68,7 @@ struct ProgramDayDetailView: View {
     }
 
     private func load() async {
-        isLoading = true
         loadError = nil
-        defer { isLoading = false }
         do {
             day = try await repository.fetchProgramDay(id: dayId)
         } catch {
