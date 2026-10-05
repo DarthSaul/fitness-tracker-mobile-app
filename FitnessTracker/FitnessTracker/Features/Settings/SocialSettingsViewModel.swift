@@ -10,7 +10,8 @@ import OSLog
 final class SocialSettingsViewModel {
     private(set) var followerCount: Int?
     private(set) var blockedCount: Int?
-    private(set) var savingFields: Set<String> = []
+    /// Profile fields with a save in flight.
+    private var savingFields: Set<PartialKeyPath<UserProfile>> = []
     /// Pending follow requests, for the "going public" warning.
     private(set) var pendingRequestCount = 0
 
@@ -52,9 +53,8 @@ final class SocialSettingsViewModel {
     /// Going public approves every pending request (the view warns first);
     /// going private keeps existing followers.
     func setPrivate(_ isPrivate: Bool) async {
-        let saved = await update("profileVisibility", UpdateMeBody(profileVisibility: isPrivate ? .private : .public)) {
-            $0.profileVisibility = isPrivate ? .private : .public
-        }
+        let visibility: ProfileVisibility = isPrivate ? .private : .public
+        let saved = await update(\.profileVisibility, to: visibility, body: UpdateMeBody(profileVisibility: visibility))
         // Only a successful switch to public approved the pending requests.
         if saved, !isPrivate {
             pendingRequestCount = 0
@@ -63,34 +63,52 @@ final class SocialSettingsViewModel {
     }
 
     func setShowActiveProgram(_ value: Bool) async {
-        await update("showActiveProgram", UpdateMeBody(showActiveProgram: value)) { $0.showActiveProgram = value }
+        await update(\.showActiveProgram, to: value, body: UpdateMeBody(showActiveProgram: value))
     }
 
     func setShowWorkoutCount(_ value: Bool) async {
-        await update("showWorkoutCount", UpdateMeBody(showWorkoutCount: value)) { $0.showWorkoutCount = value }
+        await update(\.showWorkoutCount, to: value, body: UpdateMeBody(showWorkoutCount: value))
     }
 
-    /// Applies `change` to the cached profile at once, PATCHes, then adopts
-    /// the server's copy — or restores the old one and shows a toast.
-    /// Returns whether the change was saved.
+    func isSaving(_ field: PartialKeyPath<UserProfile>) -> Bool {
+        savingFields.contains(field)
+    }
+
+    /// Sets one field optimistically, then PATCHes it. Each save touches
+    /// only its own field — success takes that field from the server's
+    /// response, failure restores just that field — so overlapping saves of
+    /// different settings can't undo each other. A field already being saved
+    /// is left alone (its toggle is disabled meanwhile). Returns whether the
+    /// change was saved.
     @discardableResult
-    private func update(_ field: String, _ body: UpdateMeBody, change: (inout UserProfile) -> Void) async -> Bool {
-        guard let original = profile else { return false }
-        var optimistic = original
-        change(&optimistic)
-        sessionManager.applyProfile(optimistic)
+    private func update<Value>(
+        _ field: WritableKeyPath<UserProfile, Value?>,
+        to value: Value,
+        body: UpdateMeBody
+    ) async -> Bool {
+        guard let current = profile, !savingFields.contains(field) else { return false }
+        let previous = current[keyPath: field]
+        setField(field, to: value)
         savingFields.insert(field)
         defer { savingFields.remove(field) }
         do {
             let saved = try await context.repository.updateMe(body)
-            sessionManager.applyProfile(saved)
+            setField(field, to: saved[keyPath: field])
             return true
         } catch {
-            sessionManager.applyProfile(original)
+            setField(field, to: previous)
             guard let failure = await context.failure(from: error) else { return false }
             Logger.data.error("Settings update failed: \(error)")
             context.toasts.show("Couldn't save that setting. \(failure.message)")
             return false
         }
+    }
+
+    /// Writes one field into the *current* cached profile, leaving any other
+    /// field another save changed meanwhile untouched.
+    private func setField<Value>(_ field: WritableKeyPath<UserProfile, Value?>, to value: Value?) {
+        guard var updated = profile else { return }
+        updated[keyPath: field] = value
+        sessionManager.applyProfile(updated)
     }
 }

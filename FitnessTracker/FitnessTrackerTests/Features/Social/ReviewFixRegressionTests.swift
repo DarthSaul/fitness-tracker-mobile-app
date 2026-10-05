@@ -100,6 +100,70 @@ struct ReviewFixRegressionTests {
         #expect(!log.events.contains { if case .followsChanged = $0 { true } else { false } })
     }
 
+    @Test("overlapping settings saves don't undo each other")
+    func overlappingSettingsSaves() async throws {
+        let harness = SocialTestHarness()
+        let original = UserProfile(
+            id: "user-me", email: "s@example.com", name: nil, avatarUrl: nil,
+            profileVisibility: .private, showActiveProgram: true, showWorkoutCount: true
+        )
+        harness.client.stub(.getMe, response: original)
+        await harness.sessionManager.loadProfile()
+
+        // The server echoes the whole profile with only that request's field
+        // changed — so each response is stale about the other save.
+        harness.client.handlers["PATCH /api/auth/me"] = { endpoint in
+            guard case .updateMe(let body) = endpoint else { return Data() }
+            var echoed = original
+            if let value = body.showActiveProgram { echoed.showActiveProgram = value }
+            if let value = body.showWorkoutCount { echoed.showWorkoutCount = value }
+            return try JSONCoding.encoder.encode(echoed)
+        }
+        let viewModel = SocialSettingsViewModel(context: harness.context)
+        let endpoint = APIEndpoint.updateMe(UpdateMeBody())
+
+        // First save is held on the wire while the second completes.
+        harness.client.holdNextResponse(for: endpoint)
+        let first = Task { await viewModel.setShowActiveProgram(false) }
+        for _ in 0..<200 where !harness.client.isHolding(endpoint) { await Task.yield() }
+        #expect(harness.client.isHolding(endpoint))
+
+        await viewModel.setShowWorkoutCount(false)
+        #expect(!viewModel.showActiveProgram, "the second save didn't restore the first field")
+
+        harness.client.release(endpoint)
+        await first.value
+
+        #expect(!viewModel.showActiveProgram)
+        #expect(!viewModel.showWorkoutCount, "the first save's stale response didn't undo the second")
+    }
+
+    @Test("a failed settings save reverts only its own field")
+    func settingsRevertOwnField() async {
+        let harness = SocialTestHarness()
+        harness.client.stub(.getMe, response: UserProfile(
+            id: "user-me", email: "s@example.com", name: nil, avatarUrl: nil,
+            showActiveProgram: true, showWorkoutCount: true
+        ))
+        await harness.sessionManager.loadProfile()
+        harness.client.handlers["PATCH /api/auth/me"] = { endpoint in
+            guard case .updateMe(let body) = endpoint, body.showWorkoutCount == nil else {
+                throw APIError.httpError(statusCode: 500, message: nil, data: Data())
+            }
+            return try JSONCoding.encoder.encode(UserProfile(
+                id: "user-me", email: "s@example.com", name: nil, avatarUrl: nil,
+                showActiveProgram: false, showWorkoutCount: true
+            ))
+        }
+        let viewModel = SocialSettingsViewModel(context: harness.context)
+
+        await viewModel.setShowActiveProgram(false)
+        await viewModel.setShowWorkoutCount(false)
+
+        #expect(!viewModel.showActiveProgram, "the successful change stays")
+        #expect(viewModel.showWorkoutCount, "only the failed field reverts")
+    }
+
     // MARK: - Compose
 
     @Test("overlapping photo picks never exceed four photos")

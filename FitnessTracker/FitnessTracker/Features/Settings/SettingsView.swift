@@ -169,7 +169,7 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .disabled(social.savingFields.contains("profileVisibility"))
+            .disabled(social.isSaving(\UserProfile.profileVisibility))
 
             Toggle(isOn: Binding(
                 get: { social.showActiveProgram },
@@ -182,6 +182,7 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .disabled(social.isSaving(\UserProfile.showActiveProgram))
 
             Toggle(isOn: Binding(
                 get: { social.showWorkoutCount },
@@ -194,6 +195,7 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+            .disabled(social.isSaving(\UserProfile.showWorkoutCount))
 
             NavigationLink {
                 BlockedAccountsView(context: socialContext) { social.setBlockedCount($0) }
