@@ -135,4 +135,74 @@ struct HistoryViewModelTests {
         await vm.loadMore()
         #expect(vm.sessions.count == 1)
     }
+
+    // MARK: - Calendar
+
+    private let day: TimeInterval = 86_400
+    private let base = Date(timeIntervalSince1970: 1_790_000_000)
+
+    /// Pages newest-first from `entries`, honoring the cursor.
+    private func stubPaged(_ client: MockAPIClient, _ entries: [HistoryEntryDTO]) {
+        client.handlers["GET /api/history"] = { endpoint in
+            guard case .getHistory(_, let limit, let before, let beforeId) = endpoint else { return Data() }
+            var rows = entries
+            if let before, let beforeId, let index = rows.firstIndex(where: { $0.id == beforeId && $0.completedAt == before }) {
+                rows = Array(rows[(index + 1)...])
+            }
+            return try JSONCoding.encoder.encode(HistoryResponseDTO(sessions: Array(rows.prefix(limit ?? 20))))
+        }
+    }
+
+    @Test("load fills the calendar from the completion dates")
+    func calendarFromDates() async throws {
+        let (vm, client) = makeViewModel(pageSize: 5)
+        stubPaged(client, [makeProgramEntry(id: "a", completedAt: base)])
+        client.stub(.getHistoryDates, response: HistoryDatesResponseDTO(completedAt: [base, base.addingTimeInterval(-3 * day)]))
+
+        await vm.load()
+
+        #expect(vm.workoutCalendar.hasWorkout(on: base))
+        #expect(vm.workoutCalendar.hasWorkout(on: base.addingTimeInterval(-3 * day)))
+    }
+
+    @Test("a failed dates call still shows the list")
+    func datesFailureKeepsList() async throws {
+        let (vm, client) = makeViewModel(pageSize: 5)
+        stubPaged(client, [makeProgramEntry(id: "a", completedAt: base)])
+        client.stubHTTPError(.getHistoryDates, status: 500)
+
+        await vm.load()
+
+        #expect(vm.sessions.map(\.id) == ["a"])
+        #expect(vm.loadError == nil)
+    }
+
+    @Test("tapping a day pages back until that day's workout is loaded")
+    func revealPagesToDay() async throws {
+        let (vm, client) = makeViewModel(pageSize: 2)
+        let entries = (0..<6).map { makeProgramEntry(id: "s\($0)", completedAt: base.addingTimeInterval(-Double($0) * day)) }
+        stubPaged(client, entries)
+        await vm.load()
+        #expect(vm.sessions.count == 2)
+
+        let id = await vm.reveal(day: base.addingTimeInterval(-4 * day))
+
+        #expect(id == "s4")
+        #expect(vm.sessions.count >= 5)
+        #expect(vm.selectedDay != nil)
+    }
+
+    @Test("tapping a day with nothing loaded for it stops once history passes it")
+    func revealStopsWhenPassed() async throws {
+        let (vm, client) = makeViewModel(pageSize: 2)
+        // Workouts every other day; the tapped day has none.
+        let entries = (0..<4).map { makeProgramEntry(id: "s\($0)", completedAt: base.addingTimeInterval(-Double($0 * 2) * day)) }
+        stubPaged(client, entries)
+        await vm.load()
+
+        let id = await vm.reveal(day: base.addingTimeInterval(-3 * day))
+
+        #expect(id == nil)
+        #expect(vm.sessions.count < 4 || vm.reachedEnd)
+    }
 }
