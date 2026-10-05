@@ -142,6 +142,13 @@ final class KeysetPaginator<Item: Identifiable> {
         self.fetch = fetch
     }
 
+    // Swift 6.3.1 (Xcode 26.4.1) segfaults in the EarlyPerfInliner while
+    // optimizing this generic class's implicit deinit in Release builds. An
+    // explicit deinit kept out of the optimizer sidesteps the crash; remove it
+    // once a fixed toolchain archives cleanly without it.
+    @_optimize(none)
+    deinit {}
+
     // MARK: Loading
 
     func refresh() async {
