@@ -67,7 +67,8 @@ private struct ProgramScreen: View {
                     // in-progress session server-side; signal the change so
                     // Home and the resume banner stop showing them.
                     onProgramEnded: { runChanges.notify() },
-                    onExplore: { tabSelection.programSection = .explore }
+                    onExplore: { tabSelection.programSection = .explore },
+                    programInfo: programInfo(programId:)
                 )
             case .explore:
                 ProgramListView(viewModel: listViewModel, programRepository: programRepository)
@@ -89,5 +90,17 @@ private struct ProgramScreen: View {
             .background(Color(.systemBackground))
         }
         .toolbar(.hidden, for: .navigationBar)
+        // Manage's Info chip opens a program from the library, so load it
+        // even if Explore hasn't been opened yet.
+        .task {
+            if listViewModel.programs.isEmpty { await listViewModel.load() }
+        }
+    }
+
+    /// The program's info page, as Explore opens it. Nil until the library
+    /// has loaded (the chip stays hidden until then).
+    private func programInfo(programId: String) -> ProgramDetailView? {
+        guard let program = listViewModel.programs.first(where: { $0.id == programId }) else { return nil }
+        return ProgramDetailView(program: program, listViewModel: listViewModel, repository: programRepository)
     }
 }

@@ -1,10 +1,14 @@
 import SwiftUI
 
 /// Top of Program → Manage: the run's progress ring (completed / total days)
-/// beside a static card naming the active program. Moved here from Home.
+/// beside a card naming the active program, with an "Info" chip that opens
+/// the program's detail page. Moved here from Home.
 struct ActiveProgramSummaryRow: View {
     let programName: String
     let progress: ProgramProgress
+    /// Opens the program's info page; nil hides the chip (e.g. while the
+    /// program library is still loading).
+    var onInfo: (() -> Void)?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -39,18 +43,35 @@ struct ActiveProgramSummaryRow: View {
     }
 
     private var programCard: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text("Active Program")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text(programName)
-                .font(.headline)
-                .lineLimit(2)
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Active Program")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(programName)
+                    .font(.headline)
+                    .lineLimit(2)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 8)
+            if let onInfo {
+                // Plain style so only the chip reacts — this sits inside a
+                // List row, which would otherwise highlight as a whole.
+                Button(action: onInfo) {
+                    Text("Info")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.tint)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Color.accentColor.opacity(0.15), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Program info")
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(Color(uiColor: .secondarySystemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 14))
-        .accessibilityElement(children: .combine)
     }
 }

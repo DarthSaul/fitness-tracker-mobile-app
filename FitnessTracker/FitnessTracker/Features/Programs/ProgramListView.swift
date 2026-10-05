@@ -108,7 +108,6 @@ struct ProgramListView: View {
         switch viewModel.filter {
         case .all: return "No Programs"
         case .saved: return "No Saved Programs"
-        case .active: return "No Active Program"
         }
     }
 
@@ -116,7 +115,6 @@ struct ProgramListView: View {
         switch viewModel.filter {
         case .all: return "Programs will appear here once loaded."
         case .saved: return "Swipe a program in the All tab to save it."
-        case .active: return "Open a saved program and tap Activate to start training."
         }
     }
 
@@ -124,7 +122,6 @@ struct ProgramListView: View {
         switch viewModel.filter {
         case .all: return "dumbbell"
         case .saved: return "bookmark"
-        case .active: return "play.circle"
         }
     }
 

@@ -14,6 +14,10 @@ struct ProgramFlowView: View {
     private let onProgramEnded: () -> Void
     /// Switches to Explore, where programs are activated.
     private let onExplore: () -> Void
+    /// The program's info page (the same one Explore opens), by program id;
+    /// nil while the program library hasn't loaded.
+    private let programInfo: (String) -> ProgramDetailView?
+    @State private var showProgramInfo = false
     @Environment(TabSelection.self) private var tabSelection
     @Environment(ProgramRunChanges.self) private var runChanges
 
@@ -21,12 +25,14 @@ struct ProgramFlowView: View {
         viewModel: ProgramFlowViewModel,
         workoutRepository: WorkoutRepository,
         onProgramEnded: @escaping () -> Void = {},
-        onExplore: @escaping () -> Void = {}
+        onExplore: @escaping () -> Void = {},
+        programInfo: @escaping (String) -> ProgramDetailView? = { _ in nil }
     ) {
         _viewModel = State(initialValue: viewModel)
         self.workoutRepository = workoutRepository
         self.onProgramEnded = onProgramEnded
         self.onExplore = onExplore
+        self.programInfo = programInfo
     }
 
     var body: some View {
@@ -100,9 +106,13 @@ struct ProgramFlowView: View {
     private func content(program: ActiveUserProgramDTO) -> some View {
         List {
             Section {
-                ActiveProgramSummaryRow(programName: program.program.name, progress: viewModel.progress)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
+                ActiveProgramSummaryRow(
+                    programName: program.program.name,
+                    progress: viewModel.progress,
+                    onInfo: programInfo(program.programId) == nil ? nil : { showProgramInfo = true }
+                )
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
             }
 
             ForEach(program.program.weeks, id: \.id) { week in
@@ -139,6 +149,13 @@ struct ProgramFlowView: View {
             }
         }
         .listStyle(.insetGrouped)
+        // One even gap everywhere, matching Explore: 16pt from the section
+        // control to the first card, and 16pt between every section below.
+        .contentMargins(.top, 12, for: .scrollContent)
+        .listSectionSpacing(16)
+        .navigationDestination(isPresented: $showProgramInfo) {
+            programInfo(program.programId)
+        }
     }
 
     private func weekHeader(_ week: ActiveUserProgramDTO.ActiveProgramWeek) -> some View {

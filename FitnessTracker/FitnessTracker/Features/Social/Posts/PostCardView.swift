@@ -159,7 +159,6 @@ struct WorkoutShareEmbed: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            SocialStyle.brandGradient.frame(width: 4)
             VStack(alignment: .leading, spacing: 2) {
                 Text(workout.programName == nil ? "Completed a workout" : "Completed a workout from")
                     .font(.system(size: 13))
@@ -176,6 +175,7 @@ struct WorkoutShareEmbed: View {
                 .foregroundStyle(SocialStyle.brandPink)
                 .padding(.trailing, 14)
         }
+        .leadingAccentBar()
         .background(SocialStyle.embed)
         .clipShape(RoundedRectangle(cornerRadius: SocialStyle.embedRadius, style: .continuous))
         .accessibilityElement(children: .ignore)

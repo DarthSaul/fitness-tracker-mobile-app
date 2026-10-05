@@ -126,7 +126,6 @@ struct ComposeSheet: View {
         if let workout = viewModel.workout {
             ZStack(alignment: .topTrailing) {
                 HStack(spacing: 0) {
-                    SocialStyle.brandGradient.frame(width: 4)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Sharing a completed workout")
                             .font(.system(size: 13))
@@ -138,6 +137,7 @@ struct ComposeSheet: View {
                     .padding(.vertical, 12)
                     Spacer(minLength: 30)
                 }
+                .leadingAccentBar()
                 .background(SocialStyle.embed)
                 .clipShape(RoundedRectangle(cornerRadius: SocialStyle.embedRadius, style: .continuous))
                 removeButton(label: "Remove workout") { viewModel.workout = nil }

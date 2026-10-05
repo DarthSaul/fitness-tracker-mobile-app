@@ -2,10 +2,10 @@ import Foundation
 import Observation
 import OSLog
 
+/// Explore's filter. (The active program lives in Program → Manage.)
 enum ProgramFilter: String, CaseIterable, Identifiable, Sendable {
     case all
     case saved
-    case active
 
     var id: String { rawValue }
 
@@ -13,7 +13,6 @@ enum ProgramFilter: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .all: return "All"
         case .saved: return "Saved"
-        case .active: return "Active"
         }
     }
 }
@@ -62,8 +61,6 @@ final class ProgramListViewModel {
             return programs
         case .saved:
             return programs.filter { savedMap[$0.id] != nil }
-        case .active:
-            return programs.filter { savedMap[$0.id]?.isActiveRun == true }
         }
     }
 

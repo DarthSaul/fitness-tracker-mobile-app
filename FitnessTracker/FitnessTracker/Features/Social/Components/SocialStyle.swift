@@ -28,6 +28,23 @@ enum SocialStyle {
     static let mineStroke = Color.blue.opacity(0.6)
 }
 
+// MARK: - Accent bar
+
+extension View {
+    /// A 4pt brand-gradient bar down the leading edge, exactly as tall as
+    /// the content. Drawn as an overlay rather than an HStack sibling: a bare
+    /// gradient takes whatever height it's offered, so outside a scroll view
+    /// (the reaction-picker stage) it stretched the whole card.
+    func leadingAccentBar(width: CGFloat = 4) -> some View {
+        padding(.leading, width)
+            .overlay(alignment: .leading) {
+                Rectangle()
+                    .fill(SocialStyle.brandGradient)
+                    .frame(width: width)
+            }
+    }
+}
+
 // MARK: - Circle icon button
 
 /// 40×40 circular header button with an optional red count badge.
