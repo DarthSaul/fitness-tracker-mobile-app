@@ -31,7 +31,7 @@ struct PostCardView: View {
                 reactions: post.reactions,
                 onToggle: { interactions.toggle($0, on: post) },
                 onShowReactors: { interactions.reactors = .init(post: post, emoji: $0) },
-                onOpenPicker: { openPicker() }
+                onOpenPicker: { openStage(.react) }
             )
             .allowsHitTesting(isInteractive)
         }
@@ -40,16 +40,25 @@ struct PostCardView: View {
         .contentShape(RoundedRectangle(cornerRadius: SocialStyle.cardRadius, style: .continuous))
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame = $0 }
         .onLongPressGesture(minimumDuration: 0.4) {
-            if isInteractive { openPicker() }
+            if isInteractive { openStage(.react) }
         }
-        // Medium haptic as the picker opens on this post (not when it closes).
-        .sensoryFeedback(.impact(weight: .medium), trigger: interactions.picker?.id == post.id) { _, isOpen in isOpen }
-        .accessibilityAction(named: "React") { openPicker() }
+        // Medium haptic as the long-press picker opens on this post (not
+        // when it closes, and not for the ⋯ menu).
+        .sensoryFeedback(.impact(weight: .medium), trigger: isReactionPickerOpen) { _, isOpen in isOpen }
+        .accessibilityAction(named: "React") { openStage(.react) }
+        .accessibilityAction(named: "More") { openStage(.menu) }
     }
 
-    private func openPicker() {
+    private var isReactionPickerOpen: Bool {
+        guard let picker = interactions.picker else { return false }
+        return picker.id == post.id && picker.mode == .react
+    }
+
+    /// Lifts this post onto the dimmed stage with the emoji tray (`.react`)
+    /// or the post menu (`.menu`).
+    private func openStage(_ mode: PostInteractions.PickerTarget.Mode) {
         guard isInteractive else { return }
-        interactions.setPicker(.init(post: post, frame: frame))
+        interactions.setPicker(.init(post: post, frame: frame, mode: mode))
     }
 
     // MARK: Header
@@ -77,7 +86,17 @@ struct PostCardView: View {
             Spacer(minLength: 0)
 
             if isInteractive {
-                PostMenu(post: post)
+                Button {
+                    openStage(.menu)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(SocialStyle.tertiaryText)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("More")
             }
         }
     }
@@ -95,27 +114,10 @@ struct PostCardView: View {
 
 // MARK: - Menu
 
-/// The ellipsis menu. My posts: Delete. Others': Report and Block
-/// (App Store Guideline 1.2). Reporting comes first so the post is still
-/// visible to report; the report sheet then offers to block.
-struct PostMenu: View {
-    let post: PostDTO
-    @Environment(PostInteractions.self) private var interactions
-
-    var body: some View {
-        Menu {
-            PostMenuItems(post: post)
-        } label: {
-            Image(systemName: "ellipsis")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(SocialStyle.tertiaryText)
-                .frame(width: 32, height: 32)
-                .contentShape(Rectangle())
-        }
-        .accessibilityLabel("More")
-    }
-}
-
+/// The post menu shown on stage from the ⋯ button. My posts: Delete.
+/// Others': Report and Block (App Store Guideline 1.2). Reporting comes
+/// first so the post is still visible to report; the report sheet then
+/// offers to block.
 struct PostMenuItems: View {
     let post: PostDTO
     var onSelect: () -> Void = {}

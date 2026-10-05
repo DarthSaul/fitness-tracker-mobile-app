@@ -19,6 +19,20 @@ enum ProgressSection: String, Hashable, Sendable, CaseIterable, Identifiable {
     }
 }
 
+/// The two sections of the Program tab.
+enum ProgramSection: String, Hashable, Sendable, CaseIterable, Identifiable {
+    case manage, explore
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .manage: "Manage"
+        case .explore: "Explore"
+        }
+    }
+}
+
 /// Lightweight selection store so non-tab views (e.g. Home's quick links) can
 /// switch tabs programmatically without having to thread a binding through
 /// every intermediate view. Provided by RootTabView via `.environment(...)`.
@@ -28,9 +42,17 @@ final class TabSelection {
     var current: AppTab = .home
     /// Which section the Progress tab shows.
     var progressSection: ProgressSection = .history
+    /// Which section the Program tab shows.
+    var programSection: ProgramSection = .manage
 
     func select(_ tab: AppTab) {
         current = tab
+    }
+
+    /// Switches to the Program tab, opened on `section`.
+    func selectProgram(_ section: ProgramSection) {
+        programSection = section
+        current = .programs
     }
 
     /// Switches to the Progress tab, opened on `section`.

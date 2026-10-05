@@ -1,9 +1,10 @@
 import SwiftUI
 
-/// Long-press reaction picker (design-spec 02): the screen dims and blurs,
-/// the pressed post lifts in place, a tray of the five reactions floats
-/// above it and a short menu sits below. Presented as a clear full-screen
-/// cover so the backdrop also covers the tab bar.
+/// The post "center stage" (design-spec 02): the screen dims and blurs and
+/// the post lifts in place. In `.react` mode (long-press, add-reaction
+/// button) a tray of the five reactions floats above it; in `.menu` mode
+/// (⋯ button) the post menu sits below it instead. Presented as a clear
+/// full-screen cover so the backdrop also covers the tab bar.
 struct ReactionPickerOverlay: View {
     let target: PostInteractions.PickerTarget
     let interactions: PostInteractions
@@ -29,15 +30,19 @@ struct ReactionPickerOverlay: View {
                     .offset(x: card.minX - screen.minX, y: card.minY - screen.minY)
                     .allowsHitTesting(false)
 
-                tray
-                    .scaleEffect(isShown ? 1 : 0.8, anchor: .bottomLeading)
-                    .opacity(isShown ? 1 : 0)
-                    .offset(x: card.minX - screen.minX + 8, y: trayY(card: card, screen: screen))
-
-                menu
-                    .frame(width: card.width)
-                    .offset(x: card.minX - screen.minX, y: menuY(card: card, screen: screen))
-                    .opacity(isShown ? 1 : 0)
+                switch target.mode {
+                case .react:
+                    tray
+                        .scaleEffect(isShown ? 1 : 0.8, anchor: .bottomLeading)
+                        .opacity(isShown ? 1 : 0)
+                        .offset(x: card.minX - screen.minX + 8, y: trayY(card: card, screen: screen))
+                case .menu:
+                    menu
+                        .frame(width: card.width)
+                        .scaleEffect(isShown ? 1 : 0.95, anchor: .top)
+                        .opacity(isShown ? 1 : 0)
+                        .offset(x: card.minX - screen.minX, y: menuY(card: card, screen: screen))
+                }
             }
             .frame(width: screen.width, height: screen.height, alignment: .topLeading)
         }

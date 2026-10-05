@@ -5,7 +5,7 @@ import SwiftUI
 ///   2. Active program but no active workout → the Next Up card: program and
 ///      position, exercise preview, program progress bar, then a "Start
 ///      workout" button with a square Preview button beside it.
-///   3. No active program → empty state pointing at the Programs tab.
+///   3. No active program → empty state pointing at Program → Explore.
 struct HomeTodayCard: View {
     let viewModel: HomeViewModel
 
@@ -72,36 +72,40 @@ private struct ResumeCard: View {
     }
 
     var body: some View {
-        Button {
-            liveWorkout.present()
-        } label: {
-            HomeCardChrome {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("In progress")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("Week \(active.session.weekNumber) · Day \(active.session.dayNumber)")
-                        .font(.headline)
+        HomeCardChrome {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("In progress")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Week \(active.session.weekNumber) · Day \(active.session.dayNumber)")
+                    .font(.headline)
 
-                    ProgressView(value: progress)
-                        .tint(.accentColor)
-                        .padding(.top, 4)
-                    Text("\(completedSets) / \(totalSets) sets")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                ProgressView(value: progress)
+                    .tint(.accentColor)
+                    .padding(.top, 4)
+                Text("\(completedSets) / \(totalSets) sets")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
 
-                    if let nextExerciseName {
-                        Label("Next: \(nextExerciseName)", systemImage: "arrow.forward.circle")
-                            .font(.subheadline)
-                            .foregroundStyle(.primary)
-                    }
-
-                    Spacer(minLength: 0)
-                    actionPill("Resume workout", systemImage: "chevron.right", tint: .green)
+                if let nextExerciseName {
+                    Label("Next: \(nextExerciseName)", systemImage: "arrow.forward.circle")
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
                 }
+
+                Spacer(minLength: 0)
+
+                // Same style as Next Up's Start workout, full width (there's
+                // no Preview beside it).
+                Button {
+                    liveWorkout.present()
+                } label: {
+                    PrimaryWorkoutButtonLabel(title: "Resume workout")
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 6)
             }
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -176,12 +180,7 @@ private struct StartNextCard: View {
                             Task { await startAndPresent() }
                         }
                     } label: {
-                        Text(viewModel.isStartingWorkout ? "Starting…" : "Start workout")
-                            .font(.system(size: 17, weight: .bold))
-                            .foregroundStyle(.black)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 46)
-                            .background(Color.green, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        PrimaryWorkoutButtonLabel(title: viewModel.isStartingWorkout ? "Starting…" : "Start workout")
                     }
                     .buttonStyle(.plain)
                     .disabled(viewModel.isStartingWorkout)
@@ -242,14 +241,19 @@ private struct StartNextCard: View {
 // MARK: - No program
 
 private struct NoProgramCard: View {
+    @Environment(TabSelection.self) private var tabSelection
+
     var body: some View {
         HomeCardChrome {
             VStack(alignment: .leading, spacing: 6) {
                 Text("No active program")
                     .font(.headline)
-                Text("Activate a program from the Programs tab to start training.")
+                Text("Find a program in Program → Explore and activate it to start training.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Button("Explore programs") { tabSelection.selectProgram(.explore) }
+                    .buttonStyle(.bordered)
             }
         }
     }
@@ -283,6 +287,21 @@ private struct HomeCardChrome<Content: View>: View {
     }
 }
 
+/// Solid green 46pt button face with black bold text: Start / Resume workout.
+private struct PrimaryWorkoutButtonLabel: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 17, weight: .bold))
+            .foregroundStyle(.black)
+            .frame(maxWidth: .infinity)
+            .frame(height: 46)
+            .background(Color.green, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
 /// 4pt program progress bar (track gray, fill blue).
 private struct ProgramProgressBar: View {
     let fraction: Double
@@ -299,21 +318,4 @@ private struct ProgramProgressBar: View {
         .frame(height: 4)
         .accessibilityHidden(true)
     }
-}
-
-// MARK: - Pill helper
-@ViewBuilder
-private func actionPill(_ title: String, systemImage: String, tint: Color) -> some View {
-    HStack {
-        Text(title).font(.subheadline.weight(.medium))
-        Spacer()
-        if !systemImage.isEmpty {
-            Image(systemName: systemImage)
-                .font(.caption.weight(.bold))
-        }
-    }
-    .foregroundStyle(tint)
-    .padding(.horizontal, 10)
-    .padding(.vertical, 6)
-    .background(tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
 }

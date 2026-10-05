@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// Composes the home dashboard: calendar strip, date header, today/scheduled
-/// card, active program progress, Strength on the Go, and the FRIENDS
-/// section. The tab provides the NavigationStack — this view is content-only.
+/// card, Strength on the Go, and the FRIENDS section. Program progress and
+/// management live in the Program tab. The tab provides the NavigationStack —
+/// this view is content-only.
 struct HomeView: View {
     @State private var viewModel: HomeViewModel
     @State private var friends: HomeFriendsViewModel?
@@ -10,18 +11,15 @@ struct HomeView: View {
     @Environment(LiveWorkoutPresentation.self) private var liveWorkout
     @Environment(ProgramRunChanges.self) private var runChanges
     @Environment(SocialContext.self) private var socialContext
-    private let homeRepository: HomeRepository
     private let workoutRepository: WorkoutRepository
     private let standaloneRepository: StandaloneWorkoutRepository
 
     init(
         viewModel: HomeViewModel,
-        homeRepository: HomeRepository,
         workoutRepository: WorkoutRepository,
         standaloneRepository: StandaloneWorkoutRepository
     ) {
         _viewModel = State(initialValue: viewModel)
-        self.homeRepository = homeRepository
         self.workoutRepository = workoutRepository
         self.standaloneRepository = standaloneRepository
     }
@@ -72,15 +70,6 @@ struct HomeView: View {
                 }
                 .padding(.horizontal)
 
-                if viewModel.hasActiveProgram {
-                    ActiveProgramProgressCard(
-                        viewModel: viewModel,
-                        homeRepository: homeRepository,
-                        workoutRepository: workoutRepository
-                    )
-                    .padding(.horizontal)
-                }
-
                 StrengthOnTheGoCard(
                     standaloneRepository: standaloneRepository,
                     workoutRepository: workoutRepository
@@ -123,7 +112,7 @@ struct HomeView: View {
             }
         }
         // The run changed (activated / paused / ended, possibly from the
-        // Programs tab). Activate can hand back a different run id, so refetch
+        // Program tab). Activate can hand back a different run id, so refetch
         // rather than keep anything loaded under the previous one.
         .onChange(of: runChanges.revision) {
             Task { await viewModel.load() }

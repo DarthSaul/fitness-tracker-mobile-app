@@ -55,6 +55,11 @@ final class ProgramFlowViewModel {
         }
     }
 
+    /// Completed / total days of the run, for the progress ring.
+    var progress: ProgramProgress {
+        ProgramProgress(program: activeProgram, sessions: sessions)
+    }
+
     // MARK: - End early
 
     /// The server 409s ending a run with no completed workouts (there is
@@ -65,7 +70,7 @@ final class ProgramFlowViewModel {
 
     /// Ends the active run before its final day. Returns true when the run is
     /// over and the caller should leave this screen. Restarting is a separate
-    /// "Start again" (activate) from the Programs tab.
+    /// "Start again" (activate) from Program → Explore.
     func endProgramEarly() async -> Bool {
         guard let userProgramId = activeProgram?.id, !isEndingProgram else { return false }
         isEndingProgram = true

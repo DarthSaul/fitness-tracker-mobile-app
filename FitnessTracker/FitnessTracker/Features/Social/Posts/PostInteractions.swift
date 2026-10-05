@@ -7,10 +7,20 @@ import Observation
 @Observable
 @MainActor
 final class PostInteractions {
-    /// The long-press reaction picker: the post and where it sits on screen.
+    /// The post lifted onto "center stage" (dimmed backdrop), and where it
+    /// sits on screen. `mode` decides what floats with it.
     struct PickerTarget: Identifiable {
+        enum Mode {
+            /// The emoji tray (long-press, or the add-reaction button).
+            case react
+            /// The post menu: Report / Block, or Delete on my own post
+            /// (the ⋯ button).
+            case menu
+        }
+
         let post: PostDTO
         let frame: CGRect
+        var mode: Mode = .react
         var id: String { post.id }
     }
 

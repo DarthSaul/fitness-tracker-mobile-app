@@ -1,7 +1,8 @@
 import SwiftUI
 
-// The enclosing tab (ProgramsTab) provides the NavigationStack — this view is
-// content-only and assumes a navigation context already exists.
+// Program → Explore: the program library. The enclosing tab (ProgramTab)
+// provides the NavigationStack and the screen title — this view is
+// content-only.
 struct ProgramListView: View {
     @State private var viewModel: ProgramListViewModel
     private let programRepository: ProgramRepository
@@ -20,10 +21,8 @@ struct ProgramListView: View {
                 content
             }
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            ScreenTitleHeader(title: "Programs", emoji: "🏋️")
-        }
-        .toolbar(.hidden, for: .navigationBar)
+        // Back label for pushed program screens (the tab hides the bar).
+        .navigationTitle("Explore")
         .task { await viewModel.load() }
         .refreshable { await viewModel.load() }
         .alert("Error", isPresented: errorBinding) {
