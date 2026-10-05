@@ -2,7 +2,8 @@ import SwiftUI
 
 /// Horizontal week-paged calendar. Each page shows seven days; swipe left/right
 /// to scroll forward/back a week. The page containing today is selected on first
-/// appear. Days that have a scheduled workout get a small dot indicator.
+/// appear. A day with a completed workout gets a green dot; a day with a
+/// scheduled workout gets an accent dot.
 ///
 /// Polish work (month-view zoom, gesture-driven scrubbing, richer accessibility)
 /// is tracked in CLAUDE.md → Backlog → Low.
@@ -152,8 +153,8 @@ private struct DayCell: View {
                     .font(.body.weight(isToday ? .bold : .regular))
                     .foregroundStyle(isSelected ? Color.white : .primary)
                 Circle()
-                    .fill(hasSchedule ? Color.accentColor : Color.clear)
-                    .frame(width: 4, height: 4)
+                    .fill(dotColor)
+                    .frame(width: 5, height: 5)
             }
             .frame(maxWidth: .infinity, minHeight: 56)
             .background(
@@ -170,12 +171,20 @@ private struct DayCell: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    /// Selection is shown with a fill, so no border then. Otherwise today gets an
-    /// accent border and a past completed day gets a green border.
+    /// A green dot marks a day with a completed workout; otherwise an accent
+    /// dot marks a scheduled one. On the selected (filled) day the dot turns
+    /// white so it stays visible.
+    private var dotColor: Color {
+        guard hasCompleted || hasSchedule else { return .clear }
+        if isSelected { return .white }
+        return hasCompleted ? .green : .accentColor
+    }
+
+    /// Selection is shown with a fill, so no border then. Otherwise today gets
+    /// an accent border.
     private var borderColor: Color {
         if isSelected { return .clear }
         if isToday { return Color.accentColor.opacity(0.5) }
-        if hasCompleted { return Color.green.opacity(0.5) }
         return .clear
     }
 

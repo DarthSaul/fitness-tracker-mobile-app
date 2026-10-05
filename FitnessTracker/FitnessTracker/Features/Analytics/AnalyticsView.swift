@@ -1,15 +1,15 @@
 import SwiftUI
 import Charts
 
-/// Analytics dashboard. Mirrors the Vue page:
-///   1. Three-up stat tiles (sessions, this-week, total volume).
-///   2. Collapsible "What is e1RM?" explainer.
-///   3. Searchable exercise selector → presents a sheet with a search list.
-///   4. Selected-exercise detail: e1RM sparkline (Swift Charts, tap-to-label)
-///      and a reverse-chronological session list.
+/// Progress → Overview:
+///   1. Three-up stat tiles (sessions, this week, total volume).
+///   2. Weekly volume (workouts per week; sample data for now).
+///   3. Searchable exercise selector, with an ⓘ explaining e1RM.
+///   4. The selected exercise's detail: e1RM card with chart and range
+///      picker, best set, and recent sessions.
 ///
-/// The Analytics section of the Progress tab, which provides the
-/// NavigationStack and the screen title — this view is content-only.
+/// The Progress tab provides the NavigationStack and the screen title — this
+/// view is content-only.
 struct AnalyticsView: View {
     @State private var viewModel: AnalyticsViewModel
     @State private var isE1rmInfoOpen = false
@@ -21,11 +21,11 @@ struct AnalyticsView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                header
+            VStack(alignment: .leading, spacing: 12) {
                 statsGrid
-                e1rmExplainer
+                WeeklyVolumeCard()
                 exerciseSelector
+                    .padding(.top, 10)
                 exerciseDetail
             }
             .padding(.horizontal)
@@ -46,16 +46,6 @@ struct AnalyticsView: View {
             ) { picked in
                 viewModel.selectExercise(picked.id)
             }
-        }
-    }
-
-    // MARK: - Header
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Strength progress")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
         }
     }
 
@@ -99,31 +89,23 @@ struct AnalyticsView: View {
 
     // MARK: - e1RM explainer
 
-    private var e1rmExplainer: some View {
-        VStack(spacing: 0) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    isE1rmInfoOpen.toggle()
-                }
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "info.circle")
-                        .foregroundStyle(.tint)
-                    Text("What is e1RM?")
-                        .font(.subheadline.weight(.medium))
-                    Spacer()
-                    Image(systemName: isE1rmInfoOpen ? "chevron.up" : "chevron.down")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            if isE1rmInfoOpen {
+    /// The ⓘ next to the Exercise heading (replaces the old full-width
+    /// "What is e1RM?" accordion).
+    private var e1rmInfoButton: some View {
+        Button {
+            isE1rmInfoOpen = true
+        } label: {
+            Image(systemName: "info.circle")
+                .font(.system(size: 17))
+                .foregroundStyle(.blue)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("What is e1RM?")
+        .popover(isPresented: $isE1rmInfoOpen) {
+            ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
+                    Text("What is e1RM?")
+                        .font(.headline)
                     Text("Estimated 1-Rep Max (e1RM) is a way to estimate the maximum weight you could lift for a single rep, based on any set you actually performed.")
                     HStack(spacing: 4) {
                         Text("Formula:")
@@ -140,19 +122,12 @@ struct AnalyticsView: View {
                 }
                 .font(.footnote)
                 .foregroundStyle(.primary)
-                .padding(.horizontal, 14)
-                .padding(.bottom, 12)
+                .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .frame(idealWidth: 340, idealHeight: 380)
+            .presentationCompactAdaptation(.popover)
         }
-        .background(Color(uiColor: .secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(alignment: .leading) {
-            Rectangle()
-                .fill(.tint)
-                .frame(width: 2)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 
     // MARK: - Exercise selector
@@ -160,9 +135,11 @@ struct AnalyticsView: View {
     @ViewBuilder
     private var exerciseSelector: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Exercise")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                Text("Exercise · e1RM")
+                    .font(.system(size: 17, weight: .semibold))
+                e1rmInfoButton
+            }
 
             switch viewModel.exercisesStatus {
             case .pending, .idle:
@@ -225,7 +202,7 @@ struct AnalyticsView: View {
                         .foregroundStyle(.red)
                 case .success:
                     if let history = viewModel.exerciseHistory {
-                        HistoryDetail(history: history)
+                        ExerciseTrendDetail(history: history)
                     }
                 }
             }
@@ -239,16 +216,6 @@ struct AnalyticsView: View {
             return String(format: "%.1fk", lbs / 1000)
         }
         return String(format: "%.0f", lbs)
-    }
-
-    static func formatE1rm(_ value: Double) -> String {
-        "\(Int(value.rounded())) lbs"
-    }
-
-    static func formatSessionDate(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "MMM d, yyyy"
-        return f.string(from: date)
     }
 }
 
@@ -294,185 +261,6 @@ private struct HistoryPlaceholder: View {
                     .fill(Color.secondary.opacity(0.10))
                     .frame(height: 56)
             }
-        }
-    }
-}
-
-private struct HistoryDetail: View {
-    let history: AnalyticsExerciseHistoryDTO
-
-    private var chartPoints: [AnalyticsExerciseHistoryDTO.SessionEntry] {
-        history.history.filter { $0.bestE1rm != nil }
-    }
-
-    private var displayHistory: [AnalyticsExerciseHistoryDTO.SessionEntry] {
-        history.history.reversed()
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(history.exercise.name)
-                .font(.headline)
-
-            if history.history.isEmpty {
-                Text("No completed sessions found for this exercise")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding(.vertical, 20)
-                    .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
-            } else {
-                if !chartPoints.isEmpty {
-                    E1rmSparkline(points: chartPoints)
-                }
-                LazyVStack(spacing: 8) {
-                    ForEach(displayHistory) { session in
-                        SessionRow(session: session)
-                    }
-                }
-            }
-        }
-    }
-}
-
-private struct SessionRow: View {
-    let session: AnalyticsExerciseHistoryDTO.SessionEntry
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(AnalyticsView.formatSessionDate(session.completedAt))
-                    .font(.subheadline.weight(.medium))
-                Spacer()
-                if let contextLabel = session.contextLabel {
-                    Text(contextLabel)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            ForEach(Array(session.sets.enumerated()), id: \.offset) { _, sessionSet in
-                HStack {
-                    Text(setLine(sessionSet))
-                        .font(.subheadline.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if let e1rm = sessionSet.e1rm {
-                        Text("e1RM \(formatDouble(e1rm))")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-            }
-            if let bestE1rm = session.bestE1rm {
-                Text("Best e1RM: \(formatDouble(bestE1rm))")
-                    .font(.caption)
-                    .foregroundStyle(.green)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
-    }
-
-    private func setLine(_ s: AnalyticsExerciseHistoryDTO.SessionSet) -> String {
-        var parts: [String] = []
-        if let reps = s.reps { parts.append("\(reps) reps") }
-        if let weight = s.weight { parts.append("\(formatDouble(weight)) lb") }
-        return parts.isEmpty ? "—" : parts.joined(separator: " · ")
-    }
-}
-
-// MARK: - Sparkline
-
-/// Swift Charts e1RM sparkline. Tapping a point pins a label that sits above
-/// the marker showing weight + session date; tapping the same point clears it.
-private struct E1rmSparkline: View {
-    let points: [AnalyticsExerciseHistoryDTO.SessionEntry]
-    @State private var selectedSessionId: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("e1RM Trend")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Chart {
-                ForEach(Array(points.enumerated()), id: \.element.id) { index, point in
-                    let value = point.bestE1rm ?? 0
-                    LineMark(
-                        x: .value("Session", index),
-                        y: .value("e1RM", value)
-                    )
-                    .foregroundStyle(.tint)
-                    .interpolationMethod(.linear)
-
-                    PointMark(
-                        x: .value("Session", index),
-                        y: .value("e1RM", value)
-                    )
-                    .foregroundStyle(.tint)
-                    .symbolSize(selectedSessionId == point.id ? 120 : 60)
-
-                    if selectedSessionId == point.id {
-                        PointMark(
-                            x: .value("Session", index),
-                            y: .value("e1RM", value)
-                        )
-                        .annotation(position: .top, alignment: .center, spacing: 4) {
-                            VStack(spacing: 2) {
-                                Text(AnalyticsView.formatE1rm(value))
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(.tint)
-                                Text(AnalyticsView.formatSessionDate(point.completedAt))
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                }
-            }
-            .chartXAxis(.hidden)
-            .chartYAxis(.hidden)
-            .frame(height: 96)
-            .chartOverlay { proxy in
-                GeometryReader { geo in
-                    Rectangle()
-                        .fill(Color.clear)
-                        .contentShape(Rectangle())
-                        .gesture(
-                            SpatialTapGesture()
-                                .onEnded { value in
-                                    handleTap(at: value.location, proxy: proxy, geometry: geo)
-                                }
-                        )
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
-    }
-
-    private func handleTap(at location: CGPoint, proxy: ChartProxy, geometry: GeometryProxy) {
-        guard let plotFrame = proxy.plotFrame else { return }
-        let frame = geometry[plotFrame]
-        let xInPlot = location.x - frame.origin.x
-        guard xInPlot >= 0, xInPlot <= frame.width else {
-            selectedSessionId = nil
-            return
-        }
-        guard let xValue: Double = proxy.value(atX: xInPlot) else { return }
-
-        let nearest = points.enumerated().min(by: { lhs, rhs in
-            abs(Double(lhs.offset) - xValue) < abs(Double(rhs.offset) - xValue)
-        })
-        guard let chosen = nearest?.element else { return }
-
-        if selectedSessionId == chosen.id {
-            selectedSessionId = nil
-        } else {
-            selectedSessionId = chosen.id
         }
     }
 }

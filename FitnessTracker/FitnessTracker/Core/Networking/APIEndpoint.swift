@@ -60,6 +60,9 @@ enum APIEndpoint {
     /// Unified history across program and standalone completions. `type`
     /// narrows to one kind; nil interleaves both, newest first.
     case getHistory(type: HistoryTypeFilter?, limit: Int?, before: Date?, beforeId: String?)
+    /// Every completed session's `completedAt` (program + standalone),
+    /// ascending — instants, so the client buckets them into local days.
+    case getHistoryDates
     case createWorkout(CreateWorkoutBody?)
     case getWorkout(id: String)
     case abandonWorkout(id: String)
@@ -208,6 +211,7 @@ extension APIEndpoint {
         // Workouts
         case .getActiveWorkout: return "/api/workouts/active"
         case .getHistory: return "/api/history"
+        case .getHistoryDates: return "/api/history/dates"
         case .createWorkout: return "/api/workouts"
         case .getWorkout(let id): return "/api/workouts/\(id)"
         case .abandonWorkout(let id): return "/api/workouts/\(id)"
@@ -315,7 +319,7 @@ extension APIEndpoint {
              .getPrograms, .getProgram, .getProgramDay,
              .getUserPrograms, .getActiveUserProgram, .getActiveProgramSessions,
              .getScheduledWorkouts,
-             .getActiveWorkout, .getHistory, .getWorkout,
+             .getActiveWorkout, .getHistory, .getHistoryDates, .getWorkout,
              .getStandaloneWorkouts, .getStandaloneWorkout,
              .getActiveStandaloneSessions, .getStandaloneSession,
              .getExercises, .getCoreExercises, .getExerciseNotes, .getExerciseInfo,

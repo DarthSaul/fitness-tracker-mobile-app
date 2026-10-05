@@ -18,7 +18,6 @@ struct HomeTab: View {
         NavigationStack {
             HomeView(
                 viewModel: viewModel,
-                homeRepository: homeRepo,
                 workoutRepository: workoutRepo,
                 standaloneRepository: standaloneRepo
             )

@@ -374,8 +374,8 @@ struct HomeViewModelTests {
 
     // MARK: - History paging
 
-    @Test("recentHistory is the first five rows of the accumulated history")
-    func recentHistoryPrefix() async throws {
+    @Test("a single history page is kept whole for the calendar")
+    func historySinglePage() async throws {
         let (vm, client) = makeViewModel()
         let entries = (0..<7).map { i in
             makeProgramHistoryEntry(id: "h\(i)", completedAt: Date(timeIntervalSinceNow: -Double(i) * 86_400))
@@ -387,8 +387,7 @@ struct HomeViewModelTests {
 
         await vm.load()
 
-        #expect(vm.history.count == 7)
-        #expect(vm.recentHistory.map(\.id) == ["h0", "h1", "h2", "h3", "h4"])
+        #expect(vm.history.map(\.id) == ["h0", "h1", "h2", "h3", "h4", "h5", "h6"])
     }
 
     @Test("paging carries the composite cursor forward and stops on a short page")

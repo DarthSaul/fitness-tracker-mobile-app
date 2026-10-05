@@ -1,27 +1,38 @@
 import SwiftUI
 
-/// "Manage Program" screen — collapsible weeks, status-badged days. Lives
-/// inside the Home tab's NavigationStack (entered from the Manage button on
-/// the active program card). Tapping a non-locked day pushes a
+/// Program → Manage: the active run's progress, then collapsible weeks with
+/// status-badged days. The content of the Program tab's Manage section (its
+/// NavigationStack is the tab's). Tapping a non-locked day pushes a
 /// ProgramDayEditView for the retroactive logging / editing flow.
 struct ProgramFlowView: View {
     @State private var viewModel: ProgramFlowViewModel
     @State private var expandedWeeks: Set<Int> = []
     @State private var showEndProgramConfirmation = false
     private let workoutRepository: WorkoutRepository
-    /// Called once the run has been ended early, before this view pops, so
-    /// the Home dashboard can drop the run it is still showing.
+    /// Called once the run has been ended early, so Home and the resume
+    /// banner drop the run they are still showing.
     private let onProgramEnded: () -> Void
-    @Environment(\.dismiss) private var dismiss
+    /// Switches to Explore, where programs are activated.
+    private let onExplore: () -> Void
+    /// The program's info page (the same one Explore opens), by program id;
+    /// nil while the program library hasn't loaded.
+    private let programInfo: (String) -> ProgramDetailView?
+    @State private var showProgramInfo = false
+    @Environment(TabSelection.self) private var tabSelection
+    @Environment(ProgramRunChanges.self) private var runChanges
 
     init(
         viewModel: ProgramFlowViewModel,
         workoutRepository: WorkoutRepository,
-        onProgramEnded: @escaping () -> Void = {}
+        onProgramEnded: @escaping () -> Void = {},
+        onExplore: @escaping () -> Void = {},
+        programInfo: @escaping (String) -> ProgramDetailView? = { _ in nil }
     ) {
         _viewModel = State(initialValue: viewModel)
         self.workoutRepository = workoutRepository
         self.onProgramEnded = onProgramEnded
+        self.onExplore = onExplore
+        self.programInfo = programInfo
     }
 
     var body: some View {
@@ -32,28 +43,37 @@ struct ProgramFlowView: View {
             } else if let program = viewModel.activeProgram {
                 content(program: program)
             } else {
-                ContentUnavailableView(
-                    "No active program",
-                    systemImage: "dumbbell",
-                    description: Text("Activate a program from the Programs tab to get started.")
-                )
+                ContentUnavailableView {
+                    Label("No active program", systemImage: "dumbbell")
+                } description: {
+                    Text("Find a program in Explore and activate it to get started.")
+                } actions: {
+                    Button("Explore programs", action: onExplore)
+                        .buttonStyle(.borderedProminent)
+                }
             }
         }
-        .navigationTitle("Manage Program")
-        .navigationBarTitleDisplayMode(.inline)
+        // Shown as the back label on pushed day screens (the tab hides the
+        // bar at its root).
+        .navigationTitle("Program")
         .task { await reload() }
         .refreshable { await reload() }
+        // Activated, paused or ended elsewhere (Explore, Home): refetch, since
+        // activating can hand back a different run.
+        .onChange(of: runChanges.revision) {
+            Task { await reload() }
+        }
         .confirmationAlert(
             "End program early?",
             isPresented: $showEndProgramConfirmation,
-            message: "This marks the program as completed where you stopped. Unfinished and scheduled workouts, including any workout in progress, are deleted. Your completed workouts stay in History, and you can start the program again from the Programs tab.",
+            message: "This marks the program as completed where you stopped. Unfinished and scheduled workouts, including any workout in progress, are deleted. Your completed workouts stay in History, and you can start the program again from Explore.",
             confirmLabel: "End Program",
             confirmRole: .destructive
         ) {
             Task {
                 if await viewModel.endProgramEarly() {
                     onProgramEnded()
-                    dismiss()
+                    await reload()
                 }
             }
         }
@@ -85,7 +105,15 @@ struct ProgramFlowView: View {
 
     private func content(program: ActiveUserProgramDTO) -> some View {
         List {
-            Section { Text(program.program.name).foregroundStyle(.secondary) }
+            Section {
+                ActiveProgramSummaryRow(
+                    programName: program.program.name,
+                    progress: viewModel.progress,
+                    onInfo: programInfo(program.programId) == nil ? nil : { showProgramInfo = true }
+                )
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+            }
 
             ForEach(program.program.weeks, id: \.id) { week in
                 // Hand-rolled disclosure rather than DisclosureGroup: inside a
@@ -121,6 +149,13 @@ struct ProgramFlowView: View {
             }
         }
         .listStyle(.insetGrouped)
+        // One even gap everywhere, matching Explore: 16pt from the section
+        // control to the first card, and 16pt between every section below.
+        .contentMargins(.top, 12, for: .scrollContent)
+        .listSectionSpacing(16)
+        .navigationDestination(isPresented: $showProgramInfo) {
+            programInfo(program.programId)
+        }
     }
 
     private func weekHeader(_ week: ActiveUserProgramDTO.ActiveProgramWeek) -> some View {
@@ -174,10 +209,10 @@ struct ProgramFlowView: View {
 
         if isLocked {
             // The text instructs the user to deal with the workout from the
-            // Home tab. Make the row act on that instruction by popping back
-            // to Home (this view is pushed onto Home's NavigationStack).
+            // Home tab. Make the row act on that instruction by switching
+            // there.
             Button {
-                dismiss()
+                tabSelection.select(.home)
             } label: {
                 label
             }

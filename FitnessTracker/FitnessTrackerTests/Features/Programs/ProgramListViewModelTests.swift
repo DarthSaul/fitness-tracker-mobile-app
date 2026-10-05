@@ -112,25 +112,6 @@ struct ProgramListViewModelTests {
         #expect(ids == ["p1", "p3"])
     }
 
-    @Test("filter .active returns only the active program")
-    func filterActive() async throws {
-        let (vm, _) = try makeViewModel(
-            programs: [
-                makeProgramDTO(id: "p1", name: "A"),
-                makeProgramDTO(id: "p2", name: "B"),
-            ],
-            userPrograms: [
-                makeUserProgramDTO(id: "up1", programId: "p1", isActive: false),
-                makeUserProgramDTO(id: "up2", programId: "p2", isActive: true),
-            ]
-        )
-
-        await vm.load()
-        vm.filter = .active
-
-        #expect(vm.filteredPrograms.map(\.id) == ["p2"])
-    }
-
     @Test("filter .all returns every program regardless of saved state")
     func filterAll() async throws {
         let (vm, _) = try makeViewModel(
@@ -255,8 +236,6 @@ struct ProgramListViewModelTests {
         #expect(vm.completedRunCount(programId: "p1") == 1)
         #expect(vm.isActive(programId: "p1") == false)
         #expect(vm.hasActiveProgram == false)
-        vm.filter = .active
-        #expect(vm.filteredPrograms.isEmpty)
     }
 
     @Test("toggleActive on a completed run activates it and adopts the fresh run's id")

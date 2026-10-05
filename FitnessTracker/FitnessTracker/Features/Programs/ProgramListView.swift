@@ -1,7 +1,8 @@
 import SwiftUI
 
-// The enclosing tab (ProgramsTab) provides the NavigationStack — this view is
-// content-only and assumes a navigation context already exists.
+// Program → Explore: the program library. The enclosing tab (ProgramTab)
+// provides the NavigationStack and the screen title — this view is
+// content-only.
 struct ProgramListView: View {
     @State private var viewModel: ProgramListViewModel
     private let programRepository: ProgramRepository
@@ -20,10 +21,8 @@ struct ProgramListView: View {
                 content
             }
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            ScreenTitleHeader(title: "Programs", emoji: "🏋️")
-        }
-        .toolbar(.hidden, for: .navigationBar)
+        // Back label for pushed program screens (the tab hides the bar).
+        .navigationTitle("Explore")
         .task { await viewModel.load() }
         .refreshable { await viewModel.load() }
         .alert("Error", isPresented: errorBinding) {
@@ -109,7 +108,6 @@ struct ProgramListView: View {
         switch viewModel.filter {
         case .all: return "No Programs"
         case .saved: return "No Saved Programs"
-        case .active: return "No Active Program"
         }
     }
 
@@ -117,7 +115,6 @@ struct ProgramListView: View {
         switch viewModel.filter {
         case .all: return "Programs will appear here once loaded."
         case .saved: return "Swipe a program in the All tab to save it."
-        case .active: return "Open a saved program and tap Activate to start training."
         }
     }
 
@@ -125,7 +122,6 @@ struct ProgramListView: View {
         switch viewModel.filter {
         case .all: return "dumbbell"
         case .saved: return "bookmark"
-        case .active: return "play.circle"
         }
     }
 

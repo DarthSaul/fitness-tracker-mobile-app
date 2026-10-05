@@ -1,9 +1,8 @@
 import SwiftUI
 
-/// One row in the history list. Used both by the standalone History tab and
-/// by the home page's recent-history section, so it stays presentation-only —
-/// the parent owns navigation. Renders either flavor of unified-history row:
-/// program rows show program · week · day; standalone rows show the workout
+/// One row in Progress → History. Presentation-only — the parent owns
+/// navigation. Renders either flavor of unified-history row: program rows
+/// show "Program · W2 D3"; standalone rows show the workout
 /// name and category (falling back to "{category} #{order}" for null names).
 struct HistoryRow: View {
     let entry: HistoryEntryDTO
@@ -21,16 +20,15 @@ struct HistoryRow: View {
         HStack(alignment: .center, spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(headlineDate)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.system(size: 16, weight: .semibold))
                 Text(subtitle)
-                    .font(.caption)
+                    .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
             Text("\(entry.completedSets) set\(entry.completedSets == 1 ? "" : "s")")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .font(.system(size: 15).monospacedDigit())
         }
         .contentShape(Rectangle())
     }
@@ -42,7 +40,7 @@ struct HistoryRow: View {
     private var subtitle: String {
         switch entry {
         case .program(let session):
-            return "\(session.programName) · Week \(session.weekNumber) · Day \(session.dayNumber)"
+            return "\(session.programName) · W\(session.weekNumber) D\(session.dayNumber)"
         case .standalone(let session):
             let workout = session.standaloneWorkout
             if let name = workout.name, !name.isEmpty {

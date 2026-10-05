@@ -82,6 +82,7 @@ struct FitnessTrackerApp: App {
                 .environment(sessionManager)
                 .environment(apiClient)
                 .environment(pushRegistrar)
+                .environment(appDelegate.pushRouter)
                 .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
                 .task {
                     // Hand the registrar to the delegate before bootstrap so

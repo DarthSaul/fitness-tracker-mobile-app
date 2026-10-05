@@ -48,47 +48,59 @@ struct HistoryView: View {
                 )
             }
         } else {
-            VStack(alignment: .leading, spacing: 0) {
-                // Matches the "Strength progress" subtitle treatment on the
-                // Analytics tab: subheadline/secondary, 12pt below the title
-                // (same as Analytics' scroll content top padding).
-                Text("Completed workouts")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.horizontal)
-                    .padding(.top, 12)
-
+            ScrollViewReader { proxy in
                 List {
-                ForEach(viewModel.sessions) { entry in
-                    NavigationLink {
-                        detailDestination(for: entry)
-                    } label: {
-                        HistoryRow(entry: entry)
+                    Section {
+                        WorkoutMonthCalendarCard(
+                            workoutCalendar: viewModel.workoutCalendar,
+                            displayedMonth: $viewModel.displayedMonth,
+                            selectedDay: viewModel.selectedDay
+                        ) { day in
+                            Task {
+                                if let id = await viewModel.reveal(day: day) {
+                                    withAnimation { proxy.scrollTo(id, anchor: .top) }
+                                }
+                            }
+                        }
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
                     }
-                    .onAppear {
-                        if entry.id == viewModel.sessions.last?.id, !viewModel.isLoadingMore {
-                            Task { await viewModel.loadMore() }
+
+                    Section {
+                        ForEach(viewModel.sessions) { entry in
+                            NavigationLink {
+                                detailDestination(for: entry)
+                            } label: {
+                                HistoryRow(entry: entry)
+                            }
+                            .id(entry.id)
+                            .onAppear {
+                                if entry.id == viewModel.sessions.last?.id, !viewModel.isLoadingMore {
+                                    Task { await viewModel.loadMore() }
+                                }
+                            }
+                        }
+
+                        if viewModel.isLoadingMore {
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                Spacer()
+                            }
+                        }
+
+                        if let loadError = viewModel.loadError {
+                            Text(loadError.localizedDescription)
+                                .font(.footnote)
+                                .foregroundStyle(.red)
                         }
                     }
                 }
-
-                if viewModel.isLoadingMore {
-                    HStack {
-                        Spacer()
-                        ProgressView()
-                        Spacer()
-                    }
-                }
-
-                if let loadError = viewModel.loadError {
-                    Text(loadError.localizedDescription)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                }
-                }
-                // Pull the list up under the subtitle — matches the
-                // subtitle → content spacing used on the Analytics tab (16pt).
-                .contentMargins(.top, 16, for: .scrollContent)
+                .listStyle(.insetGrouped)
+                // 16pt from the section control to the calendar, and between
+                // the calendar and the list — the same rhythm as Program.
+                .contentMargins(.top, 12, for: .scrollContent)
+                .listSectionSpacing(16)
             }
         }
     }

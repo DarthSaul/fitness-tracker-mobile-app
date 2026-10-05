@@ -2,11 +2,10 @@ import SwiftUI
 
 /// Today-view card with three states keyed off HomeViewModel:
 ///   1. Active workout exists  → "Resume workout" with X/Y sets progress.
-///   2. Active program but no active workout → "Start next workout" w/ exercise preview.
-///   3. No active program → empty state pointing at the Programs tab.
-///
-/// PR #7 will replace the resume/start tap handlers with real navigation
-/// into the live-workout view.
+///   2. Active program but no active workout → the Next Up card: program and
+///      position (with the completed/total count), exercise preview, then a
+///      "Start workout" button with a square Preview button beside it.
+///   3. No active program → empty state pointing at Program → Explore.
 struct HomeTodayCard: View {
     let viewModel: HomeViewModel
 
@@ -73,36 +72,40 @@ private struct ResumeCard: View {
     }
 
     var body: some View {
-        Button {
-            liveWorkout.present()
-        } label: {
-            HomeCardChrome {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("In progress")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("Week \(active.session.weekNumber) · Day \(active.session.dayNumber)")
-                        .font(.headline)
+        HomeCardChrome {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("In progress")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("Week \(active.session.weekNumber) · Day \(active.session.dayNumber)")
+                    .font(.headline)
 
-                    ProgressView(value: progress)
-                        .tint(.accentColor)
-                        .padding(.top, 4)
-                    Text("\(completedSets) / \(totalSets) sets")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                ProgressView(value: progress)
+                    .tint(.accentColor)
+                    .padding(.top, 4)
+                Text("\(completedSets) / \(totalSets) sets")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
 
-                    if let nextExerciseName {
-                        Label("Next: \(nextExerciseName)", systemImage: "arrow.forward.circle")
-                            .font(.subheadline)
-                            .foregroundStyle(.primary)
-                    }
-
-                    Spacer(minLength: 0)
-                    actionPill("Resume workout", systemImage: "chevron.right", tint: .green)
+                if let nextExerciseName {
+                    Label("Next: \(nextExerciseName)", systemImage: "arrow.forward.circle")
+                        .font(.subheadline)
+                        .foregroundStyle(.primary)
                 }
+
+                Spacer(minLength: 0)
+
+                // Same style as Next Up's Start workout, full width (there's
+                // no Preview beside it).
+                Button {
+                    liveWorkout.present()
+                } label: {
+                    PrimaryWorkoutButtonLabel(title: "Resume workout")
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 6)
             }
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -127,13 +130,23 @@ private struct StartNextCard: View {
         // both real interactive controls inside a non-tappable container so
         // they don't collide with each other or with NavigationLink/Sheet
         // semantics around the card.
-        HomeCardChrome {
+        HomeCardChrome(minHeight: nil) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Next up")
-                    .font(.caption)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Next up · \(program.program.name)")
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text("\(viewModel.completedDays)/\(viewModel.totalDays)")
+                            .monospacedDigit()
+                            .accessibilityLabel("\(viewModel.completedDays) of \(viewModel.totalDays) workouts done")
+                    }
+                    .font(.system(size: 14))
                     .foregroundStyle(.secondary)
-                Text("Week \(program.currentWeek) · Day \(program.currentDay)")
-                    .font(.headline)
+
+                    Text("Week \(program.currentWeek) · Day \(program.currentDay)")
+                        .font(.system(size: 21, weight: .bold))
+                }
 
                 if !viewModel.nextWorkoutExerciseNames.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
@@ -156,30 +169,33 @@ private struct StartNextCard: View {
                     .padding(.top, 2)
                 }
 
-                Spacer(minLength: 0)
-
-                Button {
-                    if viewModel.blockingStandaloneSession != nil {
-                        showStandaloneConflict = true
-                    } else {
-                        Task { await startAndPresent() }
+                HStack(spacing: 8) {
+                    Button {
+                        if viewModel.blockingStandaloneSession != nil {
+                            showStandaloneConflict = true
+                        } else {
+                            Task { await startAndPresent() }
+                        }
+                    } label: {
+                        PrimaryWorkoutButtonLabel(title: viewModel.isStartingWorkout ? "Starting…" : "Start workout")
                     }
-                } label: {
-                    actionPill(
-                        viewModel.isStartingWorkout ? "Starting…" : "Start next workout",
-                        systemImage: viewModel.isStartingWorkout ? "" : "chevron.right",
-                        tint: .green
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(viewModel.isStartingWorkout)
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isStartingWorkout)
+                    .opacity(viewModel.isStartingWorkout ? 0.6 : 1)
 
-                Button {
-                    showPreview = true
-                } label: {
-                    actionPill("Preview workout", systemImage: "eye", tint: .secondary)
+                    Button {
+                        showPreview = true
+                    } label: {
+                        Image(systemName: "eye")
+                            .font(.system(size: 20))
+                            .foregroundStyle(.white)
+                            .frame(width: 46, height: 46)
+                            .background(Color(.systemGray4), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Preview workout")
                 }
-                .buttonStyle(.plain)
+                .padding(.top, 6)
 
                 if let startConflictError = viewModel.startConflictError {
                     Text(startConflictError)
@@ -222,54 +238,63 @@ private struct StartNextCard: View {
 // MARK: - No program
 
 private struct NoProgramCard: View {
+    @Environment(TabSelection.self) private var tabSelection
+
     var body: some View {
         HomeCardChrome {
             VStack(alignment: .leading, spacing: 6) {
                 Text("No active program")
                     .font(.headline)
-                Text("Activate a program from the Programs tab to start training.")
+                Text("Find a program in Program → Explore and activate it to start training.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+                Button("Explore programs") { tabSelection.selectProgram(.explore) }
+                    .buttonStyle(.bordered)
             }
         }
     }
 }
 
 // MARK: - Shared chrome
+
+/// Card with the brand-gradient accent bar down its leading edge.
 private struct HomeCardChrome<Content: View>: View {
+    /// The Next Up card sizes to its content; the other states keep a
+    /// minimum height so the card doesn't jump between them.
+    var minHeight: CGFloat? = 180
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         HStack(spacing: 0) {
             LinearGradient(
-                colors: [.purple, .pink],
+                colors: [SocialStyle.brandPink, SocialStyle.brandRose],
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .frame(width: 8)
+            .frame(width: 5)
 
             content()
-                .padding(16)
-                .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .topLeading)
         }
         .background(Color(uiColor: .secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 }
 
-// MARK: - Pill helper
-@ViewBuilder
-private func actionPill(_ title: String, systemImage: String, tint: Color) -> some View {
-    HStack {
-        Text(title).font(.subheadline.weight(.medium))
-        Spacer()
-        if !systemImage.isEmpty {
-            Image(systemName: systemImage)
-                .font(.caption.weight(.bold))
-        }
+/// Solid green 46pt button face with black bold text: Start / Resume workout.
+private struct PrimaryWorkoutButtonLabel: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 17, weight: .bold))
+            .foregroundStyle(.black)
+            .frame(maxWidth: .infinity)
+            .frame(height: 46)
+            .background(Color.green, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
-    .foregroundStyle(tint)
-    .padding(.horizontal, 10)
-    .padding(.vertical, 6)
-    .background(tint.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
 }

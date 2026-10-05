@@ -1,18 +1,15 @@
 import SwiftUI
 
-/// Friends tab — the following feed with a post composer. Instantiates the
-/// repository and view model and provides the NavigationStack.
+/// Friends tab: the feed and everything reached from it, on a navigation
+/// path owned by `FriendsRouter` so push taps can open screens here.
 struct FriendsTab: View {
-    @Environment(APIClient.self) private var apiClient
-    @Environment(SessionManager.self) private var sessionManager
+    @Environment(SocialContext.self) private var context
 
     var body: some View {
-        let viewModel = FeedViewModel(
-            repository: FeedRepository(apiClient: apiClient),
-            sessionManager: sessionManager
-        )
-        NavigationStack {
-            FriendsView(viewModel: viewModel)
+        @Bindable var router = context.router
+        NavigationStack(path: $router.path) {
+            FriendsView(context: context)
+                .friendsDestinations()
         }
     }
 }

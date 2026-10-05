@@ -10,6 +10,7 @@ struct ProgramDetailView: View {
     @State private var loadError: Error?
     @State private var selectedDay: SelectedDay?
     @State private var showEndProgramConfirmation = false
+    @State private var showDeactivateConfirmation = false
 
     init(program: ProgramModel, listViewModel: ProgramListViewModel, repository: ProgramRepository) {
         self.program = program
@@ -150,7 +151,11 @@ struct ProgramDetailView: View {
             // run at week 1 day 1, so the action reads "Start again".
             let isCompleted = !isActive && listViewModel.isCompleted(programId: program.id)
             Button {
-                Task { await listViewModel.toggleActive(programId: program.id) }
+                if isActive {
+                    showDeactivateConfirmation = true
+                } else {
+                    Task { await listViewModel.toggleActive(programId: program.id) }
+                }
             } label: {
                 HStack(spacing: 6) {
                     if isActivating {
@@ -164,6 +169,15 @@ struct ProgramDetailView: View {
             .buttonStyle(.borderedProminent)
             .tint(isActive ? .red : .green)
             .disabled(isActivating)
+            .confirmationAlert(
+                "Deactivate program?",
+                isPresented: $showDeactivateConfirmation,
+                message: "This pauses the program where you are, and you can pick it up again anytime. Your scheduled workouts stay on the calendar, but you won't get reminders for them while the program is inactive.",
+                confirmLabel: "Deactivate",
+                confirmRole: .destructive
+            ) {
+                Task { await listViewModel.toggleActive(programId: program.id) }
+            }
         }
     }
 

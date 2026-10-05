@@ -40,7 +40,6 @@ final class HomeViewModel {
     private let standaloneRepository: StandaloneWorkoutRepository
     private let sessionManager: SessionManager
     private let calendar: Calendar
-    private let recentHistoryLimit: Int
     private let historyPageSize: Int
     private let historyMaxPageCount: Int
     private let calendarWeeksBack: Int
@@ -54,7 +53,6 @@ final class HomeViewModel {
         standaloneRepository: StandaloneWorkoutRepository,
         sessionManager: SessionManager,
         calendar: Calendar = .current,
-        recentHistoryLimit: Int = 5,
         historyPageSize: Int = 50,
         historyMaxPageCount: Int = 10,
         calendarWeeksBack: Int = 52
@@ -64,7 +62,6 @@ final class HomeViewModel {
         self.standaloneRepository = standaloneRepository
         self.sessionManager = sessionManager
         self.calendar = calendar
-        self.recentHistoryLimit = recentHistoryLimit
         self.historyPageSize = historyPageSize
         self.historyMaxPageCount = historyMaxPageCount
         self.calendarWeeksBack = calendarWeeksBack
@@ -82,26 +79,18 @@ final class HomeViewModel {
         activeStandaloneSessions.first
     }
 
-    var totalDays: Int {
-        guard let activeProgram else { return 0 }
-        return activeProgram.program.weeks.reduce(0) { $0 + $1.days.count }
+    private var progress: ProgramProgress {
+        ProgramProgress(program: activeProgram, sessions: sessions)
     }
+
+    var totalDays: Int { progress.totalDays }
 
     /// Distinct days, not sessions: a day logged twice must not push progress
     /// past 100%.
-    var completedDays: Int {
-        Set(
-            sessions
-                .filter { $0.status == .completed }
-                .map { "\($0.weekNumber)-\($0.dayNumber)" }
-        ).count
-    }
+    var completedDays: Int { progress.completedDays }
 
     /// Integer percentage clamped to 0...100. Returns 0 when the program has no days.
-    var progressPercent: Int {
-        guard totalDays > 0 else { return 0 }
-        return min(100, max(0, Int((Double(completedDays) / Double(totalDays) * 100).rounded())))
-    }
+    var progressPercent: Int { progress.percent }
 
     /// The ProgramDay the user is currently on, lifted out of the active program tree.
     var nextWorkoutDay: ProgramDayWithExercises? {
@@ -126,13 +115,6 @@ final class HomeViewModel {
     /// "Schedule a workout" CTA is offered — scheduling is future-only).
     var isSelectedDateInFuture: Bool {
         calendar.startOfDay(for: selectedDate) > calendar.startOfDay(for: .now)
-    }
-
-    /// First `recentHistoryLimit` rows of the accumulated history — the Home
-    /// "History" preview. Pages accumulate newest-first, so the prefix equals
-    /// what a dedicated limit-N fetch would return.
-    var recentHistory: [HistoryEntryDTO] {
-        Array(history.prefix(recentHistoryLimit))
     }
 
     /// All completed sessions (program + standalone) on the selected calendar

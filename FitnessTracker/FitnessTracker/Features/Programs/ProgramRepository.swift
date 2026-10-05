@@ -36,6 +36,8 @@ final class ProgramRepository {
     }
 
     // MARK: - Upsert
+    /// The server's list is authoritative: rows it no longer returns (deleted or reseeded
+    /// programs, or a different server's data) are pruned so their ids can't be acted on.
     @discardableResult
     private func upsert(_ dtos: [ProgramSummaryDTO]) throws -> [ProgramModel] {
         var descriptor = FetchDescriptor<ProgramModel>()
@@ -51,6 +53,11 @@ final class ProgramRepository {
             } else {
                 modelContext.insert(dto.toModel())
             }
+        }
+
+        let incomingIds = Set(dtos.map(\.id))
+        for model in existing where !incomingIds.contains(model.id) {
+            modelContext.delete(model)
         }
         try modelContext.save()
 
