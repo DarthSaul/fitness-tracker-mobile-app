@@ -1,13 +1,15 @@
 import SwiftUI
 
 /// Composes the home dashboard: calendar strip, date header, today/scheduled
-/// card, active program progress, and quick links. The tab provides the
-/// NavigationStack — this view is content-only.
+/// card, active program progress, Strength on the Go, and the FRIENDS
+/// section. The tab provides the NavigationStack — this view is content-only.
 struct HomeView: View {
     @State private var viewModel: HomeViewModel
+    @State private var friends: HomeFriendsViewModel?
     @State private var scheduleSheetPresented = false
     @Environment(LiveWorkoutPresentation.self) private var liveWorkout
     @Environment(ProgramRunChanges.self) private var runChanges
+    @Environment(SocialContext.self) private var socialContext
     private let homeRepository: HomeRepository
     private let workoutRepository: WorkoutRepository
     private let standaloneRepository: StandaloneWorkoutRepository
@@ -85,12 +87,10 @@ struct HomeView: View {
                 )
                 .padding(.horizontal)
 
-                HomeRecentHistorySection(
-                    recentHistory: viewModel.recentHistory,
-                    workoutRepository: workoutRepository,
-                    standaloneRepository: standaloneRepository,
-                    hasLoadedOnce: viewModel.hasLoadedOnce
-                )
+                if let friends {
+                    HomeFriendsSection(viewModel: friends)
+                        .padding(.top, 6)
+                }
 
                 if let loadError = viewModel.loadError {
                     Text(loadError.localizedDescription)
@@ -103,8 +103,17 @@ struct HomeView: View {
         }
         .scrollingTitleChrome(title: "Home")
         .toolbar(.hidden, for: .navigationBar)
-        .task { await viewModel.load() }
-        .refreshable { await viewModel.load() }
+        .task {
+            if friends == nil { friends = HomeFriendsViewModel(context: socialContext) }
+            async let home: Void = viewModel.load()
+            async let friendsPosts: Void = friends?.load() ?? ()
+            _ = await (home, friendsPosts)
+        }
+        .refreshable {
+            async let home: Void = viewModel.load()
+            async let friendsPosts: Void = friends?.load() ?? ()
+            _ = await (home, friendsPosts)
+        }
         // Refresh on transitions of the live-workout sheet so the today card
         // flips back from "Resume workout" to "Start next workout" after the
         // user completes or abandons a session.

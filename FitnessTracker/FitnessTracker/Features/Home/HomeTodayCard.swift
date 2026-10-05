@@ -2,11 +2,10 @@ import SwiftUI
 
 /// Today-view card with three states keyed off HomeViewModel:
 ///   1. Active workout exists  → "Resume workout" with X/Y sets progress.
-///   2. Active program but no active workout → "Start next workout" w/ exercise preview.
+///   2. Active program but no active workout → the Next Up card: program and
+///      position, exercise preview, program progress bar, then a "Start
+///      workout" button with a square Preview button beside it.
 ///   3. No active program → empty state pointing at the Programs tab.
-///
-/// PR #7 will replace the resume/start tap handlers with real navigation
-/// into the live-workout view.
 struct HomeTodayCard: View {
     let viewModel: HomeViewModel
 
@@ -127,13 +126,23 @@ private struct StartNextCard: View {
         // both real interactive controls inside a non-tappable container so
         // they don't collide with each other or with NavigationLink/Sheet
         // semantics around the card.
-        HomeCardChrome {
+        HomeCardChrome(minHeight: nil) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("Next up")
-                    .font(.caption)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Next up · \(program.program.name)")
+                            .lineLimit(1)
+                        Spacer(minLength: 8)
+                        Text("\(viewModel.completedDays)/\(viewModel.totalDays)")
+                            .monospacedDigit()
+                            .accessibilityLabel("\(viewModel.completedDays) of \(viewModel.totalDays) workouts done")
+                    }
+                    .font(.system(size: 14))
                     .foregroundStyle(.secondary)
-                Text("Week \(program.currentWeek) · Day \(program.currentDay)")
-                    .font(.headline)
+
+                    Text("Week \(program.currentWeek) · Day \(program.currentDay)")
+                        .font(.system(size: 21, weight: .bold))
+                }
 
                 if !viewModel.nextWorkoutExerciseNames.isEmpty {
                     VStack(alignment: .leading, spacing: 4) {
@@ -156,30 +165,41 @@ private struct StartNextCard: View {
                     .padding(.top, 2)
                 }
 
-                Spacer(minLength: 0)
+                ProgramProgressBar(fraction: Double(viewModel.progressPercent) / 100)
+                    .padding(.top, 4)
 
-                Button {
-                    if viewModel.blockingStandaloneSession != nil {
-                        showStandaloneConflict = true
-                    } else {
-                        Task { await startAndPresent() }
+                HStack(spacing: 8) {
+                    Button {
+                        if viewModel.blockingStandaloneSession != nil {
+                            showStandaloneConflict = true
+                        } else {
+                            Task { await startAndPresent() }
+                        }
+                    } label: {
+                        Text(viewModel.isStartingWorkout ? "Starting…" : "Start workout")
+                            .font(.system(size: 17, weight: .bold))
+                            .foregroundStyle(.black)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 46)
+                            .background(Color.green, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     }
-                } label: {
-                    actionPill(
-                        viewModel.isStartingWorkout ? "Starting…" : "Start next workout",
-                        systemImage: viewModel.isStartingWorkout ? "" : "chevron.right",
-                        tint: .green
-                    )
-                }
-                .buttonStyle(.plain)
-                .disabled(viewModel.isStartingWorkout)
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isStartingWorkout)
+                    .opacity(viewModel.isStartingWorkout ? 0.6 : 1)
 
-                Button {
-                    showPreview = true
-                } label: {
-                    actionPill("Preview workout", systemImage: "eye", tint: .secondary)
+                    Button {
+                        showPreview = true
+                    } label: {
+                        Image(systemName: "eye")
+                            .font(.system(size: 20))
+                            .foregroundStyle(.white)
+                            .frame(width: 46, height: 46)
+                            .background(Color(.systemGray4), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Preview workout")
                 }
-                .buttonStyle(.plain)
+                .padding(.top, 6)
 
                 if let startConflictError = viewModel.startConflictError {
                     Text(startConflictError)
@@ -236,24 +256,48 @@ private struct NoProgramCard: View {
 }
 
 // MARK: - Shared chrome
+
+/// Card with the brand-gradient accent bar down its leading edge.
 private struct HomeCardChrome<Content: View>: View {
+    /// The Next Up card sizes to its content; the other states keep a
+    /// minimum height so the card doesn't jump between them.
+    var minHeight: CGFloat? = 180
     @ViewBuilder let content: () -> Content
 
     var body: some View {
         HStack(spacing: 0) {
             LinearGradient(
-                colors: [.purple, .pink],
+                colors: [SocialStyle.brandPink, SocialStyle.brandRose],
                 startPoint: .top,
                 endPoint: .bottom
             )
-            .frame(width: 8)
+            .frame(width: 5)
 
             content()
-                .padding(16)
-                .frame(maxWidth: .infinity, minHeight: 180, alignment: .topLeading)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                .frame(maxWidth: .infinity, minHeight: minHeight, alignment: .topLeading)
         }
         .background(Color(uiColor: .secondarySystemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+}
+
+/// 4pt program progress bar (track gray, fill blue).
+private struct ProgramProgressBar: View {
+    let fraction: Double
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color(.systemGray4))
+                Capsule()
+                    .fill(Color.blue)
+                    .frame(width: proxy.size.width * min(max(fraction, 0), 1))
+            }
+        }
+        .frame(height: 4)
+        .accessibilityHidden(true)
     }
 }
 

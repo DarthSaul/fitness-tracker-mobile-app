@@ -40,7 +40,6 @@ final class HomeViewModel {
     private let standaloneRepository: StandaloneWorkoutRepository
     private let sessionManager: SessionManager
     private let calendar: Calendar
-    private let recentHistoryLimit: Int
     private let historyPageSize: Int
     private let historyMaxPageCount: Int
     private let calendarWeeksBack: Int
@@ -54,7 +53,6 @@ final class HomeViewModel {
         standaloneRepository: StandaloneWorkoutRepository,
         sessionManager: SessionManager,
         calendar: Calendar = .current,
-        recentHistoryLimit: Int = 5,
         historyPageSize: Int = 50,
         historyMaxPageCount: Int = 10,
         calendarWeeksBack: Int = 52
@@ -64,7 +62,6 @@ final class HomeViewModel {
         self.standaloneRepository = standaloneRepository
         self.sessionManager = sessionManager
         self.calendar = calendar
-        self.recentHistoryLimit = recentHistoryLimit
         self.historyPageSize = historyPageSize
         self.historyMaxPageCount = historyMaxPageCount
         self.calendarWeeksBack = calendarWeeksBack
@@ -126,13 +123,6 @@ final class HomeViewModel {
     /// "Schedule a workout" CTA is offered — scheduling is future-only).
     var isSelectedDateInFuture: Bool {
         calendar.startOfDay(for: selectedDate) > calendar.startOfDay(for: .now)
-    }
-
-    /// First `recentHistoryLimit` rows of the accumulated history — the Home
-    /// "History" preview. Pages accumulate newest-first, so the prefix equals
-    /// what a dedicated limit-N fetch would return.
-    var recentHistory: [HistoryEntryDTO] {
-        Array(history.prefix(recentHistoryLimit))
     }
 
     /// All completed sessions (program + standalone) on the selected calendar
