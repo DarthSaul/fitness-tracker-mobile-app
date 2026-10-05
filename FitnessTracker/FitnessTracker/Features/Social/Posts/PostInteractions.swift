@@ -31,11 +31,22 @@ final class PostInteractions {
         var id: String { "\(post.id)|\(emoji)" }
     }
 
+    /// A post-menu choice made on the stage.
+    enum MenuAction {
+        case delete(PostDTO)
+        case report(PostDTO)
+        case block(PublicUserDTO)
+    }
+
     var picker: PickerTarget?
     var reactors: ReactorsTarget?
     var report: ReportTarget?
     var blockCandidate: PublicUserDTO?
     var deleteCandidate: PostDTO?
+    /// Chosen on the stage, run once the stage's cover has fully closed —
+    /// presenting the report sheet or a confirmation while the cover is still
+    /// dismissing can be dropped.
+    private var queuedMenuAction: MenuAction?
 
     let context: SocialContext
 
@@ -53,6 +64,22 @@ final class PostInteractions {
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) { picker = target }
+    }
+
+    func queueMenuAction(_ action: MenuAction) {
+        queuedMenuAction = action
+    }
+
+    /// Runs the queued menu action. Called from the stage cover's
+    /// `onDismiss`, after it has closed.
+    func runQueuedMenuAction() {
+        guard let action = queuedMenuAction else { return }
+        queuedMenuAction = nil
+        switch action {
+        case .delete(let post): deleteCandidate = post
+        case .report(let post): report = .post(post)
+        case .block(let user): blockCandidate = user
+        }
     }
 }
 
@@ -72,7 +99,9 @@ struct PostInteractionHost: ViewModifier {
             .environment(interactions)
             // A clear full-screen cover so the dimmed backdrop also covers
             // the tab bar; the picker animates its own appearance.
-            .fullScreenCover(item: $interactions.picker) { target in
+            .fullScreenCover(item: $interactions.picker, onDismiss: {
+                interactions.runQueuedMenuAction()
+            }) { target in
                 ReactionPickerOverlay(target: target, interactions: interactions)
                     .presentationBackground(.clear)
             }

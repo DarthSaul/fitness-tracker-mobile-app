@@ -52,7 +52,8 @@ final class EditProfileViewModel {
         self.debounce = debounce
         let profile = context.sessionManager.userProfile
         originalUsername = profile?.username ?? ""
-        originalBio = profile?.bio ?? ""
+        // Trimmed like `trimmedBio`, so an untouched bio never reads as changed.
+        originalBio = (profile?.bio ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         username = originalUsername
         bio = originalBio
     }

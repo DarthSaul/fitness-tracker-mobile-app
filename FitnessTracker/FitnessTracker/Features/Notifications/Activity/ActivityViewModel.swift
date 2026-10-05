@@ -129,25 +129,26 @@ final class ActivityViewModel {
     // MARK: - Dismiss
 
     /// Swipe to dismiss: hides the row (every notification grouped in it).
+    /// Each notification leaves the inbox as soon as its own request
+    /// succeeds, so if a later one fails only the ones that failed come back.
     func dismiss(_ item: ActivityItem) async {
         let ids = item.notifications.map(\.id)
         dismissedIds.formUnion(ids)
-        do {
-            for id in ids {
+        defer { Task { await notifications.refreshUnreadCount() } }
+        for (index, id) in ids.enumerated() {
+            do {
                 _ = try await notifications.repository.setStatus(id: id, .dismissed)
+            } catch {
+                guard let failure = await context.failure(from: error) else { return }
+                // 404: already gone — the same result as dismissing it.
+                if failure != .notFound {
+                    dismissedIds.subtract(ids[index...])
+                    context.toasts.show("Couldn't dismiss that. \(failure.message)")
+                    return
+                }
             }
-            for id in ids { inbox.remove(id: id) }
-            dismissedIds.subtract(ids)
-            await notifications.refreshUnreadCount()
-        } catch {
-            guard let failure = await context.failure(from: error) else { return }
-            if failure == .notFound {
-                for id in ids { inbox.remove(id: id) }
-                dismissedIds.subtract(ids)
-                return
-            }
-            dismissedIds.subtract(ids)
-            context.toasts.show("Couldn't dismiss that. \(failure.message)")
+            inbox.remove(id: id)
+            dismissedIds.remove(id)
         }
     }
 }

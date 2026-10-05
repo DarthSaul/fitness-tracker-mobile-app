@@ -41,22 +41,26 @@ private struct FriendsFeedContent: View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
                 header
-                if viewModel.isEmpty {
-                    EmptyFeedCard()
-                        .padding(.top, 16)
-                } else {
-                    if !viewModel.incomingRequests.isEmpty {
-                        FollowRequestsSummaryRow(
-                            requests: viewModel.incomingRequests,
-                            summary: viewModel.requestsSummary
-                        )
-                        .padding(.top, 14)
-                    }
-                    composerRow
-                        .padding(.top, 12)
-                    feed
-                        .padding(.top, 16)
+                // Requests and the composer show whether or not the feed is
+                // empty: a new user may have requests waiting, and can post
+                // a first update straight away.
+                if !viewModel.incomingRequests.isEmpty {
+                    FollowRequestsSummaryRow(
+                        requests: viewModel.incomingRequests,
+                        summary: viewModel.requestsSummary
+                    )
+                    .padding(.top, 14)
                 }
+                composerRow
+                    .padding(.top, 12)
+                Group {
+                    if viewModel.isEmpty {
+                        EmptyFeedCard()
+                    } else {
+                        feed
+                    }
+                }
+                .padding(.top, 16)
             }
             .padding(.horizontal, SocialStyle.screenInset)
             .padding(.bottom, 24)

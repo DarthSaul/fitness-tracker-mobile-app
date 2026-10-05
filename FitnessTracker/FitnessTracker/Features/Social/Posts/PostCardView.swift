@@ -117,30 +117,27 @@ struct PostCardView: View {
 /// The post menu shown on stage from the ⋯ button. My posts: Delete.
 /// Others': Report and Block (App Store Guideline 1.2). Reporting comes
 /// first so the post is still visible to report; the report sheet then
-/// offers to block.
+/// offers to block. The choice is handed to `onSelect`; the stage runs it
+/// once it has closed (see `PostInteractions.queueMenuAction`).
 struct PostMenuItems: View {
     let post: PostDTO
-    var onSelect: () -> Void = {}
-    @Environment(PostInteractions.self) private var interactions
+    let onSelect: (PostInteractions.MenuAction) -> Void
 
     var body: some View {
         if post.isMine {
             Button(role: .destructive) {
-                onSelect()
-                interactions.deleteCandidate = post
+                onSelect(.delete(post))
             } label: {
                 Label("Delete post", systemImage: "trash")
             }
         } else {
             Button {
-                onSelect()
-                interactions.report = .post(post)
+                onSelect(.report(post))
             } label: {
                 Label("Report post…", systemImage: "exclamationmark.bubble")
             }
             Button(role: .destructive) {
-                onSelect()
-                interactions.blockCandidate = post.author
+                onSelect(.block(post.author))
             } label: {
                 Label("Block \(post.author.firstName)", systemImage: "hand.raised")
             }

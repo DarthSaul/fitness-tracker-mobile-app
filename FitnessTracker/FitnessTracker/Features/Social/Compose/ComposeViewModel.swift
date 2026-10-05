@@ -90,11 +90,15 @@ final class ComposeViewModel {
 
     // MARK: - Photos
 
-    /// Processes and uploads picked images, in pick order.
+    /// Processes and uploads picked images, in pick order. Placeholders for
+    /// every accepted image are added up front, before any await, so an
+    /// overlapping pick sees those slots as taken and can't exceed the limit.
     func addPhotos(_ items: [Data]) async {
-        for data in items.prefix(remainingPhotoSlots) {
-            let photo = AttachedPhoto(preview: nil, state: .processing)
-            photos.append(photo)
+        let accepted = items.prefix(remainingPhotoSlots).map { data in
+            (photo: AttachedPhoto(preview: nil, state: .processing), data: data)
+        }
+        photos.append(contentsOf: accepted.map(\.photo))
+        for (photo, data) in accepted {
             await process(photoId: photo.id, data: data)
         }
     }

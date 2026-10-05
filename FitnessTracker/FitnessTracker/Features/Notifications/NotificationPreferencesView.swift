@@ -31,9 +31,12 @@ final class NotificationPreferencesViewModel {
     }
 
     func set(_ type: NotificationType, _ isOn: Bool) async {
-        await save(UpdateNotificationPreferencesBody(push: [type.rawValue: isOn])) {
-            $0.push[type.rawValue] = isOn
-        }
+        let previous = preferences?.push[type.rawValue]
+        await save(
+            UpdateNotificationPreferencesBody(push: [type.rawValue: isOn]),
+            apply: { $0.push[type.rawValue] = isOn },
+            revert: { $0.push[type.rawValue] = previous }
+        )
     }
 
     /// "HH:MM" ⇄ a Date today, for the time picker.
@@ -46,25 +49,40 @@ final class NotificationPreferencesViewModel {
     func setReminderTime(_ date: Date) async {
         let components = Calendar.current.dateComponents([.hour, .minute], from: date)
         let value = String(format: "%02d:%02d", components.hour ?? 8, components.minute ?? 0)
-        guard value != preferences?.workoutReminderTime else { return }
-        await save(UpdateNotificationPreferencesBody(workoutReminderTime: value)) { $0.workoutReminderTime = value }
+        guard let previous = preferences?.workoutReminderTime, value != previous else { return }
+        await save(
+            UpdateNotificationPreferencesBody(workoutReminderTime: value),
+            apply: { $0.workoutReminderTime = value },
+            revert: { $0.workoutReminderTime = previous }
+        )
     }
 
     func setReminderDay(_ day: WorkoutReminderDay) async {
-        await save(UpdateNotificationPreferencesBody(workoutReminderDay: day)) { $0.workoutReminderDay = day }
+        guard let previous = preferences?.workoutReminderDay else { return }
+        await save(
+            UpdateNotificationPreferencesBody(workoutReminderDay: day),
+            apply: { $0.workoutReminderDay = day },
+            revert: { $0.workoutReminderDay = previous }
+        )
     }
 
-    private func save(_ body: UpdateNotificationPreferencesBody, optimistic change: (inout NotificationPreferencesDTO) -> Void) async {
-        guard let original = preferences else { return }
-        var updated = original
-        change(&updated)
-        preferences = updated
+    /// Applies one field optimistically, then sends it. Each save touches
+    /// only its own field: success keeps the local value (it's what was
+    /// saved), and failure reverts just that field — so saves that overlap
+    /// can't restore a stale copy over a later change.
+    private func save(
+        _ body: UpdateNotificationPreferencesBody,
+        apply: (inout NotificationPreferencesDTO) -> Void,
+        revert: @escaping (inout NotificationPreferencesDTO) -> Void
+    ) async {
+        guard preferences != nil else { return }
+        apply(&preferences!)
         isSaving = true
         defer { isSaving = false }
         do {
-            preferences = try await repository.updatePreferences(body)
+            _ = try await repository.updatePreferences(body)
         } catch {
-            preferences = original
+            if preferences != nil { revert(&preferences!) }
             guard let failure = await context.failure(from: error) else { return }
             Logger.app.error("Preferences update failed: \(error.localizedDescription, privacy: .public)")
             context.toasts.show("Couldn't save that setting. \(failure.message)")

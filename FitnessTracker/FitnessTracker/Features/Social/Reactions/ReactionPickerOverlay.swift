@@ -95,9 +95,13 @@ struct ReactionPickerOverlay: View {
 
     private var menu: some View {
         VStack(spacing: 0) {
-            PostMenuItems(post: target.post, onSelect: { dismiss() })
-                .environment(interactions)
-                .buttonStyle(PickerMenuRowStyle())
+            PostMenuItems(post: target.post) { action in
+                // Queued, not run: the host runs it from the cover's
+                // onDismiss once the stage has closed.
+                interactions.queueMenuAction(action)
+                dismiss()
+            }
+            .buttonStyle(PickerMenuRowStyle())
         }
         .background(SocialStyle.embed.opacity(0.96), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))

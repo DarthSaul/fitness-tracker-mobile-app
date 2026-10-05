@@ -9,50 +9,65 @@ struct ProgramTab: View {
     @Environment(SessionManager.self) private var sessionManager
     @Environment(\.modelContext) private var modelContext
     @Environment(ProgramRunChanges.self) private var runChanges
+    /// Built once, on first appearance (environment values aren't available
+    /// in `init`), so body re-evaluations don't allocate throwaway instances.
+    @State private var dependencies: ProgramScreen.Dependencies?
 
     var body: some View {
+        NavigationStack {
+            if let dependencies {
+                ProgramScreen(dependencies: dependencies)
+            }
+        }
+        .onAppear {
+            if dependencies == nil { dependencies = makeDependencies() }
+        }
+    }
+
+    private func makeDependencies() -> ProgramScreen.Dependencies {
         let programRepo = ProgramRepository(apiClient: apiClient, modelContext: modelContext)
         let userProgramRepo = UserProgramRepository(apiClient: apiClient)
-        NavigationStack {
-            ProgramScreen(
-                listViewModel: ProgramListViewModel(
-                    programRepository: programRepo,
-                    userProgramRepository: userProgramRepo,
-                    sessionManager: sessionManager,
-                    onRunChanged: { [runChanges] in runChanges.notify() }
-                ),
-                flowViewModel: ProgramFlowViewModel(
-                    homeRepository: HomeRepository(apiClient: apiClient),
-                    userProgramRepository: userProgramRepo,
-                    sessionManager: sessionManager
-                ),
+        return ProgramScreen.Dependencies(
+            listViewModel: ProgramListViewModel(
                 programRepository: programRepo,
-                workoutRepository: WorkoutRepository(apiClient: apiClient)
-            )
-        }
+                userProgramRepository: userProgramRepo,
+                sessionManager: sessionManager,
+                onRunChanged: { [runChanges] in runChanges.notify() }
+            ),
+            flowViewModel: ProgramFlowViewModel(
+                homeRepository: HomeRepository(apiClient: apiClient),
+                userProgramRepository: userProgramRepo,
+                sessionManager: sessionManager
+            ),
+            programRepository: programRepo,
+            workoutRepository: WorkoutRepository(apiClient: apiClient)
+        )
     }
 }
 
 private struct ProgramScreen: View {
+    /// Everything the screen needs, created once by ProgramTab. The view
+    /// models live here (not in the sections) so switching segments keeps
+    /// each section's loaded data.
+    struct Dependencies {
+        let listViewModel: ProgramListViewModel
+        let flowViewModel: ProgramFlowViewModel
+        let programRepository: ProgramRepository
+        let workoutRepository: WorkoutRepository
+    }
+
     @Environment(TabSelection.self) private var tabSelection
     @Environment(ProgramRunChanges.self) private var runChanges
-    // Held here (not in the sections) so switching segments keeps each
-    // section's loaded data.
-    @State private var listViewModel: ProgramListViewModel
-    @State private var flowViewModel: ProgramFlowViewModel
+    private let listViewModel: ProgramListViewModel
+    private let flowViewModel: ProgramFlowViewModel
     private let programRepository: ProgramRepository
     private let workoutRepository: WorkoutRepository
 
-    init(
-        listViewModel: ProgramListViewModel,
-        flowViewModel: ProgramFlowViewModel,
-        programRepository: ProgramRepository,
-        workoutRepository: WorkoutRepository
-    ) {
-        _listViewModel = State(initialValue: listViewModel)
-        _flowViewModel = State(initialValue: flowViewModel)
-        self.programRepository = programRepository
-        self.workoutRepository = workoutRepository
+    init(dependencies: Dependencies) {
+        listViewModel = dependencies.listViewModel
+        flowViewModel = dependencies.flowViewModel
+        programRepository = dependencies.programRepository
+        workoutRepository = dependencies.workoutRepository
     }
 
     var body: some View {

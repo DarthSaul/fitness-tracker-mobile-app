@@ -52,10 +52,11 @@ final class SocialSettingsViewModel {
     /// Going public approves every pending request (the view warns first);
     /// going private keeps existing followers.
     func setPrivate(_ isPrivate: Bool) async {
-        await update("profileVisibility", UpdateMeBody(profileVisibility: isPrivate ? .private : .public)) {
+        let saved = await update("profileVisibility", UpdateMeBody(profileVisibility: isPrivate ? .private : .public)) {
             $0.profileVisibility = isPrivate ? .private : .public
         }
-        if !isPrivate {
+        // Only a successful switch to public approved the pending requests.
+        if saved, !isPrivate {
             pendingRequestCount = 0
             context.events.send(.followsChanged)
         }
@@ -71,8 +72,10 @@ final class SocialSettingsViewModel {
 
     /// Applies `change` to the cached profile at once, PATCHes, then adopts
     /// the server's copy — or restores the old one and shows a toast.
-    private func update(_ field: String, _ body: UpdateMeBody, change: (inout UserProfile) -> Void) async {
-        guard let original = profile else { return }
+    /// Returns whether the change was saved.
+    @discardableResult
+    private func update(_ field: String, _ body: UpdateMeBody, change: (inout UserProfile) -> Void) async -> Bool {
+        guard let original = profile else { return false }
         var optimistic = original
         change(&optimistic)
         sessionManager.applyProfile(optimistic)
@@ -81,11 +84,13 @@ final class SocialSettingsViewModel {
         do {
             let saved = try await context.repository.updateMe(body)
             sessionManager.applyProfile(saved)
+            return true
         } catch {
             sessionManager.applyProfile(original)
-            guard let failure = await context.failure(from: error) else { return }
+            guard let failure = await context.failure(from: error) else { return false }
             Logger.data.error("Settings update failed: \(error)")
             context.toasts.show("Couldn't save that setting. \(failure.message)")
+            return false
         }
     }
 }

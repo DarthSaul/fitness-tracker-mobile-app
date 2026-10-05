@@ -36,8 +36,12 @@ struct ProgramProgressTests {
 @MainActor
 struct ProgramTabSelectionTests {
     @Test("opens on Manage, and Explore can be selected from elsewhere")
-    func programSection() {
-        let selection = TabSelection()
+    func programSection() throws {
+        // Its own defaults: TabSelection persists the Progress section.
+        let suite = "ProgramTabSelectionTests.programSection"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        let selection = TabSelection(defaults: defaults)
         #expect(selection.programSection == .manage)
         selection.selectProgram(.explore)
         #expect(selection.current == .programs)
