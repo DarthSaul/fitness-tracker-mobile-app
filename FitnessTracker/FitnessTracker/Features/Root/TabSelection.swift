@@ -5,16 +5,16 @@ enum AppTab: Hashable, Sendable {
     case home, friends, progress, programs, settings
 }
 
-/// The two sections of the Progress tab.
+/// The two sections of the Progress tab, in display order.
 enum ProgressSection: String, Hashable, Sendable, CaseIterable, Identifiable {
-    case history, analytics
+    case overview, history
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .overview: "Overview"
         case .history: "History"
-        case .analytics: "Analytics"
         }
     }
 }
@@ -39,11 +39,23 @@ enum ProgramSection: String, Hashable, Sendable, CaseIterable, Identifiable {
 @Observable
 @MainActor
 final class TabSelection {
+    static let progressSectionDefaultsKey = "progressSection"
+
     var current: AppTab = .home
-    /// Which section the Progress tab shows.
-    var progressSection: ProgressSection = .history
+    /// Which section the Progress tab shows. Remembered between launches.
+    var progressSection: ProgressSection {
+        didSet { defaults.set(progressSection.rawValue, forKey: Self.progressSectionDefaultsKey) }
+    }
     /// Which section the Program tab shows.
     var programSection: ProgramSection = .manage
+
+    @ObservationIgnored private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        progressSection = defaults.string(forKey: Self.progressSectionDefaultsKey)
+            .flatMap(ProgressSection.init(rawValue:)) ?? .overview
+    }
 
     func select(_ tab: AppTab) {
         current = tab

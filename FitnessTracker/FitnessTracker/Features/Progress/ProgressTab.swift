@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Progress tab: History and Analytics under one title, switched by a
+/// Progress tab: Overview (stats, weekly volume, exercise trends) and
+/// History (calendar + workout log) under one title, switched by a
 /// segmented control. Provides the NavigationStack both sections push into.
 struct ProgressTab: View {
     @Environment(APIClient.self) private var apiClient
@@ -48,14 +49,14 @@ private struct ProgressScreen: View {
         @Bindable var tabSelection = tabSelection
         Group {
             switch tabSelection.progressSection {
+            case .overview:
+                AnalyticsView(viewModel: analyticsViewModel)
             case .history:
                 HistoryView(
                     viewModel: historyViewModel,
                     workoutRepository: workoutRepository,
                     standaloneRepository: standaloneRepository
                 )
-            case .analytics:
-                AnalyticsView(viewModel: analyticsViewModel)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

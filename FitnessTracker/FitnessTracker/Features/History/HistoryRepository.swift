@@ -24,4 +24,17 @@ final class HistoryRepository {
         )
         return response.sessions
     }
+
+    /// GET /api/history/dates — when every completed session finished,
+    /// oldest first. Small (one timestamp per workout), so the calendar loads
+    /// it whole rather than paging.
+    func fetchCompletionDates() async throws -> [Date] {
+        let response: HistoryDatesResponseDTO = try await apiClient.send(.getHistoryDates)
+        return response.completedAt
+    }
+}
+
+/// `{ completedAt: string[] }` from GET /api/history/dates.
+nonisolated struct HistoryDatesResponseDTO: Codable, Sendable, Equatable {
+    let completedAt: [Date]
 }
