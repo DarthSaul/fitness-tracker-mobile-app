@@ -250,9 +250,9 @@ private struct EmptyFeedCard: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Every lifter needs a spotter.")
+                Text("Tracking progress is better together!")
                     .font(.system(size: 22, weight: .bold))
-                Text("Follow friends to see their posts and cheer them on.")
+                Text("Follow friends to see their posts, react, and cheer them on as they accomplish their goals.")
                     .font(.system(size: 15))
                     .foregroundStyle(.secondary)
                     .lineSpacing(3)
