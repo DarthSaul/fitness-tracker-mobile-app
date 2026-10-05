@@ -84,7 +84,14 @@ struct RootTabView: View {
             // when the workout has been completed or abandoned.
             Task { await resumeViewModel?.refresh() }
         } content: { target in
+            // This cover is attached *outside* the `.environment(...)`
+            // modifiers above (later in the chain = higher in the tree), so
+            // its content doesn't inherit them. Pass the session services the
+            // live workout needs (the post-workout share prompt) explicitly.
             liveWorkoutCover(for: target)
+                .environment(socialContext)
+                .environment(notifications)
+                .environment(tabSelection)
         }
         .task {
             // Initialize lazily so we capture apiClient from the environment.
