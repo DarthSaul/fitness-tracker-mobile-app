@@ -104,8 +104,8 @@ struct AnalyticsRepositoryTests {
 
     // MARK: - Time zone
 
-    @Test("fetchDashboard sends the device's IANA zone name")
-    func sendsTimeZoneIdentifier() async throws {
+    @Test("fetchDashboard forwards the supplied zone's IANA name")
+    func forwardsSuppliedTimeZoneIdentifier() async throws {
         let client = MockAPIClient()
         client.stub(.getDashboard(timeZone: nil), response: makeDashboard())
         let repo = AnalyticsRepository(apiClient: client)

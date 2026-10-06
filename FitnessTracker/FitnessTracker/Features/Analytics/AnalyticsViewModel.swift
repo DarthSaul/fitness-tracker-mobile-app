@@ -25,6 +25,12 @@ final class AnalyticsViewModel {
     /// The `weekStartDay` that `weeklyVolume` was bucketed by.
     private var weeklyVolumeWeekStart: WeekStartDay?
 
+    /// The calendar `weeklyVolume` was bucketed with, for the chart to bin
+    /// its bars by.
+    var weeklyVolumeCalendar: Calendar {
+        (weeklyVolumeWeekStart ?? weekStartDay).calendar()
+    }
+
     var dashboardStatus: LoadStatus = .idle
     var weeklyVolumeStatus: LoadStatus = .idle
     var exercisesStatus: LoadStatus = .idle

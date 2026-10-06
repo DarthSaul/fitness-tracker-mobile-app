@@ -26,7 +26,11 @@ struct AnalyticsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 statsGrid
-                WeeklyVolumeCard(weeks: viewModel.weeklyVolume, errorMessage: weeklyVolumeError)
+                WeeklyVolumeCard(
+                    weeks: viewModel.weeklyVolume,
+                    errorMessage: weeklyVolumeError,
+                    calendar: viewModel.weeklyVolumeCalendar
+                )
                 exerciseSelector
                     .padding(.top, 10)
                 exerciseDetail
@@ -71,7 +75,8 @@ struct AnalyticsView: View {
     private var weeklyGoal: Int? {
         guard let profile = sessionManager.userProfile,
               profile.weeklyWorkoutGoalEnabled == true else { return nil }
-        return profile.weeklyWorkoutGoal
+        // 3 is the server default, and what Settings shows when it's missing.
+        return profile.weeklyWorkoutGoal ?? 3
     }
 
     private var weeklyVolumeError: String? {

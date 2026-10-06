@@ -15,6 +15,9 @@ struct WeeklyVolumeCard: View {
 
     let weeks: [Week]?
     var errorMessage: String?
+    /// The calendar `weeks` were bucketed with. The chart bins each bar's
+    /// week-unit date with it, so bars line up with the user's week start.
+    var calendar: Calendar = .current
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -80,6 +83,7 @@ struct WeeklyVolumeCard: View {
             }
             .chartYAxis(.hidden)
             .chartYScale(domain: 0...maxSessions)
+            .environment(\.calendar, calendar)
             .frame(height: 130)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Self.accessibilitySummary(weeks))

@@ -84,8 +84,11 @@ final class SocialSettingsViewModel {
         await update(\.weeklyWorkoutGoal, to: value, body: UpdateMeBody(weeklyWorkoutGoal: value))
     }
 
+    /// Applied only once saved: Progress reloads when the cached week start
+    /// changes, and a reload before the PATCH lands would get the server's
+    /// `sessionsThisWeek` for the old week.
     func setWeekStartDay(_ value: WeekStartDay) async {
-        await update(\.weekStartDay, to: value, body: UpdateMeBody(weekStartDay: value))
+        await update(\.weekStartDay, to: value, body: UpdateMeBody(weekStartDay: value), optimistic: false)
     }
 
     func isSaving(_ field: PartialKeyPath<UserProfile>) -> Bool {
@@ -96,17 +99,19 @@ final class SocialSettingsViewModel {
     /// only its own field — success takes that field from the server's
     /// response, failure restores just that field — so overlapping saves of
     /// different settings can't undo each other. A field already being saved
-    /// is left alone (its toggle is disabled meanwhile). Returns whether the
-    /// change was saved.
+    /// is left alone (its toggle is disabled meanwhile). With `optimistic`
+    /// false the field changes only once the server has saved it. Returns
+    /// whether the change was saved.
     @discardableResult
     private func update<Value>(
         _ field: WritableKeyPath<UserProfile, Value?>,
         to value: Value,
-        body: UpdateMeBody
+        body: UpdateMeBody,
+        optimistic: Bool = true
     ) async -> Bool {
         guard let current = profile, !savingFields.contains(field) else { return false }
         let previous = current[keyPath: field]
-        setField(field, to: value)
+        if optimistic { setField(field, to: value) }
         savingFields.insert(field)
         defer { savingFields.remove(field) }
         do {
