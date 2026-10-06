@@ -148,6 +148,17 @@ final class LiveWorkoutViewModel {
         }
     }
 
+    /// Every set logged in this session, from the live buckets (kept current
+    /// as sets are logged, unlike `session.completedSets`).
+    var allCompletedSets: [CompletedSetDTO] {
+        Array(completedByExerciseSetId.values) + extraSetsByProgramExerciseId.values.flatMap { $0 } + adhocSets
+    }
+
+    /// The post-workout share prompt's highlights, as of now.
+    var completionSummary: WorkoutCompletionSummary? {
+        session.map { WorkoutCompletionSummary.program($0, completedSets: allCompletedSets) }
+    }
+
     private func apply(_ response: ActiveWorkoutResponseDTO) {
         self.session = response.session
         self.day = response.day

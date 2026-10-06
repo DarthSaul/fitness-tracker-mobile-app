@@ -1,7 +1,6 @@
 import Foundation
 import Observation
 import OSLog
-import UIKit
 
 /// The New Post sheet (design-spec 04): a caption, up to four photos
 /// (uploaded as soon as they're picked; the upload returns ids, not URLs,
@@ -12,20 +11,7 @@ final class ComposeViewModel {
     /// The app's caption limit. The API allows 2,000; the design caps posts
     /// at 500.
     static let captionMax = 500
-    static let maxPhotos = 4
-
-    struct AttachedPhoto: Identifiable {
-        enum State: Equatable {
-            case processing
-            case uploading
-            case uploaded(id: String)
-            case failed(String)
-        }
-
-        let id = UUID()
-        var preview: UIImage?
-        var state: State
-    }
+    static let maxPhotos = PhotoAttachments.maxPhotos
 
     /// A completed workout attached ahead of time (from History's Share or
     /// the post-workout prompt).
@@ -37,7 +23,7 @@ final class ComposeViewModel {
     }
 
     var caption = ""
-    private(set) var photos: [AttachedPhoto] = []
+    let photoAttachments: PhotoAttachments
     var workout: AttachedWorkout?
     private(set) var isPosting = false
     private(set) var errorMessage: String?
@@ -51,6 +37,7 @@ final class ComposeViewModel {
 
     init(context: SocialContext, workout: AttachedWorkout? = nil, canPost: @escaping @MainActor () -> Bool = { true }) {
         self.context = context
+        self.photoAttachments = PhotoAttachments(context: context)
         self.workout = workout
         self.canPost = canPost
     }
@@ -64,78 +51,25 @@ final class ComposeViewModel {
 
     // MARK: - Posting rules
 
-    private var uploadedPhotoIds: [String] {
-        photos.compactMap {
-            if case .uploaded(let id) = $0.state { return id }
-            return nil
-        }
-    }
-
-    private var hasPendingUploads: Bool {
-        photos.contains { $0.state == .processing || $0.state == .uploading }
-    }
-
-    private var hasFailedUploads: Bool {
-        photos.contains { if case .failed = $0.state { return true } else { return false } }
-    }
+    var photos: [PhotoAttachments.AttachedPhoto] { photoAttachments.photos }
 
     /// Disabled when there's no caption **and** nothing attached, while
     /// photos upload, or with a failed photo still attached.
     var canSubmit: Bool {
         let hasContent = captionLength > 0 || !photos.isEmpty || workout != nil
-        return hasContent && !isCaptionTooLong && !hasPendingUploads && !hasFailedUploads && !isPosting
+        return hasContent && !isCaptionTooLong && photoAttachments.isReadyToPost && !isPosting
     }
 
-    var remainingPhotoSlots: Int { Self.maxPhotos - photos.count }
+    var remainingPhotoSlots: Int { photoAttachments.remainingPhotoSlots }
 
     // MARK: - Photos
 
-    /// Processes and uploads picked images, in pick order. Placeholders for
-    /// every accepted image are added up front, before any await, so an
-    /// overlapping pick sees those slots as taken and can't exceed the limit.
     func addPhotos(_ items: [Data]) async {
-        let accepted = items.prefix(remainingPhotoSlots).map { data in
-            (photo: AttachedPhoto(preview: nil, state: .processing), data: data)
-        }
-        photos.append(contentsOf: accepted.map(\.photo))
-        for (photo, data) in accepted {
-            await process(photoId: photo.id, data: data)
-        }
+        await photoAttachments.addPhotos(items)
     }
 
     func removePhoto(_ id: UUID) {
-        // An upload that's never attached expires server-side after 24 hours,
-        // so there's nothing to clean up.
-        photos.removeAll { $0.id == id }
-    }
-
-    private func process(photoId: UUID, data: Data) async {
-        let processed: (jpeg: Data, preview: UIImage)
-        do {
-            processed = try await Task.detached(priority: .userInitiated) {
-                try PhotoProcessing.jpegForUpload(from: data)
-            }.value
-        } catch {
-            update(photoId) { $0.state = .failed("This image couldn't be read.") }
-            return
-        }
-        update(photoId) {
-            $0.preview = processed.preview
-            $0.state = .uploading
-        }
-        do {
-            let uploaded = try await context.repository.uploadPhoto(jpeg: processed.jpeg)
-            update(photoId) { $0.state = .uploaded(id: uploaded.id) }
-        } catch {
-            guard let failure = await context.failure(from: error) else { return }
-            Logger.data.error("Photo upload failed: \(error)")
-            update(photoId) { $0.state = .failed(failure.message) }
-        }
-    }
-
-    private func update(_ id: UUID, _ change: (inout AttachedPhoto) -> Void) {
-        guard let index = photos.firstIndex(where: { $0.id == id }) else { return }
-        change(&photos[index])
+        photoAttachments.removePhoto(id)
     }
 
     // MARK: - Post
@@ -149,7 +83,7 @@ final class ComposeViewModel {
         errorMessage = nil
         defer { isPosting = false }
 
-        let body = CreatePostBody(body: caption, photoIds: uploadedPhotoIds, sharing: workout?.share)
+        let body = CreatePostBody(body: caption, photoIds: photoAttachments.uploadedPhotoIds, sharing: workout?.share)
         do {
             let post = try await context.repository.createPost(body)
             context.events.send(.postCreated(post))

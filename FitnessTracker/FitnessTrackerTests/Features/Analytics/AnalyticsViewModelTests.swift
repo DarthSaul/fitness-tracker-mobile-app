@@ -73,6 +73,20 @@ struct AnalyticsViewModelTests {
         #expect(vm.exercisesStatus == .success)
     }
 
+    @Test("load() buckets completion dates into the weekly volume")
+    func loadWeeklyVolume() async {
+        let (vm, client) = makeViewModel(dashboard: makeDashboard(), exercises: makeExercises())
+        let now = Date.now
+        let lastWeek = Calendar.current.date(byAdding: .weekOfYear, value: -1, to: now)!
+        client.stub(.getHistoryDates, response: HistoryDatesResponseDTO(completedAt: [lastWeek, now, now]))
+
+        await vm.load()
+
+        #expect(vm.weeklyVolumeStatus == .success)
+        #expect(vm.weeklyVolume?.map(\.sessions).suffix(2) == [1, 2])
+        #expect(vm.hasLoaded)
+    }
+
     @Test("load() records error status for dashboard failure")
     func loadDashboardError() async {
         let exercises = makeExercises()

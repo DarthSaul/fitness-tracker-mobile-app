@@ -117,6 +117,17 @@ final class HomeViewModel {
         calendar.startOfDay(for: selectedDate) > calendar.startOfDay(for: .now)
     }
 
+    /// True when the selected date is strictly before today.
+    var isSelectedDateInPast: Bool {
+        calendar.startOfDay(for: selectedDate) < calendar.startOfDay(for: .now)
+    }
+
+    /// The most recent completed sessions, newest first, for Home's History
+    /// section (`history` is already newest-first).
+    var recentHistory: [HistoryEntryDTO] {
+        Array(history.prefix(HomeRecentWorkoutsSection.limit))
+    }
+
     /// All completed sessions (program + standalone) on the selected calendar
     /// day, newest first. The past-date view renders one card per entry — a
     /// program session and a standalone session can share a day.

@@ -3,7 +3,7 @@ import Charts
 
 /// Progress → Overview:
 ///   1. Three-up stat tiles (sessions, this week, total volume).
-///   2. Weekly volume (workouts per week; sample data for now).
+///   2. Weekly volume (completed workouts per local week).
 ///   3. Searchable exercise selector, with an ⓘ explaining e1RM.
 ///   4. The selected exercise's detail: e1RM card with chart and range
 ///      picker, best set, and recent sessions.
@@ -23,7 +23,7 @@ struct AnalyticsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 statsGrid
-                WeeklyVolumeCard()
+                WeeklyVolumeCard(weeks: viewModel.weeklyVolume, errorMessage: weeklyVolumeError)
                 exerciseSelector
                     .padding(.top, 10)
                 exerciseDetail
@@ -32,9 +32,9 @@ struct AnalyticsView: View {
             .padding(.vertical, 12)
         }
         // Switching back to the Analytics section re-runs `.task`; skip the
-        // reload once both loads have succeeded. Pull-to-refresh always reloads.
+        // reload once every load has succeeded. Pull-to-refresh always reloads.
         .task {
-            if viewModel.dashboardStatus != .success || viewModel.exercisesStatus != .success {
+            if !viewModel.hasLoaded {
                 await viewModel.load()
             }
         }
@@ -47,6 +47,11 @@ struct AnalyticsView: View {
                 viewModel.selectExercise(picked.id)
             }
         }
+    }
+
+    private var weeklyVolumeError: String? {
+        if case .error(let message) = viewModel.weeklyVolumeStatus { return message }
+        return nil
     }
 
     // MARK: - Stats grid
@@ -89,8 +94,8 @@ struct AnalyticsView: View {
 
     // MARK: - e1RM explainer
 
-    /// The ⓘ next to the Exercise heading (replaces the old full-width
-    /// "What is e1RM?" accordion).
+    /// The ⓘ next to the Exercise heading: opens the explainer as a bottom
+    /// sheet at half height (drag up for the rest).
     private var e1rmInfoButton: some View {
         Button {
             isE1rmInfoOpen = true
@@ -101,32 +106,8 @@ struct AnalyticsView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("What is e1RM?")
-        .popover(isPresented: $isE1rmInfoOpen) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("What is e1RM?")
-                        .font(.headline)
-                    Text("Estimated 1-Rep Max (e1RM) is a way to estimate the maximum weight you could lift for a single rep, based on any set you actually performed.")
-                    HStack(spacing: 4) {
-                        Text("Formula:")
-                        Text("e1RM = weight × (1 + reps ÷ 30)")
-                            .font(.caption.monospaced())
-                            .padding(.horizontal, 6).padding(.vertical, 2)
-                            .background(Color.secondary.opacity(0.18), in: RoundedRectangle(cornerRadius: 4))
-                    }
-                    .font(.footnote)
-                    Text("This is the Epley formula — one of the most widely used estimates in strength training.")
-                    Text("Why it matters: programs use different rep ranges across phases (e.g. 5×5 one month, 3×12 the next). Average weight would drop as reps go up, even if you're getting stronger. e1RM normalizes this so the trend reflects true progress.")
-                    Text("Note: less accurate above ~15 reps; most meaningful for compound barbell movements.")
-                        .foregroundStyle(.secondary)
-                }
-                .font(.footnote)
-                .foregroundStyle(.primary)
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(idealWidth: 340, idealHeight: 380)
-            .presentationCompactAdaptation(.popover)
+        .sheet(isPresented: $isE1rmInfoOpen) {
+            E1rmInfoSheet()
         }
     }
 
@@ -245,6 +226,38 @@ private struct StatTile: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(Color(uiColor: .secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10))
+    }
+}
+
+// MARK: - e1RM explainer sheet
+
+private struct E1rmInfoSheet: View {
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("What is e1RM?")
+                    .font(.title3.weight(.semibold))
+                Text("Estimated 1-Rep Max (e1RM) is a way to estimate the maximum weight you could lift for a single rep, based on any set you actually performed.")
+                HStack(spacing: 4) {
+                    Text("Formula:")
+                    Text("e1RM = weight × (1 + reps ÷ 30)")
+                        .font(.caption.monospaced())
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Color.secondary.opacity(0.18), in: RoundedRectangle(cornerRadius: 4))
+                }
+                Text("This is the Epley formula — one of the most widely used estimates in strength training.")
+                Text("Why it matters: programs use different rep ranges across phases (e.g. 5×5 one month, 3×12 the next). Average weight would drop as reps go up, even if you're getting stronger. e1RM normalizes this so the trend reflects true progress.")
+                Text("Note: less accurate above ~15 reps; most meaningful for compound barbell movements.")
+                    .foregroundStyle(.secondary)
+            }
+            .font(.subheadline)
+            .padding(.horizontal, 20)
+            .padding(.top, 28)
+            .padding(.bottom, 20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }
 

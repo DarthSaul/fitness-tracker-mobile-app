@@ -68,7 +68,7 @@ struct LiveWorkoutView: View {
                 ) {
                     // Captured before completing: the summary reflects the
                     // workout as the user finished it.
-                    let summary = viewModel.session.map { WorkoutCompletionSummary.program($0) }
+                    let summary = viewModel.completionSummary
                     Task {
                         guard await viewModel.completeWorkout() else { return }
                         if let summary {

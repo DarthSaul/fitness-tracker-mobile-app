@@ -1,4 +1,3 @@
-import PhotosUI
 import SwiftUI
 
 /// New Post sheet (design-spec 04). Opens at 420pt and grows to full height
@@ -6,7 +5,6 @@ import SwiftUI
 /// it, which follows the profile's privacy.
 struct ComposeSheet: View {
     @State private var viewModel: ComposeViewModel
-    @State private var pickerItems: [PhotosPickerItem] = []
     @State private var showPhotoPicker: Bool
     @State private var detent: PresentationDetent = .height(420)
     @FocusState private var captionFocused: Bool
@@ -44,23 +42,7 @@ struct ComposeSheet: View {
         .onChange(of: captionFocused) { _, focused in
             if focused { detent = .large }
         }
-        .photosPicker(
-            isPresented: $showPhotoPicker,
-            selection: $pickerItems,
-            maxSelectionCount: max(viewModel.remainingPhotoSlots, 1),
-            matching: .images
-        )
-        .onChange(of: pickerItems) { _, items in
-            guard !items.isEmpty else { return }
-            pickerItems = []
-            Task {
-                var data: [Data] = []
-                for item in items {
-                    if let loaded = try? await item.loadTransferable(type: Data.self) { data.append(loaded) }
-                }
-                await viewModel.addPhotos(data)
-            }
-        }
+        .photoAttachmentPicker(isPresented: $showPhotoPicker, attachments: viewModel.photoAttachments)
         .sensoryFeedback(.success, trigger: viewModel.didPost)
         .interactiveDismissDisabled(viewModel.isPosting)
     }
@@ -140,75 +122,16 @@ struct ComposeSheet: View {
                 .leadingAccentBar()
                 .background(SocialStyle.embed)
                 .clipShape(RoundedRectangle(cornerRadius: SocialStyle.embedRadius, style: .continuous))
-                removeButton(label: "Remove workout") { viewModel.workout = nil }
+                AttachmentRemoveButton(label: "Remove workout") { viewModel.workout = nil }
                     .padding(8)
             }
             .padding(.leading, 52)
         }
 
         if !viewModel.photos.isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(viewModel.photos) { photo in
-                        photoThumb(photo)
-                    }
-                }
-            }
-            .padding(.leading, 52)
+            AttachedPhotoStrip(attachments: viewModel.photoAttachments)
+                .padding(.leading, 52)
         }
-    }
-
-    private func photoThumb(_ photo: ComposeViewModel.AttachedPhoto) -> some View {
-        ZStack(alignment: .topTrailing) {
-            Group {
-                if let preview = photo.preview {
-                    Image(uiImage: preview).resizable().scaledToFill()
-                } else {
-                    SocialStyle.embed
-                }
-            }
-            .frame(width: 96, height: 96)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay {
-                switch photo.state {
-                case .processing, .uploading:
-                    ProgressView()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 12))
-                case .failed:
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.yellow)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 12))
-                case .uploaded:
-                    EmptyView()
-                }
-            }
-            removeButton(label: "Remove photo") { viewModel.removePhoto(photo.id) }
-                .padding(4)
-        }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(photoAccessibilityLabel(photo.state))
-    }
-
-    private func photoAccessibilityLabel(_ state: ComposeViewModel.AttachedPhoto.State) -> String {
-        switch state {
-        case .processing, .uploading: "Photo, uploading"
-        case .uploaded: "Photo"
-        case .failed(let message): "Photo failed to upload. \(message)"
-        }
-    }
-
-    private func removeButton(label: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: "xmark")
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 26, height: 26)
-                .background(Color(.systemGray2), in: Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
     }
 
     private var attachChips: some View {

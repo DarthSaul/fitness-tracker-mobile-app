@@ -13,7 +13,6 @@ nonisolated struct WorkoutCompletionSummary: Equatable, Sendable {
     /// "Week 2 · Day 4" for a program workout.
     var position: String?
     let sets: Int
-    let duration: TimeInterval
     let volumeLbs: Double
 
     /// "Arm Farm 2 · Week 2 · Day 4".
@@ -21,39 +20,38 @@ nonisolated struct WorkoutCompletionSummary: Equatable, Sendable {
         [title, position].compactMap { $0 }.joined(separator: " · ")
     }
 
-    var formattedDuration: String {
-        let minutes = max(Int((duration / 60).rounded()), 0)
-        guard minutes >= 60 else { return "\(minutes)m" }
-        return "\(minutes / 60)h \(minutes % 60)m"
-    }
-
     var formattedVolume: String {
         volumeLbs >= 1000 ? String(format: "%.1fk", volumeLbs / 1000) : String(format: "%.0f", volumeLbs)
     }
 
-    static func program(_ session: ActiveWorkoutResponseDTO.ActiveWorkoutSession, now: Date = .now) -> WorkoutCompletionSummary {
+    /// `completedSets` must be the live view model's current sets, not the
+    /// session's `completedSets` — that's the snapshot from when the workout
+    /// loaded and misses every set logged since.
+    static func program(
+        _ session: ActiveWorkoutResponseDTO.ActiveWorkoutSession,
+        completedSets: [CompletedSetDTO]
+    ) -> WorkoutCompletionSummary {
         WorkoutCompletionSummary(
             share: .program(sessionId: session.id),
             title: nil,
             position: "Week \(session.weekNumber) · Day \(session.dayNumber)",
-            sets: session.completedSets.count,
-            duration: now.timeIntervalSince(session.startedAt),
-            volumeLbs: volume(session.completedSets.map { ($0.reps, $0.weight) })
+            sets: completedSets.count,
+            volumeLbs: volume(completedSets.map { ($0.reps, $0.weight) })
         )
     }
 
+    /// See `program(_:completedSets:)` on which sets to pass.
     static func standalone(
-        _ session: StandaloneSessionDetailResponseDTO.SessionWithSets,
+        sessionId: String,
         workoutName: String,
-        now: Date = .now
+        completedSets: [StandaloneCompletedSetDTO]
     ) -> WorkoutCompletionSummary {
         WorkoutCompletionSummary(
-            share: .standalone(sessionId: session.id),
+            share: .standalone(sessionId: sessionId),
             title: workoutName,
             position: nil,
-            sets: session.completedSets.count,
-            duration: now.timeIntervalSince(session.startedAt),
-            volumeLbs: volume(session.completedSets.map { ($0.reps, $0.weight) })
+            sets: completedSets.count,
+            volumeLbs: volume(completedSets.map { ($0.reps, $0.weight) })
         )
     }
 
@@ -67,7 +65,8 @@ nonisolated struct WorkoutCompletionSummary: Equatable, Sendable {
 }
 
 /// The post-workout share prompt (design-spec 05): shown right after a
-/// workout is completed, offering to post it to followers with a caption.
+/// workout is completed, offering to post it to followers with a caption
+/// and up to four photos.
 @Observable
 @MainActor
 final class PostWorkoutShareViewModel {
@@ -75,6 +74,7 @@ final class PostWorkoutShareViewModel {
 
     private(set) var summary: WorkoutCompletionSummary
     var caption = ""
+    let photoAttachments: PhotoAttachments
     /// My follower count, for "48 followers will see it"; nil until loaded.
     private(set) var followerCount: Int?
     private(set) var isSharing = false
@@ -95,6 +95,7 @@ final class PostWorkoutShareViewModel {
     ) {
         self.summary = summary
         self.context = context
+        self.photoAttachments = PhotoAttachments(context: context)
         self.historyRepository = historyRepository
         self.canPost = canPost
     }
@@ -144,11 +145,13 @@ final class PostWorkoutShareViewModel {
 
     var isCaptionTooLong: Bool { SocialRules.postBodyLength(caption) > Self.captionMax }
 
-    var canShare: Bool { !isSharing && !isCaptionTooLong }
+    /// Off while sharing, over the caption limit, while photos upload, or
+    /// with a failed photo still attached.
+    var canShare: Bool { !isSharing && !isCaptionTooLong && photoAttachments.isReadyToPost }
 
     // MARK: - Share
 
-    /// Posts the workout with the caption. Returns whether the prompt can
+    /// Posts the workout with the caption and photos. Returns whether the prompt can
     /// close (shared, or already shared before).
     func share() async -> Bool {
         guard canShare, canPost() else { return false }
@@ -156,7 +159,11 @@ final class PostWorkoutShareViewModel {
         errorMessage = nil
         defer { isSharing = false }
         do {
-            let post = try await context.repository.createPost(CreatePostBody(body: caption, sharing: summary.share))
+            let post = try await context.repository.createPost(CreatePostBody(
+                body: caption,
+                photoIds: photoAttachments.uploadedPhotoIds,
+                sharing: summary.share
+            ))
             context.events.send(.postCreated(post))
             didShare = true
             return true

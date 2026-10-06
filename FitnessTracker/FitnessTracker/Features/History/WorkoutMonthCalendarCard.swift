@@ -2,8 +2,8 @@ import SwiftUI
 
 /// The History calendar card (design-spec A2): month name and workout count,
 /// weekday letters, then a 7-column grid of 30pt day circles. Workout days
-/// are tinted blue; the selected day (or, before any tap, the month's most
-/// recent workout day) is solid blue. Swipe sideways to change month.
+/// are tinted blue; the tapped day is solid blue. Swipe sideways to change
+/// month.
 struct WorkoutMonthCalendarCard: View {
     let workoutCalendar: WorkoutCalendar
     @Binding var displayedMonth: Date
@@ -55,7 +55,7 @@ struct WorkoutMonthCalendarCard: View {
     @ViewBuilder
     private func dayCell(_ day: Date) -> some View {
         let hasWorkout = workoutCalendar.hasWorkout(on: day)
-        let isHighlighted = hasWorkout && calendar.isDate(day, inSameDayAs: highlightedDay ?? .distantPast)
+        let isHighlighted = hasWorkout && selectedDay.map { calendar.isDate(day, inSameDayAs: $0) } == true
         Button {
             onSelectDay(day)
         } label: {
@@ -75,14 +75,6 @@ struct WorkoutMonthCalendarCard: View {
         .disabled(!hasWorkout)
         .accessibilityLabel(day.formatted(date: .complete, time: .omitted))
         .accessibilityValue(hasWorkout ? "Workout completed" : "")
-    }
-
-    /// The tapped day, or the month's latest workout day.
-    private var highlightedDay: Date? {
-        if let selectedDay, calendar.isDate(selectedDay, equalTo: displayedMonth, toGranularity: .month) {
-            return selectedDay
-        }
-        return workoutCalendar.mostRecentWorkoutDay(inMonthOf: displayedMonth)
     }
 
     private var summary: String {

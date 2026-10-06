@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// Account / preferences tab. Layout: profile header → Preferences
-/// (appearance + feedback) → About → Sign Out → Delete Account. The profile
+/// Account / preferences tab. Layout: profile header (Edit Profile + View
+/// Profile) → Social → Preferences (appearance + feedback) → Sign Out →
+/// About → Danger (Delete Account). The profile
 /// header pulls from `SessionManager.userProfile`, which is populated by
 /// GET /api/auth/me on bootstrap and after sign-in. The hosting tab provides
 /// the NavigationStack.
@@ -41,7 +42,19 @@ struct SettingsView: View {
                 NavigationLink {
                     EditProfileView(context: socialContext)
                 } label: {
-                    ProfileHeader(profile: sessionManager.userProfile, followerCount: social?.followerCount)
+                    ProfileHeader(profile: sessionManager.userProfile)
+                }
+                // The separator would otherwise start at the name, past the
+                // avatar. Start it at the row's content edge instead, where
+                // the text-only rows below (Social) start theirs.
+                .alignmentGuide(.listRowSeparatorLeading) { d in d[.leading] }
+
+                // The stack registers `.friendsDestinations()`, so this opens
+                // the same profile screen others see (with my posts).
+                if let userId = socialContext.currentUserId {
+                    NavigationLink(value: FriendsRoute.profile(userId: userId)) {
+                        Label("View Profile", systemImage: "person.crop.circle")
+                    }
                 }
             }
 
@@ -73,10 +86,6 @@ struct SettingsView: View {
                 }
             }
 
-            Section("About") {
-                LabeledContent("Version", value: AppVersion.displayString)
-            }
-
             Section {
                 Button(role: .destructive) {
                     Task { await performSignOut() }
@@ -93,8 +102,12 @@ struct SettingsView: View {
                 .disabled(isSigningOut || isDeletingAccount)
             }
 
-            // Own section (not sharing Sign Out's) so the most dangerous
-            // action in the app isn't one row away from a routine one.
+            Section("About") {
+                LabeledContent("Version", value: AppVersion.displayString)
+            }
+
+            // Own section, below About, so the most dangerous action in the
+            // app isn't one row away from a routine one.
             Section {
                 Button(role: .destructive) {
                     showDeleteConfirmation = true
@@ -118,6 +131,8 @@ struct SettingsView: View {
                 ) {
                     Task { await performDeleteAccount() }
                 }
+            } header: {
+                Text("Danger")
             } footer: {
                 Text("Deleting your account removes all of your data from our servers.")
             }
@@ -264,7 +279,6 @@ struct SettingsView: View {
 
 private struct ProfileHeader: View {
     let profile: UserProfile?
-    var followerCount: Int?
 
     var body: some View {
         HStack(spacing: 14) {
@@ -285,13 +299,11 @@ private struct ProfileHeader: View {
         .padding(.vertical, 4)
     }
 
-    /// "@saulg · 48 followers", falling back to the email before the
-    /// username loads.
+    /// "@saulg", falling back to the email before the username loads.
     private var subtitle: String? {
         guard let profile else { return nil }
         guard let username = profile.username else { return profile.email }
-        guard let followerCount else { return "@\(username)" }
-        return "@\(username) · \(followerCount) follower\(followerCount == 1 ? "" : "s")"
+        return "@\(username)"
     }
 
     private var displayName: String {
