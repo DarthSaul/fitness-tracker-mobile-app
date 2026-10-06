@@ -2,7 +2,8 @@ import SwiftUI
 import Charts
 
 /// Progress → Overview:
-///   1. Three-up stat tiles (sessions, this week, total volume).
+///   1. Three-up stat tiles (sessions, this week against the weekly goal
+///      when it's on, total volume).
 ///   2. Weekly volume (completed workouts per local week).
 ///   3. Searchable exercise selector, with an ⓘ explaining e1RM.
 ///   4. The selected exercise's detail: e1RM card with chart and range
@@ -14,6 +15,8 @@ struct AnalyticsView: View {
     @State private var viewModel: AnalyticsViewModel
     @State private var isE1rmInfoOpen = false
     @State private var isSelectorPresented = false
+    @Environment(SessionManager.self) private var sessionManager
+    @Environment(\.scenePhase) private var scenePhase
 
     init(viewModel: AnalyticsViewModel) {
         _viewModel = State(initialValue: viewModel)
@@ -31,12 +34,16 @@ struct AnalyticsView: View {
             .padding(.horizontal)
             .padding(.vertical, 12)
         }
-        // Switching back to the Analytics section re-runs `.task`; skip the
-        // reload once every load has succeeded. Pull-to-refresh always reloads.
-        .task {
-            if !viewModel.hasLoaded {
-                await viewModel.load()
-            }
+        // Switching back to the Analytics section re-runs `.task`, as does a
+        // new week start from Settings; skip the reload while everything
+        // loaded is still current. Pull-to-refresh always reloads.
+        .task(id: weekStartDay) {
+            viewModel.weekStartDay = weekStartDay
+            await reloadIfStale()
+        }
+        // The week may have rolled over while the app was in the background.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { Task { await reloadIfStale() } }
         }
         .refreshable { await viewModel.load() }
         .sheet(isPresented: $isSelectorPresented) {
@@ -47,6 +54,24 @@ struct AnalyticsView: View {
                 viewModel.selectExercise(picked.id)
             }
         }
+    }
+
+    private func reloadIfStale() async {
+        if !viewModel.hasLoaded {
+            await viewModel.load()
+        }
+    }
+
+    private var weekStartDay: WeekStartDay {
+        sessionManager.userProfile?.weekStartDay ?? .sunday
+    }
+
+    /// The weekly goal, when it's on. Read from the profile so a change in
+    /// Settings shows here at once.
+    private var weeklyGoal: Int? {
+        guard let profile = sessionManager.userProfile,
+              profile.weeklyWorkoutGoalEnabled == true else { return nil }
+        return profile.weeklyWorkoutGoal
     }
 
     private var weeklyVolumeError: String? {
@@ -77,9 +102,11 @@ struct AnalyticsView: View {
                         value: "\(dash.totalSessions)",
                         label: "Sessions"
                     )
+                    // "2/4" against the weekly goal. The server counts the
+                    // same week as the goal (`weekStartDay`, local zone).
                     StatTile(
                         systemImage: "calendar",
-                        value: "\(dash.sessionsThisWeek)",
+                        value: weeklyGoal.map { "\(dash.sessionsThisWeek)/\($0)" } ?? "\(dash.sessionsThisWeek)",
                         label: "this week"
                     )
                     StatTile(

@@ -13,14 +13,24 @@ struct ActivityView: View {
     var body: some View {
         List {
             if !viewModel.incomingRequests.isEmpty {
-                FollowRequestsSummaryRow(
-                    requests: viewModel.incomingRequests,
-                    summary: viewModel.requestsSummary,
-                    showsCountBadge: true
-                )
-                .listRowInsets(EdgeInsets(top: 8, leading: 20, bottom: 8, trailing: 20))
-                .listRowBackground(Color.clear)
-                .listRowSeparator(.hidden)
+                // Its own section with the list's card background, so it's
+                // as wide as the activity cards below. A button rather than
+                // a NavigationLink, which the list would give a second,
+                // system chevron outside the row's own.
+                Section {
+                    Button {
+                        context.router.open(.requests)
+                    } label: {
+                        FollowRequestsSummaryRow(
+                            requests: viewModel.incomingRequests,
+                            summary: viewModel.requestsSummary,
+                            showsCountBadge: true
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(SocialStyle.card)
+                    .listRowInsets(EdgeInsets(top: 12, leading: 16, bottom: 12, trailing: 16))
+                }
             }
 
             content

@@ -103,7 +103,7 @@ struct WeeklyVolumeCard: View {
     }
 
     /// `weekCount` local weeks ending with the current one (weeks start on
-    /// the locale's first weekday), each counting the completions inside it.
+    /// `calendar.firstWeekday`), each counting the completions inside it.
     /// Completions outside the window are ignored.
     static func weeks(
         from completionDates: [Date],

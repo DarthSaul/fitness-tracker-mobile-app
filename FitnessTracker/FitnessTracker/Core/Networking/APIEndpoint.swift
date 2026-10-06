@@ -107,7 +107,7 @@ enum APIEndpoint {
     case updateExerciseNotes(exerciseId: String, body: UpdateExerciseNotesBody)
 
     // Analytics
-    case getDashboard(tzOffsetMinutes: Int?)
+    case getDashboard(timeZone: String?)
     case getAnalyticsExercises
     case getAnalyticsExercise(id: String)
 
@@ -438,9 +438,9 @@ extension APIEndpoint {
             }
             return items
 
-        case .getDashboard(let tzOffsetMinutes):
-            guard let tzOffsetMinutes else { return nil }
-            return [URLQueryItem(name: "tzOffset", value: String(tzOffsetMinutes))]
+        case .getDashboard(let timeZone):
+            guard let timeZone else { return nil }
+            return [URLQueryItem(name: "timeZone", value: timeZone)]
 
         case .getHistory(let type, let limit, let before, let beforeId):
             var items: [URLQueryItem] = []
@@ -733,6 +733,10 @@ nonisolated struct UpdateMeBody: Encodable, Sendable, Equatable {
     var bio: String?
     var showActiveProgram: Bool?
     var showWorkoutCount: Bool?
+    var weeklyWorkoutGoalEnabled: Bool?
+    /// 1–7. Setting it leaves `weeklyWorkoutGoalEnabled` alone.
+    var weeklyWorkoutGoal: Int?
+    var weekStartDay: WeekStartDay?
 }
 
 /// POST /api/following.

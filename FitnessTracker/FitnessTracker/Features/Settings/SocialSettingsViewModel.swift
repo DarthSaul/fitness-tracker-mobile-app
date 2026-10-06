@@ -2,9 +2,10 @@ import Foundation
 import Observation
 import OSLog
 
-/// The Settings → Social group and Edit Profile: privacy, profile stats,
-/// username and bio, all through `PATCH /api/auth/me`. Toggles update
-/// optimistically and roll back on failure.
+/// The Settings → Social and Weekly Goal groups and Edit Profile: privacy,
+/// profile stats, username, bio, the weekly goal and the week start, all
+/// through `PATCH /api/auth/me`. Changes apply optimistically and roll back
+/// on failure.
 @Observable
 @MainActor
 final class SocialSettingsViewModel {
@@ -65,6 +66,26 @@ final class SocialSettingsViewModel {
 
     func setShowWorkoutCount(_ value: Bool) async {
         await update(\.showWorkoutCount, to: value, body: UpdateMeBody(showWorkoutCount: value))
+    }
+
+    // MARK: - Weekly goal
+
+    /// Off by default. The number is kept while off, so turning the goal
+    /// back on restores it.
+    var weeklyGoalEnabled: Bool { profile?.weeklyWorkoutGoalEnabled ?? false }
+    var weeklyGoal: Int { profile?.weeklyWorkoutGoal ?? 3 }
+    var weekStartDay: WeekStartDay { profile?.weekStartDay ?? .sunday }
+
+    func setWeeklyGoalEnabled(_ value: Bool) async {
+        await update(\.weeklyWorkoutGoalEnabled, to: value, body: UpdateMeBody(weeklyWorkoutGoalEnabled: value))
+    }
+
+    func setWeeklyGoal(_ value: Int) async {
+        await update(\.weeklyWorkoutGoal, to: value, body: UpdateMeBody(weeklyWorkoutGoal: value))
+    }
+
+    func setWeekStartDay(_ value: WeekStartDay) async {
+        await update(\.weekStartDay, to: value, body: UpdateMeBody(weekStartDay: value))
     }
 
     func isSaving(_ field: PartialKeyPath<UserProfile>) -> Bool {

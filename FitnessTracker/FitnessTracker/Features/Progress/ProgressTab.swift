@@ -26,6 +26,7 @@ struct ProgressTab: View {
 
 private struct ProgressScreen: View {
     @Environment(TabSelection.self) private var tabSelection
+    @Environment(LiveWorkoutPresentation.self) private var liveWorkout
     // Held here (not in the sections) so switching segments keeps each
     // section's loaded data instead of refetching from scratch.
     @State private var historyViewModel: HistoryViewModel
@@ -75,5 +76,12 @@ private struct ProgressScreen: View {
             .background(Color(.systemBackground))
         }
         .toolbar(.hidden, for: .navigationBar)
+        // A workout just finished (or was abandoned): refresh the overview's
+        // counts so "this week" includes it. Skipped until it first loads.
+        .onChange(of: liveWorkout.isPresented) { wasPresented, isPresented in
+            if wasPresented && !isPresented && analyticsViewModel.dashboardStatus != .idle {
+                Task { await analyticsViewModel.load() }
+            }
+        }
     }
 }

@@ -18,4 +18,11 @@ nonisolated struct UserProfile: Codable, Sendable, Equatable {
     var showActiveProgram: Bool? = nil
     /// Whether people who can see my posts also see my completed-workout count.
     var showWorkoutCount: Bool? = nil
+    /// Whether the weekly workout goal is on. Private to the owner.
+    var weeklyWorkoutGoalEnabled: Bool? = nil
+    /// Workouts per week, 1–7. Kept while the goal is off, so turning it
+    /// back on restores it.
+    var weeklyWorkoutGoal: Int? = nil
+    /// The first day of the user's week.
+    var weekStartDay: WeekStartDay? = nil
 }

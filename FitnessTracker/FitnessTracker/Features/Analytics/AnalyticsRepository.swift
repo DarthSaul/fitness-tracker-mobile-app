@@ -10,12 +10,12 @@ final class AnalyticsRepository {
         self.apiClient = apiClient
     }
 
-    func fetchDashboard(tzOffsetMinutes: Int? = nil) async throws -> AnalyticsDashboardDTO {
-        // Default to the device's current timezone offset when the caller
-        // doesn't supply one. Computed lazily here (not as a default arg)
-        // because default values evaluate outside the main actor.
-        let offset = tzOffsetMinutes ?? Self.localTzOffsetMinutes()
-        return try await apiClient.send(.getDashboard(tzOffsetMinutes: offset))
+    /// `sessionsThisWeek` counts the user's week (their `weekStartDay`) in
+    /// `timeZone`, the device's zone unless given. Sent as an IANA name
+    /// rather than an offset so the server gets DST weeks right.
+    func fetchDashboard(timeZone: TimeZone? = nil) async throws -> AnalyticsDashboardDTO {
+        let identifier = (timeZone ?? .current).identifier
+        return try await apiClient.send(.getDashboard(timeZone: identifier))
     }
 
     func fetchExercises() async throws -> [AnalyticsExerciseDTO] {
@@ -31,12 +31,5 @@ final class AnalyticsRepository {
 
     func fetchExerciseHistory(id: String) async throws -> AnalyticsExerciseHistoryDTO {
         try await apiClient.send(.getAnalyticsExercise(id: id))
-    }
-
-    /// Server expects `tzOffset` in minutes-east-of-UTC (matches JS
-    /// `-getTimezoneOffset()`). `TimeZone.secondsFromGMT()` already returns the
-    /// signed offset in seconds-east-of-UTC, so just divide.
-    static func localTzOffsetMinutes(timeZone: TimeZone = .current) -> Int {
-        timeZone.secondsFromGMT() / 60
     }
 }

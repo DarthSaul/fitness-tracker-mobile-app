@@ -45,10 +45,16 @@ private struct FriendsFeedContent: View {
                 // empty: a new user may have requests waiting, and can post
                 // a first update straight away.
                 if !viewModel.incomingRequests.isEmpty {
-                    FollowRequestsSummaryRow(
-                        requests: viewModel.incomingRequests,
-                        summary: viewModel.requestsSummary
-                    )
+                    NavigationLink(value: FriendsRoute.requests) {
+                        FollowRequestsSummaryRow(
+                            requests: viewModel.incomingRequests,
+                            summary: viewModel.requestsSummary
+                        )
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 12)
+                        .background(SocialStyle.card, in: RoundedRectangle(cornerRadius: SocialStyle.smallCardRadius, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
                     .padding(.top, 14)
                 }
                 composerRow
