@@ -2,9 +2,10 @@ import Foundation
 import Observation
 import OSLog
 
-/// The Settings → Social group and Edit Profile: privacy, profile stats,
-/// username and bio, all through `PATCH /api/auth/me`. Toggles update
-/// optimistically and roll back on failure.
+/// The Settings → Social and Weekly Goal groups and Edit Profile: privacy,
+/// profile stats, username, bio, the weekly goal and the week start, all
+/// through `PATCH /api/auth/me`. Changes apply optimistically and roll back
+/// on failure.
 @Observable
 @MainActor
 final class SocialSettingsViewModel {
@@ -67,6 +68,29 @@ final class SocialSettingsViewModel {
         await update(\.showWorkoutCount, to: value, body: UpdateMeBody(showWorkoutCount: value))
     }
 
+    // MARK: - Weekly goal
+
+    /// Off by default. The number is kept while off, so turning the goal
+    /// back on restores it.
+    var weeklyGoalEnabled: Bool { profile?.weeklyWorkoutGoalEnabled ?? false }
+    var weeklyGoal: Int { profile?.weeklyWorkoutGoal ?? 3 }
+    var weekStartDay: WeekStartDay { profile?.weekStartDay ?? .sunday }
+
+    func setWeeklyGoalEnabled(_ value: Bool) async {
+        await update(\.weeklyWorkoutGoalEnabled, to: value, body: UpdateMeBody(weeklyWorkoutGoalEnabled: value))
+    }
+
+    func setWeeklyGoal(_ value: Int) async {
+        await update(\.weeklyWorkoutGoal, to: value, body: UpdateMeBody(weeklyWorkoutGoal: value))
+    }
+
+    /// Applied only once saved: Progress reloads when the cached week start
+    /// changes, and a reload before the PATCH lands would get the server's
+    /// `sessionsThisWeek` for the old week.
+    func setWeekStartDay(_ value: WeekStartDay) async {
+        await update(\.weekStartDay, to: value, body: UpdateMeBody(weekStartDay: value), optimistic: false)
+    }
+
     func isSaving(_ field: PartialKeyPath<UserProfile>) -> Bool {
         savingFields.contains(field)
     }
@@ -75,17 +99,19 @@ final class SocialSettingsViewModel {
     /// only its own field — success takes that field from the server's
     /// response, failure restores just that field — so overlapping saves of
     /// different settings can't undo each other. A field already being saved
-    /// is left alone (its toggle is disabled meanwhile). Returns whether the
-    /// change was saved.
+    /// is left alone (its toggle is disabled meanwhile). With `optimistic`
+    /// false the field changes only once the server has saved it. Returns
+    /// whether the change was saved.
     @discardableResult
     private func update<Value>(
         _ field: WritableKeyPath<UserProfile, Value?>,
         to value: Value,
-        body: UpdateMeBody
+        body: UpdateMeBody,
+        optimistic: Bool = true
     ) async -> Bool {
         guard let current = profile, !savingFields.contains(field) else { return false }
         let previous = current[keyPath: field]
-        setField(field, to: value)
+        if optimistic { setField(field, to: value) }
         savingFields.insert(field)
         defer { savingFields.remove(field) }
         do {

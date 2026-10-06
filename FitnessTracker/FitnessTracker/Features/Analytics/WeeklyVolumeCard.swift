@@ -15,6 +15,9 @@ struct WeeklyVolumeCard: View {
 
     let weeks: [Week]?
     var errorMessage: String?
+    /// The calendar `weeks` were bucketed with. The chart bins each bar's
+    /// week-unit date with it, so bars line up with the user's week start.
+    var calendar: Calendar = .current
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -51,7 +54,10 @@ struct WeeklyVolumeCard: View {
         return Chart {
                 ForEach(Array(weeks.enumerated()), id: \.element.id) { index, week in
                     BarMark(
-                        x: .value("Week", index),
+                        // A week-unit date gives each bar a week-wide band for
+                        // `.ratio` to size against; a plain index is a
+                        // continuous scale with no band, so bars get zero width.
+                        x: .value("Week", week.start, unit: .weekOfYear),
                         // The current, unfinished week keeps a 3% stub so it
                         // still reads as a bar; empty past weeks stay empty.
                         y: .value("Workouts", index == weeks.count - 1
@@ -64,10 +70,11 @@ struct WeeklyVolumeCard: View {
                 }
             }
             .chartXAxis {
-                AxisMarks(values: Array(weeks.indices)) { value in
-                    if let index = value.as(Int.self), index % 2 == 0 {
+                // Every other week, starting with the oldest.
+                AxisMarks(values: weeks.enumerated().filter { $0.offset % 2 == 0 }.map(\.element.start)) { value in
+                    if let start = value.as(Date.self) {
                         AxisValueLabel(centered: true) {
-                            Text(weeks[index].start, format: .dateTime.month(.abbreviated).day())
+                            Text(start, format: .dateTime.month(.abbreviated).day())
                                 .font(.system(size: 10))
                                 .foregroundStyle(SocialStyle.tertiaryText)
                         }
@@ -76,6 +83,7 @@ struct WeeklyVolumeCard: View {
             }
             .chartYAxis(.hidden)
             .chartYScale(domain: 0...maxSessions)
+            .environment(\.calendar, calendar)
             .frame(height: 130)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(Self.accessibilitySummary(weeks))
@@ -99,7 +107,7 @@ struct WeeklyVolumeCard: View {
     }
 
     /// `weekCount` local weeks ending with the current one (weeks start on
-    /// the locale's first weekday), each counting the completions inside it.
+    /// `calendar.firstWeekday`), each counting the completions inside it.
     /// Completions outside the window are ignored.
     static func weeks(
         from completionDates: [Date],

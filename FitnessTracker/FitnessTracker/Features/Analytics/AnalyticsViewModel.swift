@@ -19,6 +19,17 @@ final class AnalyticsViewModel {
     var exerciseHistory: AnalyticsExerciseHistoryDTO?
     /// Completed workouts per local week, oldest first (Weekly volume card).
     var weeklyVolume: [WeeklyVolumeCard.Week]?
+    /// The user's first day of the week, which `load()` buckets the weekly
+    /// chart by. The server counts `sessionsThisWeek` the same way.
+    var weekStartDay: WeekStartDay = .sunday
+    /// The `weekStartDay` that `weeklyVolume` was bucketed by.
+    private var weeklyVolumeWeekStart: WeekStartDay?
+
+    /// The calendar `weeklyVolume` was bucketed with, for the chart to bin
+    /// its bars by.
+    var weeklyVolumeCalendar: Calendar {
+        (weeklyVolumeWeekStart ?? weekStartDay).calendar()
+    }
 
     var dashboardStatus: LoadStatus = .idle
     var weeklyVolumeStatus: LoadStatus = .idle
@@ -59,26 +70,30 @@ final class AnalyticsViewModel {
         _ = await (dash, weekly, ex)
     }
 
-    /// True once every eager section has loaded and the weekly chart still
-    /// ends on the current local week (the app can stay open across a week
-    /// boundary).
+    /// True once every eager section has loaded, and the weekly numbers
+    /// still describe the current week as the user defines it. The app can
+    /// stay open across a week boundary, and a new week start in Settings
+    /// changes both the chart and the server's `sessionsThisWeek`.
     var hasLoaded: Bool {
         dashboardStatus == .success && weeklyVolumeStatus == .success && exercisesStatus == .success
             && isWeeklyVolumeCurrent
     }
 
     private var isWeeklyVolumeCurrent: Bool {
-        guard let lastWeek = weeklyVolume?.last?.start else { return false }
-        return Calendar.current.isDate(lastWeek, equalTo: .now, toGranularity: .weekOfYear)
+        guard weeklyVolumeWeekStart == weekStartDay,
+              let lastWeek = weeklyVolume?.last?.start else { return false }
+        return weekStartDay.calendar().isDate(lastWeek, equalTo: .now, toGranularity: .weekOfYear)
     }
 
     func loadWeeklyVolume(token: Int) async {
         guard token == loadToken else { return }
         weeklyVolumeStatus = .pending
+        let weekStart = weekStartDay
         do {
             let dates = try await repository.fetchCompletionDates()
             guard token == loadToken else { return }
-            self.weeklyVolume = WeeklyVolumeCard.weeks(from: dates)
+            self.weeklyVolume = WeeklyVolumeCard.weeks(from: dates, calendar: weekStart.calendar())
+            self.weeklyVolumeWeekStart = weekStart
             self.weeklyVolumeStatus = .success
         } catch {
             if Self.isCancellation(error) { return }

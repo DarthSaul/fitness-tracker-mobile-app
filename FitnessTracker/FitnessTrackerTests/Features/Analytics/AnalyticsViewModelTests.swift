@@ -44,7 +44,7 @@ struct AnalyticsViewModelTests {
     ) -> (AnalyticsViewModel, MockAPIClient) {
         let client = MockAPIClient()
         if let dashboard {
-            // Stub by exact path so any tzOffset value resolves to the same handler.
+            // Stub by exact path so any timeZone value resolves to the same handler.
             client.handlers["GET /api/analytics/dashboard"] = { _ in
                 try JSONCoding.encoder.encode(dashboard)
             }
@@ -84,6 +84,21 @@ struct AnalyticsViewModelTests {
 
         #expect(vm.weeklyVolumeStatus == .success)
         #expect(vm.weeklyVolume?.map(\.sessions).suffix(2) == [1, 2])
+        #expect(vm.hasLoaded)
+    }
+
+    @Test("a new week start makes the loaded numbers stale")
+    func weekStartChangeNeedsReload() async {
+        let (vm, client) = makeViewModel(dashboard: makeDashboard(), exercises: makeExercises())
+        client.stub(.getHistoryDates, response: HistoryDatesResponseDTO(completedAt: []))
+
+        await vm.load()
+        #expect(vm.hasLoaded)
+
+        vm.weekStartDay = vm.weekStartDay == .monday ? .sunday : .monday
+        #expect(!vm.hasLoaded)
+
+        await vm.load()
         #expect(vm.hasLoaded)
     }
 

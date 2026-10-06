@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Account / preferences tab. Layout: profile header (Edit Profile + View
-/// Profile) → Social → Preferences (appearance + feedback) → Sign Out →
+/// Profile) → Weekly Goal → Social → Preferences (appearance + feedback) → Sign Out →
 /// About → Danger (Delete Account). The profile
 /// header pulls from `SessionManager.userProfile`, which is populated by
 /// GET /api/auth/me on bootstrap and after sign-in. The hosting tab provides
@@ -59,6 +59,7 @@ struct SettingsView: View {
             }
 
             if let social {
+                weeklyGoalSection(social)
                 socialSection(social)
             }
 
@@ -160,6 +161,53 @@ struct SettingsView: View {
         } message: {
             Text(deleteAccountError?.localizedDescription ?? "")
         }
+    }
+
+    // MARK: - Weekly goal
+
+    private func weeklyGoalSection(_ social: SocialSettingsViewModel) -> some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { social.weeklyGoalEnabled },
+                set: { value in Task { await social.setWeeklyGoalEnabled(value) } }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Weekly goal")
+                    Text("Only you can see it")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .disabled(social.isSaving(\UserProfile.weeklyWorkoutGoalEnabled))
+
+            // Hidden while off; the server keeps the number for next time.
+            if social.weeklyGoalEnabled {
+                Picker("Workouts per week", selection: Binding(
+                    get: { social.weeklyGoal },
+                    set: { value in Task { await social.setWeeklyGoal(value) } }
+                )) {
+                    ForEach(1...7, id: \.self) { count in
+                        Text("\(count)").tag(count)
+                    }
+                }
+                .disabled(social.isSaving(\UserProfile.weeklyWorkoutGoal))
+            }
+
+            Picker("Week starts on", selection: Binding(
+                get: { social.weekStartDay },
+                set: { value in Task { await social.setWeekStartDay(value) } }
+            )) {
+                ForEach(WeekStartDay.allCases) { day in
+                    Text(day.displayName).tag(day)
+                }
+            }
+            .disabled(social.isSaving(\UserProfile.weekStartDay))
+        } header: {
+            Text("Weekly Goal")
+        } footer: {
+            Text("Your goal and this week's count in Progress start on this day.")
+        }
+        .tint(.green)
     }
 
     // MARK: - Social

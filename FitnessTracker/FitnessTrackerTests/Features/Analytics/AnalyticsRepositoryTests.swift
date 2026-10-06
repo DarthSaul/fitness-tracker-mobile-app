@@ -45,13 +45,13 @@ struct AnalyticsRepositoryTests {
 
     // MARK: - 200 happy paths
 
-    @Test("fetchDashboard sends GET to /api/analytics/dashboard with tzOffset")
+    @Test("fetchDashboard sends GET to /api/analytics/dashboard with timeZone")
     func fetchDashboard() async throws {
         let client = MockAPIClient()
-        client.stub(.getDashboard(tzOffsetMinutes: 0), response: makeDashboard())
+        client.stub(.getDashboard(timeZone: "UTC"), response: makeDashboard())
         let repo = AnalyticsRepository(apiClient: client)
 
-        let dto = try await repo.fetchDashboard(tzOffsetMinutes: 0)
+        let dto = try await repo.fetchDashboard(timeZone: TimeZone(identifier: "UTC"))
         #expect(dto.totalSessions == 42)
         #expect(dto.sessionsThisWeek == 4)
     }
@@ -85,11 +85,11 @@ struct AnalyticsRepositoryTests {
     @Test("fetchDashboard propagates 401")
     func dashboardUnauthorized() async {
         let client = MockAPIClient()
-        client.stubUnauthorized(for: .getDashboard(tzOffsetMinutes: 0))
+        client.stubUnauthorized(for: .getDashboard(timeZone: "UTC"))
         let repo = AnalyticsRepository(apiClient: client)
 
         do {
-            _ = try await repo.fetchDashboard(tzOffsetMinutes: 0)
+            _ = try await repo.fetchDashboard(timeZone: TimeZone(identifier: "UTC"))
             Issue.record("Expected unauthorized error")
         } catch let error as APIError {
             if case .unauthorized = error {
@@ -102,15 +102,27 @@ struct AnalyticsRepositoryTests {
         }
     }
 
-    // MARK: - Timezone offset
+    // MARK: - Time zone
 
-    @Test("localTzOffsetMinutes converts seconds-east-of-UTC to minutes")
-    func tzOffsetConversion() {
-        // -5h (e.g. New York standard time)
-        let est = TimeZone(secondsFromGMT: -5 * 3600)!
-        #expect(AnalyticsRepository.localTzOffsetMinutes(timeZone: est) == -300)
-        // +9h (Tokyo)
-        let jst = TimeZone(secondsFromGMT: 9 * 3600)!
-        #expect(AnalyticsRepository.localTzOffsetMinutes(timeZone: jst) == 540)
+    @Test("fetchDashboard forwards the supplied zone's IANA name")
+    func forwardsSuppliedTimeZoneIdentifier() async throws {
+        let client = MockAPIClient()
+        client.stub(.getDashboard(timeZone: nil), response: makeDashboard())
+        let repo = AnalyticsRepository(apiClient: client)
+
+        _ = try await repo.fetchDashboard(timeZone: TimeZone(identifier: "America/Chicago"))
+
+        #expect(client.sentEndpoints.contains { endpoint in
+            if case .getDashboard(timeZone: "America/Chicago") = endpoint { return true }
+            return false
+        })
+    }
+
+    @Test("the dashboard's zone is a timeZone query item")
+    func timeZoneQueryItem() throws {
+        let url = try #require(try APIEndpoint.getDashboard(timeZone: "America/Chicago")
+            .urlRequest(baseURL: URL(string: "http://localhost:3000")!, accessToken: "token").url)
+        #expect(URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+            == [URLQueryItem(name: "timeZone", value: "America/Chicago")])
     }
 }
