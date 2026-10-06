@@ -117,7 +117,6 @@ struct WorkoutCalendarTests {
         #expect(workoutCalendar.workoutCount(inMonthOf: date("2026-09-15T00:00:00Z")) == 3)
         #expect(workoutCalendar.hasWorkout(on: date("2026-09-22T23:00:00Z")))
         #expect(!workoutCalendar.hasWorkout(on: date("2026-09-21T12:00:00Z")))
-        #expect(workoutCalendar.mostRecentWorkoutDay(inMonthOf: date("2026-09-01T00:00:00Z")) == date("2026-09-22T00:00:00Z"))
     }
 
     @Test("the grid starts on the locale's first weekday")
@@ -144,13 +143,41 @@ struct WorkoutCalendarTests {
     }
 }
 
-@Suite("Weekly volume sample")
-struct WeeklyVolumeSampleTests {
-    @Test("nine weeks ending with the current one")
-    func nineWeeks() {
-        let now = Date.now
-        let weeks = WeeklyVolumeCard.sampleWeeks(now: now)
+@Suite("Weekly volume")
+@MainActor
+struct WeeklyVolumeTests {
+    private var calendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        calendar.firstWeekday = 1
+        return calendar
+    }
+
+    private func date(_ iso: String) -> Date {
+        JSONCoding.parseISO8601(iso)!
+    }
+
+    @Test("nine local weeks ending with the current one, counting completions in each")
+    func buckets() {
+        // Wednesday 2026-09-30; Sunday-first weeks.
+        let now = date("2026-09-30T12:00:00Z")
+        let weeks = WeeklyVolumeCard.weeks(from: [
+            date("2026-07-01T10:00:00Z"), // outside the window
+            date("2026-09-20T09:00:00Z"), // Sun — first day of last week
+            date("2026-09-26T23:00:00Z"), // Sat — last day of last week
+            date("2026-09-27T08:00:00Z"), // Sun — this week
+        ], now: now, calendar: calendar)
+
         #expect(weeks.count == 9)
-        #expect(Calendar.current.isDate(weeks.last!.start, equalTo: now, toGranularity: .weekOfYear))
+        #expect(weeks.last?.start == date("2026-09-27T00:00:00Z"))
+        #expect(weeks.first?.start == date("2026-08-02T00:00:00Z"))
+        #expect(weeks.map(\.sessions) == [0, 0, 0, 0, 0, 0, 0, 2, 1])
+    }
+
+    @Test("no completions yields nine empty weeks")
+    func empty() {
+        let weeks = WeeklyVolumeCard.weeks(from: [], now: date("2026-09-30T12:00:00Z"), calendar: calendar)
+        #expect(weeks.count == 9)
+        #expect(weeks.allSatisfy { $0.sessions == 0 })
     }
 }

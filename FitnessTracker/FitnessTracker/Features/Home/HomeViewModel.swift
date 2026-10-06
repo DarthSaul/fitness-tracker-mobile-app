@@ -26,6 +26,9 @@ final class HomeViewModel {
     /// Used to suppress the "No active program" empty state during the first
     /// fetch — otherwise it briefly flashes on sign-in before data arrives.
     private(set) var hasLoadedOnce = false
+    /// True once `history` has been fetched successfully at least once, so an
+    /// empty list means "no workouts" rather than "couldn't load".
+    private(set) var hasLoadedHistory = false
     var loadError: Error?
     var scheduleError: String?
     /// Failure surfaced on the Today card when completing/discarding a
@@ -115,6 +118,17 @@ final class HomeViewModel {
     /// "Schedule a workout" CTA is offered — scheduling is future-only).
     var isSelectedDateInFuture: Bool {
         calendar.startOfDay(for: selectedDate) > calendar.startOfDay(for: .now)
+    }
+
+    /// True when the selected date is strictly before today.
+    var isSelectedDateInPast: Bool {
+        calendar.startOfDay(for: selectedDate) < calendar.startOfDay(for: .now)
+    }
+
+    /// The most recent completed sessions, newest first, for Home's History
+    /// section (`history` is already newest-first).
+    var recentHistory: [HistoryEntryDTO] {
+        Array(history.prefix(HomeRecentWorkoutsSection.limit))
     }
 
     /// All completed sessions (program + standalone) on the selected calendar
@@ -208,6 +222,7 @@ final class HomeViewModel {
                 let history = try await historyTask
                 guard isCurrent else { return }
                 self.history = history
+                self.hasLoadedHistory = true
             } catch {
                 Logger.data.error("Failed to fetch history: \(error)")
             }

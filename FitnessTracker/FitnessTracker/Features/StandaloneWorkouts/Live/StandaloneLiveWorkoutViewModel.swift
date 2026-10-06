@@ -72,6 +72,18 @@ final class StandaloneLiveWorkoutViewModel {
         completedByTemplateSetId.count
     }
 
+    /// Every set logged in this session, from the live buckets (kept current
+    /// as sets are logged, unlike `session.completedSets`).
+    var allCompletedSets: [StandaloneCompletedSetDTO] {
+        Array(completedByTemplateSetId.values) + adhocSets
+    }
+
+    /// The post-workout share prompt's highlights, as of now.
+    var completionSummary: WorkoutCompletionSummary? {
+        guard session != nil else { return nil }
+        return .standalone(sessionId: sessionId, workoutName: workoutDisplayName, completedSets: allCompletedSets)
+    }
+
     func completedSet(forTemplateSetId id: String) -> StandaloneCompletedSetDTO? {
         completedByTemplateSetId[id]
     }

@@ -34,12 +34,6 @@ nonisolated struct WorkoutCalendar: Sendable {
         }
     }
 
-    /// The latest day with a workout in that month, if any.
-    func mostRecentWorkoutDay(inMonthOf month: Date) -> Date? {
-        guard let interval = calendar.dateInterval(of: .month, for: month) else { return nil }
-        return workoutsByDay.keys.filter { interval.contains($0) }.max()
-    }
-
     /// The month as grid cells, week rows from the locale's first weekday:
     /// nil for the blanks before the 1st, then each day.
     func gridDays(forMonthOf month: Date) -> [Date?] {

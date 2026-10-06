@@ -59,9 +59,7 @@ struct StandaloneLiveWorkoutView: View {
                 ) {
                     // Captured before completing: the summary reflects the
                     // workout as the user finished it.
-                    let summary = viewModel.session.map {
-                        WorkoutCompletionSummary.standalone($0, workoutName: viewModel.workoutDisplayName)
-                    }
+                    let summary = viewModel.completionSummary
                     Task {
                         guard await viewModel.completeWorkout() else { return }
                         if let summary {

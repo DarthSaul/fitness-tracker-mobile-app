@@ -157,6 +157,30 @@ struct StandaloneLiveWorkoutViewModelTests {
         #expect(vm.completedSet(forTemplateSetId: "sws1") == nil)
     }
 
+    @Test("the completion summary counts sets logged after load, not the loaded snapshot")
+    func completionSummaryUsesLiveSets() async throws {
+        let client = MockAPIClient()
+        client.stub(.getStandaloneSession(id: "ss1"), response: makeDetailResponse())
+        client.stub(
+            .recordStandaloneSet(sessionId: "ss1", body: .prescribed(standaloneWorkoutSetId: "sws1", reps: 10, weight: 45, rpe: nil, notes: nil)),
+            response: makeCompletedSet(id: "cs1", standaloneWorkoutSetId: "sws1")
+        )
+        client.stub(
+            .recordStandaloneSet(sessionId: "ss1", body: .adhoc(exerciseName: "Goblet Squat", reps: 8, weight: 45, rpe: nil, notes: nil)),
+            response: makeCompletedSet(id: "cs2", adhocExerciseName: "Goblet Squat", reps: 8)
+        )
+        let vm = makeViewModel(client: client)
+        await vm.load()
+
+        #expect(await vm.logSet(templateSetId: "sws1", reps: 10, weight: 45, rpe: nil, notes: nil))
+        #expect(await vm.addExtraSet(exerciseName: "Goblet Squat", reps: 8, weight: 45, rpe: nil, notes: nil))
+
+        let summary = try #require(vm.completionSummary)
+        #expect(summary.sets == 2)
+        #expect(summary.volumeLbs == 10 * 45 + 8 * 45)
+        #expect(summary.share == .standalone(sessionId: "ss1"))
+    }
+
     // MARK: - Ad-hoc
 
     @Test("addExtraSet logs an ad-hoc set under the exercise's name")

@@ -10,11 +10,14 @@ struct HomeCompletedCard: View {
     let entry: HistoryEntryDTO
     let workoutRepository: WorkoutRepository
     let standaloneRepository: StandaloneWorkoutRepository
-    @Environment(SessionManager.self) private var sessionManager
 
     var body: some View {
         NavigationLink {
-            destination
+            HistoryEntryDestination(
+                entry: entry,
+                workoutRepository: workoutRepository,
+                standaloneRepository: standaloneRepository
+            )
         } label: {
             HStack(spacing: 0) {
                 LinearGradient(
@@ -70,23 +73,6 @@ struct HomeCompletedCard: View {
             return text
         case .standalone(let session):
             return session.standaloneWorkout.category
-        }
-    }
-
-    @ViewBuilder
-    private var destination: some View {
-        switch entry {
-        case .program(let session):
-            WorkoutDetailView(viewModel: WorkoutDetailViewModel(
-                workoutId: session.id,
-                repository: workoutRepository
-            ))
-        case .standalone(let session):
-            StandaloneSessionDetailView(viewModel: StandaloneSessionDetailViewModel(
-                sessionId: session.id,
-                repository: standaloneRepository,
-                sessionManager: sessionManager
-            ))
         }
     }
 }

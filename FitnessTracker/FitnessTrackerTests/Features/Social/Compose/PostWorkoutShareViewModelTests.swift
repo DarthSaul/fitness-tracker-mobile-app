@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UIKit
 @testable import FitnessTracker
 
 @Suite("Post-workout share prompt")
@@ -8,7 +9,7 @@ struct PostWorkoutShareViewModelTests {
     private func summary(_ share: CreatePostBody.SharedWorkout = .program(sessionId: "ws-1")) -> WorkoutCompletionSummary {
         WorkoutCompletionSummary(
             share: share, title: nil, position: "Week 2 · Day 4",
-            sets: 32, duration: 58 * 60, volumeLbs: 19_140
+            sets: 32, volumeLbs: 19_140
         )
     }
 
@@ -30,13 +31,10 @@ struct PostWorkoutShareViewModelTests {
 
     // MARK: - Summary
 
-    @Test("highlights format sets, time and volume")
+    @Test("highlights format volume")
     func highlights() {
-        let s = summary()
-        #expect(s.formattedDuration == "58m")
-        #expect(s.formattedVolume == "19.1k")
-        #expect(WorkoutCompletionSummary(share: .program(sessionId: "x"), sets: 1, duration: 64 * 60, volumeLbs: 950).formattedDuration == "1h 4m")
-        #expect(WorkoutCompletionSummary(share: .program(sessionId: "x"), sets: 1, duration: 60, volumeLbs: 950).formattedVolume == "950")
+        #expect(summary().formattedVolume == "19.1k")
+        #expect(WorkoutCompletionSummary(share: .program(sessionId: "x"), sets: 1, volumeLbs: 950).formattedVolume == "950")
     }
 
     @Test("volume sums reps × weight, skipping sets without both")
@@ -100,6 +98,26 @@ struct PostWorkoutShareViewModelTests {
         _ = await viewModel.share()
 
         #expect(createBodies(harness) == [CreatePostBody(body: nil, sharing: .standalone(sessionId: "ss-9"))])
+    }
+
+    @Test("attached photos go on the post; a failed upload blocks sharing until removed")
+    func sharePhotos() async throws {
+        let (viewModel, harness) = makeViewModel()
+        harness.client.stub(.uploadPostPhoto, response: UploadedPhotoDTO(id: "ph-1", width: 4, height: 4))
+        harness.client.stub(.createPost(CreatePostBody(body: nil)), response: SocialFactory.post("new", isMine: true))
+        let png = try #require(UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4)).image { _ in }.pngData())
+
+        await viewModel.photoAttachments.addPhotos([png])
+        #expect(viewModel.canShare)
+        _ = await viewModel.share()
+        #expect(createBodies(harness).first?.photoIds == ["ph-1"])
+
+        let (failing, failingHarness) = makeViewModel()
+        failingHarness.client.stubHTTPError(.uploadPostPhoto, status: 429)
+        await failing.photoAttachments.addPhotos([png])
+        #expect(!failing.canShare)
+        failing.photoAttachments.removePhoto(try #require(failing.photoAttachments.photos.first?.id))
+        #expect(failing.canShare)
     }
 
     @Test("already shared (409) closes the prompt; other failures keep it open")

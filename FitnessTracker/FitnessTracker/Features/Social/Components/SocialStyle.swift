@@ -201,16 +201,19 @@ struct SocialGroup<Content: View>: View {
     }
 }
 
-/// "TODAY", "SUGGESTED" etc.: 13pt semibold, uppercase, secondary.
+/// "TODAY", "SUGGESTED" etc.: 13pt semibold, uppercase, secondary. Pass
+/// `uppercased: false` to keep the text's own casing ("Following").
 struct SectionHeaderText: View {
     let text: String
+    var uppercased = true
 
-    init(_ text: String) {
+    init(_ text: String, uppercased: Bool = true) {
         self.text = text
+        self.uppercased = uppercased
     }
 
     var body: some View {
-        Text(text.uppercased())
+        Text(uppercased ? text.uppercased() : text)
             .font(.system(size: 13, weight: .semibold))
             .foregroundStyle(.secondary)
             .tracking(0.3)

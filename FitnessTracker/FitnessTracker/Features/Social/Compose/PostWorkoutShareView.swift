@@ -2,10 +2,12 @@ import SwiftUI
 
 /// Post-workout share prompt (design-spec 05), shown in the live-workout
 /// cover right after the user confirms Complete: a hero, the workout's
-/// highlights (sets · time · lbs), then a card offering to share it.
+/// highlights (sets · lbs), then a card offering to share it with a caption
+/// and photos.
 struct PostWorkoutShareView: View {
     @State private var viewModel: PostWorkoutShareViewModel
     private let onDone: () -> Void
+    @State private var showPhotoPicker = false
     @FocusState private var captionFocused: Bool
 
     init(viewModel: PostWorkoutShareViewModel, onDone: @escaping () -> Void) {
@@ -29,6 +31,7 @@ struct PostWorkoutShareView: View {
         .scrollDismissesKeyboard(.interactively)
         .background(Color(.systemBackground))
         .task { await viewModel.load() }
+        .photoAttachmentPicker(isPresented: $showPhotoPicker, attachments: viewModel.photoAttachments)
         .sensoryFeedback(.success, trigger: viewModel.didShare)
     }
 
@@ -57,7 +60,6 @@ struct PostWorkoutShareView: View {
     private var highlights: some View {
         HStack(spacing: 10) {
             highlight(value: "\(viewModel.summary.sets)", label: viewModel.summary.sets == 1 ? "set" : "sets")
-            highlight(value: viewModel.summary.formattedDuration, label: "time")
             highlight(value: viewModel.summary.formattedVolume, label: "lbs")
         }
     }
@@ -99,6 +101,21 @@ struct PostWorkoutShareView: View {
                 .padding(.vertical, 12)
                 .background(Color(.tertiarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .padding(.top, 14)
+
+            if !viewModel.photoAttachments.photos.isEmpty {
+                AttachedPhotoStrip(attachments: viewModel.photoAttachments)
+                    .padding(.top, 12)
+            }
+
+            Button {
+                captionFocused = false
+                showPhotoPicker = true
+            } label: {
+                Label("Photo", systemImage: "photo")
+            }
+            .buttonStyle(.pill(.gray))
+            .disabled(viewModel.photoAttachments.remainingPhotoSlots == 0 || viewModel.isSharing)
+            .padding(.top, 12)
 
             if viewModel.isCaptionTooLong {
                 Text("Captions can be up to \(PostWorkoutShareViewModel.captionMax) characters.")

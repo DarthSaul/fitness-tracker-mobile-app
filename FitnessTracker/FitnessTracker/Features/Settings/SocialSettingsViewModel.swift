@@ -8,7 +8,6 @@ import OSLog
 @Observable
 @MainActor
 final class SocialSettingsViewModel {
-    private(set) var followerCount: Int?
     private(set) var blockedCount: Int?
     /// Profile fields with a save in flight.
     private var savingFields: Set<PartialKeyPath<UserProfile>> = []
@@ -26,15 +25,13 @@ final class SocialSettingsViewModel {
 
     // MARK: - Loading
 
-    /// Follower count (for "@handle · 48 followers"), blocked count and
-    /// pending requests. Best-effort: missing values hide their text.
+    /// Blocked count and pending requests. Best-effort: missing values hide
+    /// their text.
     func loadCounts() async {
-        guard let userId = context.currentUserId else { return }
-        async let profile = try? context.repository.fetchProfile(userId: userId)
+        guard context.currentUserId != nil else { return }
         async let blocked = try? context.repository.fetchBlocked()
         async let requests = try? context.repository.fetchFollowRequests(direction: .incoming)
-        let (loadedProfile, loadedBlocked, loadedRequests) = await (profile, blocked, requests)
-        followerCount = loadedProfile?.followerCount
+        let (loadedBlocked, loadedRequests) = await (blocked, requests)
         blockedCount = loadedBlocked?.count
         pendingRequestCount = loadedRequests?.count ?? 0
     }

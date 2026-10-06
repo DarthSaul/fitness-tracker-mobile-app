@@ -1,6 +1,7 @@
 import Foundation
 
-/// Thin wrapper around the three `/api/analytics/*` endpoints.
+/// Thin wrapper around the three `/api/analytics/*` endpoints, plus the
+/// completion timestamps the weekly-volume chart buckets on the device.
 @MainActor
 final class AnalyticsRepository {
     private let apiClient: any APIClientProtocol
@@ -19,6 +20,13 @@ final class AnalyticsRepository {
 
     func fetchExercises() async throws -> [AnalyticsExerciseDTO] {
         try await apiClient.send(.getAnalyticsExercises)
+    }
+
+    /// GET /api/history/dates — every completed session's `completedAt`
+    /// (program and standalone), oldest first.
+    func fetchCompletionDates() async throws -> [Date] {
+        let response: HistoryDatesResponseDTO = try await apiClient.send(.getHistoryDates)
+        return response.completedAt
     }
 
     func fetchExerciseHistory(id: String) async throws -> AnalyticsExerciseHistoryDTO {

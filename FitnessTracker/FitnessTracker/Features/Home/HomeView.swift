@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// Composes the home dashboard: calendar strip, date header, today/scheduled
-/// card, Strength on the Go, and the FRIENDS section. Program progress and
+/// card, Strength on the Go (today and later only), the Following section,
+/// and the five most recent workouts. Program progress and
 /// management live in the Program tab. The tab provides the NavigationStack —
 /// this view is content-only.
 struct HomeView: View {
@@ -70,15 +71,30 @@ struct HomeView: View {
                 }
                 .padding(.horizontal)
 
-                StrengthOnTheGoCard(
-                    standaloneRepository: standaloneRepository,
-                    workoutRepository: workoutRepository
-                )
-                .padding(.horizontal)
+                if !viewModel.isSelectedDateInPast {
+                    StrengthOnTheGoCard(
+                        standaloneRepository: standaloneRepository,
+                        workoutRepository: workoutRepository
+                    )
+                    .padding(.horizontal)
+                }
 
                 if let friends {
                     HomeFriendsSection(viewModel: friends)
                         .padding(.top, 6)
+                }
+
+                if viewModel.hasLoadedOnce {
+                    HomeRecentWorkoutsSection(
+                        entries: viewModel.recentHistory,
+                        hasLoaded: viewModel.hasLoadedHistory,
+                        isLoading: viewModel.isLoading,
+                        onRetry: { Task { await viewModel.load() } },
+                        workoutRepository: workoutRepository,
+                        standaloneRepository: standaloneRepository,
+                        onChange: { Task { await viewModel.load() } }
+                    )
+                    .padding(.top, 6)
                 }
 
                 if let loadError = viewModel.loadError {

@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Home's FRIENDS section (replaces the old HISTORY preview; History lives in
-/// Progress now). "See all" and each row open the Friends tab.
+/// Home's Following section: recent posts from people I follow. "See all"
+/// and each row open the Friends tab.
 struct HomeFriendsSection: View {
     let viewModel: HomeFriendsViewModel
     @Environment(TabSelection.self) private var tabSelection
@@ -10,7 +10,7 @@ struct HomeFriendsSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                SectionHeaderText("Friends")
+                SectionHeaderText("Following", uppercased: false)
                 Spacer()
                 Button("See all") { open([]) }
                     .font(.system(size: 15))

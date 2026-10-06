@@ -6,7 +6,6 @@ import SwiftUI
 /// GET /api/history); rows push the matching detail view for their type.
 struct HistoryView: View {
     @State private var viewModel: HistoryViewModel
-    @Environment(SessionManager.self) private var sessionManager
     private let workoutRepository: WorkoutRepository
     private let standaloneRepository: StandaloneWorkoutRepository
 
@@ -69,7 +68,12 @@ struct HistoryView: View {
                     Section {
                         ForEach(viewModel.sessions) { entry in
                             NavigationLink {
-                                detailDestination(for: entry)
+                                HistoryEntryDestination(
+                                    entry: entry,
+                                    workoutRepository: workoutRepository,
+                                    standaloneRepository: standaloneRepository,
+                                    onChange: { Task { await viewModel.load() } }
+                                )
                             } label: {
                                 HistoryRow(entry: entry)
                             }
@@ -102,26 +106,6 @@ struct HistoryView: View {
                 .contentMargins(.top, 12, for: .scrollContent)
                 .listSectionSpacing(16)
             }
-        }
-    }
-
-    @ViewBuilder
-    private func detailDestination(for entry: HistoryEntryDTO) -> some View {
-        switch entry {
-        case .program(let session):
-            WorkoutDetailView(
-                viewModel: WorkoutDetailViewModel(
-                    workoutId: session.id,
-                    repository: workoutRepository
-                ),
-                onChange: { Task { await viewModel.load() } }
-            )
-        case .standalone(let session):
-            StandaloneSessionDetailView(viewModel: StandaloneSessionDetailViewModel(
-                sessionId: session.id,
-                repository: standaloneRepository,
-                sessionManager: sessionManager
-            ))
         }
     }
 }

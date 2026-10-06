@@ -17,8 +17,11 @@ final class AnalyticsViewModel {
     var exercises: [AnalyticsExerciseDTO] = []
     var selectedExerciseId: String?
     var exerciseHistory: AnalyticsExerciseHistoryDTO?
+    /// Completed workouts per local week, oldest first (Weekly volume card).
+    var weeklyVolume: [WeeklyVolumeCard.Week]?
 
     var dashboardStatus: LoadStatus = .idle
+    var weeklyVolumeStatus: LoadStatus = .idle
     var exercisesStatus: LoadStatus = .idle
     var historyStatus: LoadStatus = .idle
 
@@ -45,14 +48,44 @@ final class AnalyticsViewModel {
 
     // MARK: - Public API
 
-    /// Loads dashboard and exercise list in parallel. Safe to call repeatedly
-    /// (e.g. from `.refreshable`); each call refreshes both sources.
+    /// Loads dashboard, weekly volume and exercise list in parallel. Safe to
+    /// call repeatedly (e.g. from `.refreshable`); each call refreshes all.
     func load() async {
         loadToken &+= 1
         let token = loadToken
         async let dash: Void = loadDashboard(token: token)
+        async let weekly: Void = loadWeeklyVolume(token: token)
         async let ex: Void = loadExercises(token: token)
-        _ = await (dash, ex)
+        _ = await (dash, weekly, ex)
+    }
+
+    /// True once every eager section has loaded and the weekly chart still
+    /// ends on the current local week (the app can stay open across a week
+    /// boundary).
+    var hasLoaded: Bool {
+        dashboardStatus == .success && weeklyVolumeStatus == .success && exercisesStatus == .success
+            && isWeeklyVolumeCurrent
+    }
+
+    private var isWeeklyVolumeCurrent: Bool {
+        guard let lastWeek = weeklyVolume?.last?.start else { return false }
+        return Calendar.current.isDate(lastWeek, equalTo: .now, toGranularity: .weekOfYear)
+    }
+
+    func loadWeeklyVolume(token: Int) async {
+        guard token == loadToken else { return }
+        weeklyVolumeStatus = .pending
+        do {
+            let dates = try await repository.fetchCompletionDates()
+            guard token == loadToken else { return }
+            self.weeklyVolume = WeeklyVolumeCard.weeks(from: dates)
+            self.weeklyVolumeStatus = .success
+        } catch {
+            if Self.isCancellation(error) { return }
+            guard token == loadToken else { return }
+            Logger.networking.error("Weekly volume failed: \(error.localizedDescription, privacy: .public)")
+            self.weeklyVolumeStatus = .error(error.localizedDescription)
+        }
     }
 
     func loadDashboard(token: Int) async {
