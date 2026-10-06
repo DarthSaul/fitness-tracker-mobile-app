@@ -27,13 +27,14 @@ struct WeeklyVolumeCard: View {
                     .foregroundStyle(.secondary)
             }
 
-            if let weeks {
-                chart(weeks)
-            } else if let errorMessage {
+            // A failed refresh shows its error rather than the stale chart.
+            if let errorMessage {
                 Text("Couldn't load weekly volume: \(errorMessage)")
                     .font(.footnote)
                     .foregroundStyle(.red)
                     .frame(maxWidth: .infinity, minHeight: 130, alignment: .leading)
+            } else if let weeks {
+                chart(weeks)
             } else {
                 RoundedRectangle(cornerRadius: 10)
                     .fill(Color.secondary.opacity(0.12))
@@ -52,8 +53,10 @@ struct WeeklyVolumeCard: View {
                     BarMark(
                         x: .value("Week", index),
                         // The current, unfinished week keeps a 3% stub so it
-                        // still reads as a bar.
-                        y: .value("Workouts", max(Double(week.sessions), maxSessions * 0.03)),
+                        // still reads as a bar; empty past weeks stay empty.
+                        y: .value("Workouts", index == weeks.count - 1
+                            ? max(Double(week.sessions), maxSessions * 0.03)
+                            : Double(week.sessions)),
                         width: .ratio(0.78)
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 5))

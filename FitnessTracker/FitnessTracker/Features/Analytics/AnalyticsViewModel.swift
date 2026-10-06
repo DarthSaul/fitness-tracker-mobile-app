@@ -59,9 +59,17 @@ final class AnalyticsViewModel {
         _ = await (dash, weekly, ex)
     }
 
-    /// True once every eager section has loaded.
+    /// True once every eager section has loaded and the weekly chart still
+    /// ends on the current local week (the app can stay open across a week
+    /// boundary).
     var hasLoaded: Bool {
         dashboardStatus == .success && weeklyVolumeStatus == .success && exercisesStatus == .success
+            && isWeeklyVolumeCurrent
+    }
+
+    private var isWeeklyVolumeCurrent: Bool {
+        guard let lastWeek = weeklyVolume?.last?.start else { return false }
+        return Calendar.current.isDate(lastWeek, equalTo: .now, toGranularity: .weekOfYear)
     }
 
     func loadWeeklyVolume(token: Int) async {

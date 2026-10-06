@@ -87,6 +87,9 @@ struct HomeView: View {
                 if viewModel.hasLoadedOnce {
                     HomeRecentWorkoutsSection(
                         entries: viewModel.recentHistory,
+                        hasLoaded: viewModel.hasLoadedHistory,
+                        isLoading: viewModel.isLoading,
+                        onRetry: { Task { await viewModel.load() } },
                         workoutRepository: workoutRepository,
                         standaloneRepository: standaloneRepository,
                         onChange: { Task { await viewModel.load() } }
