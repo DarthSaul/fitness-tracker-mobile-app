@@ -51,7 +51,10 @@ struct WeeklyVolumeCard: View {
         return Chart {
                 ForEach(Array(weeks.enumerated()), id: \.element.id) { index, week in
                     BarMark(
-                        x: .value("Week", index),
+                        // A week-unit date gives each bar a week-wide band for
+                        // `.ratio` to size against; a plain index is a
+                        // continuous scale with no band, so bars get zero width.
+                        x: .value("Week", week.start, unit: .weekOfYear),
                         // The current, unfinished week keeps a 3% stub so it
                         // still reads as a bar; empty past weeks stay empty.
                         y: .value("Workouts", index == weeks.count - 1
@@ -64,10 +67,11 @@ struct WeeklyVolumeCard: View {
                 }
             }
             .chartXAxis {
-                AxisMarks(values: Array(weeks.indices)) { value in
-                    if let index = value.as(Int.self), index % 2 == 0 {
+                // Every other week, starting with the oldest.
+                AxisMarks(values: weeks.enumerated().filter { $0.offset % 2 == 0 }.map(\.element.start)) { value in
+                    if let start = value.as(Date.self) {
                         AxisValueLabel(centered: true) {
-                            Text(weeks[index].start, format: .dateTime.month(.abbreviated).day())
+                            Text(start, format: .dateTime.month(.abbreviated).day())
                                 .font(.system(size: 10))
                                 .foregroundStyle(SocialStyle.tertiaryText)
                         }
