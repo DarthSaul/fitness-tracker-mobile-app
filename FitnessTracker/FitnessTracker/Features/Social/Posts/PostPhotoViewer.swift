@@ -111,6 +111,15 @@ private struct ZoomablePhoto: View {
         .onChange(of: isCurrent) { _, current in
             if !current { resetZoom(animated: false) }
         }
+        // Zooming disables the dismiss drag, whose onEnded may then never
+        // fire — undo any pull-down already in progress.
+        .onChange(of: isZoomed) { _, zoomed in
+            guard zoomed, dragDown != 0 || dismissOffset != 0 else { return }
+            withAnimation(.spring(duration: 0.3)) {
+                dragDown = 0
+                dismissOffset = 0
+            }
+        }
         .accessibilityElement()
         .accessibilityLabel("Photo")
         .accessibilityAddTraits(.isImage)
