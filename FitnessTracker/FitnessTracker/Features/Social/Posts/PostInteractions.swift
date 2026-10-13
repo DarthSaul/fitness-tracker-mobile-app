@@ -38,7 +38,15 @@ final class PostInteractions {
         case block(PublicUserDTO)
     }
 
+    /// The full-screen photo viewer, opened on a post's photo at `index`.
+    struct PhotoViewerTarget: Identifiable {
+        let post: PostDTO
+        let index: Int
+        var id: String { post.id }
+    }
+
     var picker: PickerTarget?
+    var photoViewer: PhotoViewerTarget?
     var reactors: ReactorsTarget?
     var report: ReportTarget?
     var blockCandidate: PublicUserDTO?
@@ -84,7 +92,7 @@ final class PostInteractions {
 }
 
 /// Presents everything a post card can trigger: the reaction picker, the
-/// who-reacted sheet, the report sheet and the block/delete confirmations.
+/// photo viewer, the who-reacted sheet, the report sheet and the block/delete confirmations.
 struct PostInteractionHost: ViewModifier {
     @State private var interactions: PostInteractions
     @Environment(SocialContext.self) private var context
@@ -104,6 +112,9 @@ struct PostInteractionHost: ViewModifier {
             }) { target in
                 ReactionPickerOverlay(target: target, interactions: interactions)
                     .presentationBackground(.clear)
+            }
+            .fullScreenCover(item: $interactions.photoViewer) { target in
+                PostPhotoViewer(photos: target.post.photos, initialIndex: target.index)
             }
             .sheet(item: $interactions.reactors) { target in
                 ReactorsSheet(post: target.post, initialEmoji: target.emoji, context: context)
