@@ -25,7 +25,10 @@ struct PostCardView: View {
                 WorkoutShareEmbed(workout: workout, authorName: post.author.displayName)
             }
             if !post.photos.isEmpty {
-                PostPhotos(photos: post.photos)
+                PostPhotos(photos: post.photos) { index in
+                    interactions.photoViewer = .init(post: post, index: index)
+                }
+                .allowsHitTesting(isInteractive)
             }
             ReactionBar(
                 reactions: post.reactions,
@@ -180,32 +183,56 @@ struct WorkoutShareEmbed: View {
     }
 }
 
-/// 1–4 photos in display order, 220pt tall. Each is identified by its photo
-/// id (`.id`), not its signed URL, which changes on every fetch.
+/// 1–4 photos in display order. A single photo keeps its own shape (within
+/// `displayAspectRatio`'s limits); 2–4 share a 220pt cropped grid. Tapping a
+/// photo hands its index to `onTap`, which opens the full-screen viewer.
+/// Each is identified by its photo id (`.id`), not its signed URL, which
+/// changes on every fetch.
 struct PostPhotos: View {
     let photos: [PostPhotoDTO]
+    let onTap: (Int) -> Void
+
+    /// The photo's width / height, clamped between 3:4 portrait and 16:9
+    /// landscape so one photo can't take over the feed or shrink to a strip.
+    static func displayAspectRatio(for photo: PostPhotoDTO) -> CGFloat {
+        min(max(photo.aspectRatio, 3.0 / 4.0), 16.0 / 9.0)
+    }
 
     var body: some View {
         Group {
             switch photos.count {
             case 1:
-                PostPhotoView(photo: photos[0])
+                cell(0)
+                    .aspectRatio(Self.displayAspectRatio(for: photos[0]), contentMode: .fit)
             case 2:
                 HStack(spacing: 4) {
-                    ForEach(photos) { PostPhotoView(photo: $0) }
+                    cell(0)
+                    cell(1)
                 }
+                .frame(height: 220)
             default:
                 HStack(spacing: 4) {
-                    PostPhotoView(photo: photos[0])
+                    cell(0)
                     VStack(spacing: 4) {
-                        ForEach(photos.dropFirst().prefix(3)) { PostPhotoView(photo: $0) }
+                        ForEach(1..<min(photos.count, 4), id: \.self) { cell($0) }
                     }
                 }
+                .frame(height: 220)
             }
         }
-        .frame(height: 220)
         .frame(maxWidth: .infinity)
         .clipShape(RoundedRectangle(cornerRadius: SocialStyle.embedRadius, style: .continuous))
+    }
+
+    private func cell(_ index: Int) -> some View {
+        Button {
+            onTap(index)
+        } label: {
+            PostPhotoView(photo: photos[index])
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(photos.count > 1 ? "Photo \(index + 1) of \(photos.count)" : "Photo")
+        .accessibilityHint("Opens full screen")
     }
 }
 
@@ -229,8 +256,8 @@ private struct PostPhotoView: View {
                 }
             }
             .clipped()
+            .contentShape(Rectangle())
             .id(photo.id)
-            .accessibilityLabel("Photo")
     }
 }
 
